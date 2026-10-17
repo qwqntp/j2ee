@@ -8,10 +8,12 @@
 | Backend        | Spring Boot             |
 | Persistence    | Spring Data JPA         |
 | Security       | Spring Security         |
-| Authentication | Access/Refresh token, OAuth2 |
+| Authentication | Access/Refresh , OAuth2 |
 | Messaging      | RabbitMQ                |
 | Caching        | Redis                   |
+| Payment        | Vnpay                  |
 | Realtime       | WebSocket               |
+| API Docs       | Swagger (OpenAPI)       |
 | Media          | Cloudinary              |
 | Testing        | Spring Test             |
 | Database       | PostgreSQL, Supabase    |
@@ -54,9 +56,17 @@
 
 - **WebSocket** — bidirectional real-time communication (Spring `WebSocket` / STOMP).
 
+## API Documentation
+
+- **Swagger / OpenAPI** — interactive REST API docs (springdoc-openapi + Swagger UI).
+
 ## Media
 
 - **Cloudinary** — cloud image/media storage and delivery.
+
+## Payment
+
+- **Vnpay**
 
 ## Testing
 
