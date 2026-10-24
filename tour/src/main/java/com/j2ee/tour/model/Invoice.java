@@ -1,5 +1,6 @@
 package com.j2ee.tour.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -9,6 +10,9 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,9 +20,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Ban in cua don cu (du lieu cu). Doc lai bang bookings + payments cho logic moi.
- */
 @Data
 @Entity
 @Table(name = "invoices")
@@ -27,17 +28,49 @@ public class Invoice {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long invoiceId;
 
+    @NotNull
+    @Column(nullable = false)
     private LocalDateTime invoiceCreatedAt;
-    private String status;               // PAID / UNPAID
+
+    @NotNull
+    @Pattern(regexp = "PAID|UNPAID")
+    @Column(nullable = false, length = 20)
+    private String status;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal discountAmount;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal taxAmount;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal serviceFee;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
+
+    @Pattern(regexp = "CASH|VNPAY|MOMO|CARD")
+    @Column(length = 20)
     private String paymentMethod;
-    private String customerName;         // snapshot
+
+    @Column(length = 255)
+    private String customerName;
+
+    @Column(length = 20)
     private String customerPhone;
+
+    @Column(length = 255)
     private String customerEmail;
 
+    @NotNull
     @OneToOne
     @JoinColumn(name = "booking_id", nullable = false, unique = true)
     private Booking booking;

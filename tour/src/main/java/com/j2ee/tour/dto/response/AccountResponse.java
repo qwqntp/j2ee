@@ -4,6 +4,7 @@ public record AccountResponse(
         Long id,
         String username,
         String email,
-        Integer status
+        Integer status,
+        String roleName
 ) {
 }

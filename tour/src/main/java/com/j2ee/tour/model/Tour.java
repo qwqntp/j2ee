@@ -1,15 +1,21 @@
 package com.j2ee.tour.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -19,19 +25,38 @@ import java.util.List;
 
 @Data
 @Entity
-@Table(name = "tours")
+@Table(name = "tours", indexes = {
+    @Index(name = "idx_tour_status", columnList = "tour_status")
+})
 public class Tour {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long tourId;
 
+    @NotBlank
+    @Column(nullable = false, length = 255)
     private String tourName;
+
+    @Column(columnDefinition = "TEXT")
     private String tourDescription;
-    private BigDecimal tourPrice;        // sau migration: doc gia tu TourDeparture
-    private String tourStatus;           // DRAFT / OPEN / CLOSED / CANCELLED
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal tourPrice;
+
+    @NotNull
+    @Pattern(regexp = "DRAFT|OPEN|CLOSED|CANCELLED")
+    @Column(nullable = false, length = 20)
+    private String tourStatus;
+
     private LocalDateTime tourStartDate;
     private LocalDateTime tourEndDate;
+
+    @Column(length = 255)
     private String tourMeetingPoint;
+
+    @Column
     private Integer tourRemainingSlots;
 
     @ManyToOne

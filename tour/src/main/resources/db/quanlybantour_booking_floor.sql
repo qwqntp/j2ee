@@ -108,8 +108,10 @@ CREATE TABLE tours (
     tour_remaining_slots INT          NULL,
     accommodation_id    BIGINT        NULL,
     tour_guide_id       BIGINT        NULL,
+    promotion_id        BIGINT        NULL,
     CONSTRAINT fk_tour_accommodation FOREIGN KEY (accommodation_id) REFERENCES accommodations(accommodation_id),
     CONSTRAINT fk_tour_guide         FOREIGN KEY (tour_guide_id)   REFERENCES tour_guides(tour_guide_id),
+    CONSTRAINT fk_tour_promotion     FOREIGN KEY (promotion_id)    REFERENCES promotions(promotion_id),
     CONSTRAINT ck_tour_price CHECK (tour_price >= 0),
     CONSTRAINT ck_tour_dates CHECK (tour_start_date IS NULL OR tour_end_date IS NULL OR tour_end_date > tour_start_date),
     CONSTRAINT ck_tour_remaining_slots CHECK (tour_remaining_slots IS NULL OR tour_remaining_slots >= 0),
@@ -141,14 +143,6 @@ CREATE TABLE tour_vehicles (
     PRIMARY KEY (tour_id, vehicle_id),
     CONSTRAINT fk_tv_tour    FOREIGN KEY (tour_id)    REFERENCES tours(tour_id),
     CONSTRAINT fk_tv_vehicle FOREIGN KEY (vehicle_id) REFERENCES travel_vehicles(vehicle_id)
-);
-
-CREATE TABLE tour_promotions (
-    tour_id      BIGINT NOT NULL,
-    promotion_id BIGINT NOT NULL,
-    PRIMARY KEY (tour_id, promotion_id),
-    CONSTRAINT fk_tp_tour      FOREIGN KEY (tour_id)      REFERENCES tours(tour_id),
-    CONSTRAINT fk_tp_promotion FOREIGN KEY (promotion_id) REFERENCES promotions(promotion_id)
 );
 
 
@@ -374,13 +368,13 @@ INSERT INTO customers (customer_id, customer_name, customer_email, customer_phon
 (3, 'Lê Thị Mua', 'mua.le@gmail.com', '0922222222', 'Đà Nẵng', '2000-10-20', 1);
 
 -- I. TOURS
-INSERT INTO tours (tour_id, tour_name, tour_description, tour_price, tour_status, tour_start_date, tour_end_date, tour_meeting_point, tour_remaining_slots, accommodation_id, tour_guide_id) VALUES
+INSERT INTO tours (tour_id, tour_name, tour_description, tour_price, tour_status, tour_start_date, tour_end_date, tour_meeting_point, tour_remaining_slots, accommodation_id, tour_guide_id, promotion_id) VALUES
 (1, 'Đà Nẵng - Hội An: Hành Trình Di Sản',
 'Ngày 1: Xe đón quý khách tại sân bay Đà Nẵng, đưa về khách sạn Mường Thanh nhận phòng. Chiều tham quan Bán đảo Sơn Trà.|Ngày 2: Khởi hành đi Bà Nà Hills - Đường lên tiên cảnh. Check-in Cầu Vàng. Ăn trưa Buffet. Chiều về Hội An tham quan phố cổ.|Ngày 3: Mua sắm đặc sản Miền Trung tại chợ Hàn. Xe đưa quý khách ra sân bay.',
-4500000, 'OPEN', '2026-06-15 08:00:00', '2026-06-17 17:00:00', 'Sân bay Đà Nẵng', 28, 1, 1),
+4500000, 'OPEN', '2026-06-15 08:00:00', '2026-06-17 17:00:00', 'Sân bay Đà Nẵng', 28, 1, 1, 1),
 (2, 'Nha Trang Biển Gọi',
 'Ngày 1: Đón khách tại sân bay Cam Ranh. Về trung tâm thành phố, nhận phòng Vinpearl Resort.|Ngày 2: Du ngoạn 4 đảo: Hòn Mun, Hòn Một, Bãi Tranh. Lặn ngắm san hô.|Ngày 3: Vui chơi không giới hạn tại VinWonders Nha Trang.|Ngày 4: Tắm bùn khoáng nóng I-Resort. Tiễn đoàn.',
-6500000, 'OPEN', '2026-07-10 07:00:00', '2026-07-13 18:00:00', 'Sân bay Cam Ranh', 40, 2, 2);
+6500000, 'OPEN', '2026-07-10 07:00:00', '2026-07-13 18:00:00', 'Sân bay Cam Ranh', 40, 2, 2, NULL);
 
 -- J. TOUR IMAGES
 INSERT INTO tour_images (image_url, tour_id) VALUES
@@ -402,10 +396,6 @@ INSERT INTO tour_destinations (tour_id, destination_id) VALUES
 INSERT INTO tour_vehicles (tour_id, vehicle_id) VALUES
  (1, 2),
  (2, 1);
-
-INSERT INTO tour_promotions (tour_id, promotion_id) VALUES
- (1, 1),
- (1, 3);
 
 -- L. BOOKING FLOOR - DEPARTURES
 INSERT INTO tour_departures (departure_id, tour_id, departure_start_date, departure_end_date,

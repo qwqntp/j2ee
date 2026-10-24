@@ -1,5 +1,6 @@
 package com.j2ee.tour.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -8,6 +9,11 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -27,22 +33,54 @@ public class Booking {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long bookingId;
 
-    private String bookingCode;            // 'BK-YYYYMMDD-0001'
+    @NotBlank
+    @Column(unique = true, nullable = false, length = 16)
+    private String bookingCode;
+
+    @NotNull
+    @Column(nullable = false)
     private LocalDateTime bookingCreatedAt;
+
+    @NotNull
+    @Min(1)
+    @Column(nullable = false)
     private Integer bookingGuestCount;
-    private BigDecimal bookingUnitPrice;   // snapshot gia tai thoi diem dat
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal bookingUnitPrice;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal bookingSubtotal;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal bookingDiscountAmount;
+
+    @NotNull
+    @DecimalMin("0")
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal bookingTotalAmount;
-    private String bookingStatus;          // PENDING / PAID / CONFIRMED / COMPLETED / CANCELLED
+
+    @NotNull
+    @Pattern(regexp = "PENDING|PAID|CONFIRMED|COMPLETED|CANCELLED")
+    @Column(nullable = false, length = 20)
+    private String bookingStatus;
+
+    @Column(columnDefinition = "TEXT")
     private String bookingNote;
 
     @ManyToOne
     @JoinColumn(name = "account_id")
     private Account account;
 
+    @NotNull
     @ManyToOne
-    @JoinColumn(name = "departure_id")
+    @JoinColumn(name = "departure_id", nullable = false)
     private TourDeparture departure;
 
     @OneToMany(mappedBy = "booking")
