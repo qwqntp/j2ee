@@ -1,6 +1,8 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Data;
@@ -12,7 +14,8 @@ import java.math.BigDecimal;
 @Table(name = "accommodations")
 public class Accommodation {
     @Id
-    private String accommodationId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long accommodationId;
 
     private String accommodationName;
     private String location;

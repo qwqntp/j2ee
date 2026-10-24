@@ -1,6 +1,8 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -19,7 +21,8 @@ import java.time.LocalDateTime;
 @Table(name = "tour_departures")
 public class TourDeparture {
     @Id
-    private String departureId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long departureId;
 
     @ManyToOne
     @JoinColumn(name = "tour_id")

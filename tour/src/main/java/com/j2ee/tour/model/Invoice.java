@@ -1,11 +1,13 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
 
@@ -22,11 +24,11 @@ import java.util.List;
 @Table(name = "invoices")
 public class Invoice {
     @Id
-    private String invoiceId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long invoiceId;
 
     private LocalDateTime invoiceCreatedAt;
     private String status;               // PAID / UNPAID
-    private Integer numberOfPeople;
     private BigDecimal discountAmount;
     private BigDecimal taxAmount;
     private BigDecimal serviceFee;
@@ -36,13 +38,9 @@ public class Invoice {
     private String customerPhone;
     private String customerEmail;
 
-    @ManyToOne
-    @JoinColumn(name = "account_id")
-    private Account account;
-
-    @ManyToOne
-    @JoinColumn(name = "tour_id")
-    private Tour tour;
+    @OneToOne
+    @JoinColumn(name = "booking_id", nullable = false, unique = true)
+    private Booking booking;
 
     @ManyToMany
     @JoinTable(name = "invoice_promotions",
