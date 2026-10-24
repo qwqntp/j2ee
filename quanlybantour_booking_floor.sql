@@ -1,4 +1,4 @@
--- ============================================================
+`-- ============================================================
 -- QUANLYBANTOUR - FULL SCHEMA + SEED (PostgreSQL)
 -- 1) 15 bang hien co (tach DDL tu seed MySQL cu)
 -- 2) 5 bang booking floor moi: tour_departures, bookings, travelers, payments, refunds

@@ -7,6 +7,7 @@
 | Frontend       | Next.js                 |
 | Backend        | Spring Boot             |
 | Persistence    | Spring Data JPA         |
+| Mapping        | MapStruct               |
 | Security       | Spring Security         |
 | Authentication | Access/Refresh , OAuth2 |
 | Messaging      | RabbitMQ                |
@@ -16,7 +17,7 @@
 | API Docs       | Swagger (OpenAPI)       |
 | Media          | Cloudinary              |
 | Testing        | Spring Test             |
-| Database       | PostgreSQL, Supabase    |
+| Database       | PostgreSQL, Supabase, Flyway |
 
 ## Frontend
 
@@ -33,7 +34,9 @@
 ## Persistence
 
 - **Spring Data JPA** via `spring-boot-starter-data-jpa`.
+- **MapStruct** — compile-time DTO/entity mapping with generated implementations.
 - **PostgreSQL** — runtime driver (`org.postgresql:postgresql`).
+- **Flyway** — versioned database migrations from `src/main/resources/db/migration`.
 
 ## Security
 
@@ -84,6 +87,20 @@
 
 - **Maven** — build and dependency management.
 - **Lombok** — boilerplate reduction (compile-time annotation processor).
+- **MapStruct** — compile-time mapping code generation (`org.mapstruct:mapstruct`).
+
+## Recommended Additions
+
+These are recommended tools to consider; they are not all configured in the repository yet.
+
+- **Spring Boot Actuator** — health checks, metrics, and operational endpoints.
+- **Bean Validation** — request validation with `spring-boot-starter-validation` and `jakarta.validation` annotations.
+- **Testcontainers** — integration tests against real PostgreSQL, Redis, and RabbitMQ services.
+- **WireMock** — deterministic tests for Cloudinary, VNPay, OAuth2, and other external APIs.
+- **Micrometer + Prometheus/Grafana** — application metrics and dashboards when the system is deployed.
+- **ArchUnit** — architectural tests that protect controller/service/repository boundaries.
+- **GitHub Actions** — CI for formatting, compilation, tests, and migration checks on every pull request.
+- **Renovate** — automated dependency update pull requests.
 
 ## Configuration
 
