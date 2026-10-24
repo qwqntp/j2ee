@@ -1,6 +1,8 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -22,7 +24,8 @@ import java.util.List;
 @Table(name = "bookings")
 public class Booking {
     @Id
-    private String bookingId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long bookingId;
 
     private String bookingCode;            // 'BK-YYYYMMDD-0001'
     private LocalDateTime bookingCreatedAt;

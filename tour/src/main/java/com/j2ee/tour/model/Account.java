@@ -1,6 +1,8 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -14,7 +16,8 @@ import java.time.LocalDateTime;
 @Table(name = "accounts")
 public class Account {
     @Id
-    private String accountId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long accountId;
 
     private String username;
     private String password;

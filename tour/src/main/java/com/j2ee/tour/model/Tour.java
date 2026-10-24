@@ -1,6 +1,8 @@
 package com.j2ee.tour.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
@@ -20,7 +22,8 @@ import java.util.List;
 @Table(name = "tours")
 public class Tour {
     @Id
-    private String tourId;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long tourId;
 
     private String tourName;
     private String tourDescription;
@@ -39,6 +42,10 @@ public class Tour {
     @JoinColumn(name = "tour_guide_id")
     private TourGuide tourGuide;
 
+    @ManyToOne
+    @JoinColumn(name = "promotion_id")
+    private Promotion promotion;
+
     @OneToMany(mappedBy = "tour")
     private List<TourImage> tourImages = new ArrayList<>();
 
@@ -56,10 +63,4 @@ public class Tour {
             joinColumns = @JoinColumn(name = "tour_id"),
             inverseJoinColumns = @JoinColumn(name = "vehicle_id"))
     private List<TravelVehicle> vehicles = new ArrayList<>();
-
-    @ManyToMany
-    @JoinTable(name = "tour_promotions",
-            joinColumns = @JoinColumn(name = "tour_id"),
-            inverseJoinColumns = @JoinColumn(name = "promotion_id"))
-    private List<Promotion> promotions = new ArrayList<>();
 }
