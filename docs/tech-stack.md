@@ -1,6 +1,9 @@
+A tourism booking system built with Spring Boot, Next.js, and PostgreSQL. This document outlines the tech stack used in the project.
+
 # Tech Stack
 
 ## Overview
+
 
 | Layer          | Technology              |
 |----------------|-------------------------|

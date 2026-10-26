@@ -67,6 +67,11 @@
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
+		<!-- Boot 4 moved Flyway auto-configuration into its own module. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-flyway</artifactId>
+		</dependency>
 
 		<!-- Security & Authentication (Spring Security, OAuth2, JWT) -->
 		<dependency>

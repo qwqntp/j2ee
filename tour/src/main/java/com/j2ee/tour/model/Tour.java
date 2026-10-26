@@ -17,6 +17,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -71,18 +72,22 @@ public class Tour {
     @JoinColumn(name = "promotion_id")
     private Promotion promotion;
 
+    @BatchSize(size = 25)
     @OneToMany(mappedBy = "tour")
     private List<TourImage> tourImages = new ArrayList<>();
 
+    @BatchSize(size = 25)
     @OneToMany(mappedBy = "tour")
     private List<TourDeparture> departures = new ArrayList<>();
 
+    @BatchSize(size = 25)
     @ManyToMany
     @JoinTable(name = "tour_destinations",
             joinColumns = @JoinColumn(name = "tour_id"),
             inverseJoinColumns = @JoinColumn(name = "destination_id"))
     private List<TouristDestination> destinations = new ArrayList<>();
 
+    @BatchSize(size = 25)
     @ManyToMany
     @JoinTable(name = "tour_vehicles",
             joinColumns = @JoinColumn(name = "tour_id"),
