@@ -12,15 +12,12 @@ import com.j2ee.tour.model.TouristDestination;
 import com.j2ee.tour.model.TravelVehicle;
 import com.j2ee.tour.repository.TourStatsProjection;
 
-import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 
 public final class TourMapper {
 
     private static final int SUMMARY_DESCRIPTION_LENGTH = 160;
-    private static final List<String> PUBLIC_DEPARTURE_STATUSES = List.of("OPEN", "FULL");
 
     private TourMapper() {
     }
@@ -39,14 +36,11 @@ public final class TourMapper {
         );
     }
 
-    public static TourResponse toDetail(Tour tour, LocalDateTime now) {
+    public static TourResponse toDetail(Tour tour, List<TourDeparture> departures) {
         Accommodation accommodation = tour.getAccommodation();
         TourGuide guide = tour.getTourGuide();
 
-        List<TourDepartureResponse> departures = tour.getDepartures().stream()
-                .filter(departure -> PUBLIC_DEPARTURE_STATUSES.contains(departure.getDepartureStatus()))
-                .filter(departure -> departure.getDepartureStartDate().isAfter(now))
-                .sorted(Comparator.comparing(TourDeparture::getDepartureStartDate))
+        List<TourDepartureResponse> responses = departures.stream()
                 .map(departure -> toDeparture(tour.getTourId(), departure))
                 .toList();
 
@@ -64,7 +58,7 @@ public final class TourMapper {
                 itinerary(tour.getTourDescription()),
                 tour.getDestinations().stream().map(TouristDestination::getDestinationName).toList(),
                 tour.getVehicles().stream().map(TravelVehicle::getVehicleType).toList(),
-                departures
+                responses
         );
     }
 

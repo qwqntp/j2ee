@@ -119,13 +119,16 @@ class TourServiceTest {
     }
 
     @Test
-    void getTourIncludesOnlyUpcomingOpenAndFullDepartures() {
+    void getTourUsesUpcomingOpenAndFullDeparturesQuery() {
         Tour tour = tour();
-        tour.getDepartures().add(departure(1L, "OPEN", LocalDateTime.of(2026, 11, 1, 8, 0)));
-        tour.getDepartures().add(departure(2L, "FULL", LocalDateTime.of(2026, 11, 5, 8, 0)));
-        tour.getDepartures().add(departure(3L, "CLOSED", LocalDateTime.of(2026, 11, 10, 8, 0)));
-        tour.getDepartures().add(departure(4L, "OPEN", LocalDateTime.of(2026, 10, 1, 8, 0)));
+        List<TourDeparture> departures = List.of(
+                departure(1L, "OPEN", LocalDateTime.of(2026, 11, 1, 8, 0)),
+                departure(2L, "FULL", LocalDateTime.of(2026, 11, 5, 8, 0)));
         when(tourRepository.findByTourIdAndTourStatus(1L, "OPEN")).thenReturn(Optional.of(tour));
+        when(departureRepository
+                .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
+                        eq(1L), eq(List.of("OPEN", "FULL")), any(LocalDateTime.class)))
+                .thenReturn(departures);
 
         TourResponse result = tourService.getTour(1L);
 
@@ -134,6 +137,9 @@ class TourServiceTest {
                 .containsExactly(1L, 2L);
         assertThat(result.description()).isEqualTo("Ngay 1: Da Nang");
         assertThat(result.itinerary()).containsExactly("Ngay 1: Da Nang", "Ngay 2: Hoi An");
+        verify(departureRepository)
+                .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
+                        eq(1L), eq(List.of("OPEN", "FULL")), eq(NOW));
     }
 
     @Test

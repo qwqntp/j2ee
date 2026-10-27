@@ -7,6 +7,7 @@ import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
 import com.j2ee.tour.mapper.TourMapper;
 import com.j2ee.tour.model.Tour;
+import com.j2ee.tour.model.TourDeparture;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TourRepository;
 import com.j2ee.tour.repository.TourStatsProjection;
@@ -63,19 +64,22 @@ public class TourService {
     public TourResponse getTour(Long tourId) {
         Tour tour = tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
-        return TourMapper.toDetail(tour, now());
+        return TourMapper.toDetail(tour, upcomingDepartures(tourId));
     }
 
     public List<TourDepartureResponse> getDepartures(Long tourId) {
         tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
 
-        return departureRepository
-                .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
-                        tourId, PUBLIC_DEPARTURE_STATUSES, now())
-                .stream()
+        return upcomingDepartures(tourId).stream()
                 .map(departure -> TourMapper.toDeparture(tourId, departure))
                 .toList();
+    }
+
+    private List<TourDeparture> upcomingDepartures(Long tourId) {
+        return departureRepository
+                .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
+                        tourId, PUBLIC_DEPARTURE_STATUSES, now());
     }
 
     private LocalDateTime now() {
