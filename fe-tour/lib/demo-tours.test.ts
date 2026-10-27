@@ -7,6 +7,14 @@ describe("demoToursPage", () => {
 
     expect(page.totalElements).toBe(1);
     expect(page.content[0]?.name).toBe("Lan Ha Bay Overnight");
+
+    const descriptionMatch = demoToursPage(0, "day-trippers");
+    expect(descriptionMatch.totalElements).toBe(1);
+    expect(descriptionMatch.content[0]?.name).toBe("Lan Ha Bay Overnight");
+
+    const destinationMatch = demoToursPage(0, "Cat Ba Island");
+    expect(destinationMatch.totalElements).toBe(1);
+    expect(destinationMatch.content[0]?.name).toBe("Lan Ha Bay Overnight");
   });
 
   it("returns the same page shape as the API", () => {
