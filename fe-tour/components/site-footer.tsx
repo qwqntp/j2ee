@@ -85,7 +85,7 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-white/15">
-        <div className="shell flex flex-wrap items-center justify-between gap-3 py-6 text-xs text-ivory/50">
+        <div className="shell flex flex-wrap items-center justify-between gap-3 py-6 text-xs text-ivory/70">
           <p>© 2026 Hành Trình. A demo booking experience.</p>
           <p>
             Photography by Christophe95, Steffen Schmitz and others via{" "}
