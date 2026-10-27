@@ -47,7 +47,7 @@ public class AuthService {
         if (accountRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.CONFLICT, "Username already exists");
         }
-        // Known race: two concurrent registrations can both pass this check.
+        // The app check gives a friendly message; the DB unique index is the final guard.
         if (accountRepository.existsByAccountEmailIgnoreCase(request.email())) {
             throw new ApiException(HttpStatus.CONFLICT, "Email already exists");
         }

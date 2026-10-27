@@ -194,7 +194,7 @@ No commits were made. The existing uncommitted change in `docs/tech-stack.md` wa
 - JSON `401`/`403` responses; no stack traces.
 - BCrypt passwords. Register and login both reject passwords over 72 UTF-8 bytes.
 - Unknown usernames still run a dummy BCrypt compare to reduce timing differences.
-- Email uniqueness is checked case-insensitively in the service. The concurrent-registration race is documented; there is no unique database constraint.
+- Email uniqueness is checked case-insensitively in the service for a friendly message; the unique index `uq_accounts_email_lower` enforces it in the database.
 - Stateless sessions; CSRF disabled. The refresh cookie relies on `SameSite=Lax`.
 
 ### Verification
