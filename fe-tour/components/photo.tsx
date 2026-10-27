@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 type Props = {
   src: string;
   alt: string;
@@ -7,13 +9,12 @@ type Props = {
 
 export function Photo({ src, alt, className, eager = false }: Props) {
   return (
-    // Local editorial images are pre-sized; remote tour images use TourImage.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       src={src}
       alt={alt}
-      loading={eager ? "eager" : "lazy"}
-      decoding="async"
+      fill
+      sizes="100vw"
+      preload={eager}
       className={`object-cover ${className ?? ""}`}
     />
   );
