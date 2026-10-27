@@ -142,6 +142,13 @@ class RefreshTokenServiceTest {
         assertThat(current.isRevoked()).isTrue();
     }
 
+    @Test
+    void purgeExpiredUsesNowFromTheInjectedClock() {
+        service.purgeExpired();
+
+        verify(repository).deleteExpiredBefore(NOW);
+    }
+
     private RefreshToken token(Account account, boolean revoked, LocalDateTime expiresAt) {
         RefreshToken token = new RefreshToken();
         token.setId(1L);

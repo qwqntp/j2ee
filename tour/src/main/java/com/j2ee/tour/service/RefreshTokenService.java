@@ -6,6 +6,7 @@ import com.j2ee.tour.model.RefreshToken;
 import com.j2ee.tour.repository.RefreshTokenRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,6 +82,12 @@ public class RefreshTokenService {
         }
         repository.findByTokenHashForUpdate(hash(rawToken))
                 .ifPresent(token -> token.setRevoked(true));
+    }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    @Transactional
+    public void purgeExpired() {
+        repository.deleteExpiredBefore(LocalDateTime.now(clock));
     }
 
     public static String hash(String rawToken) {
