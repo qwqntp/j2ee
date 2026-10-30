@@ -13,8 +13,7 @@ public record PageResponse<T>(
         int totalPages,
         boolean last,
         boolean hasNext,
-        boolean hasPrevious
-) {
+        boolean hasPrevious) {
     public PageResponse(List<T> content, int page, int size, long totalElements, int totalPages, boolean last) {
         this(content, page, size, totalElements, totalPages, last, page < totalPages - 1, page > 0);
     }
@@ -28,8 +27,7 @@ public record PageResponse<T>(
                 page.getTotalPages(),
                 page.isLast(),
                 page.hasNext(),
-                page.hasPrevious()
-        );
+                page.hasPrevious());
     }
 
     public static <E, T> PageResponse<T> from(Page<E> page, Function<E, T> mapper) {
@@ -42,7 +40,6 @@ public record PageResponse<T>(
                 page.getTotalPages(),
                 page.isLast(),
                 page.hasNext(),
-                page.hasPrevious()
-        );
+                page.hasPrevious());
     }
 }

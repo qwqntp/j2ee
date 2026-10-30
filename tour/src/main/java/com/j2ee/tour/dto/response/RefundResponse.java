@@ -13,4 +13,16 @@ public record RefundResponse(
         LocalDateTime requestedAt,
         LocalDateTime processedAt
 ) {
+    public static RefundResponse from(com.j2ee.tour.model.Refund refund) {
+        return new RefundResponse(
+                refund.getRefundId(),
+                refund.getPayment() == null ? null : refund.getPayment().getPaymentId(),
+                refund.getBooking() == null ? null : refund.getBooking().getBookingId(),
+                refund.getRefundAmount(),
+                refund.getRefundReason(),
+                refund.getRefundStatus(),
+                refund.getRefundRequestedAt(),
+                refund.getRefundProcessedAt()
+        );
+    }
 }

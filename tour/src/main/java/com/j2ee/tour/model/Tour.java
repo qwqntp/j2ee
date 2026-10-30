@@ -12,14 +12,11 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,24 +37,13 @@ public class Tour {
     @Column(columnDefinition = "TEXT")
     private String tourDescription;
 
-    @NotNull
-    @DecimalMin("0")
-    @Column(nullable = false, precision = 12, scale = 2)
-    private BigDecimal tourPrice;
+    @Column
+    private Integer tourDurationDays;
 
     @NotNull
     @Pattern(regexp = "DRAFT|OPEN|CLOSED|CANCELLED")
     @Column(nullable = false, length = 20)
     private String tourStatus;
-
-    private LocalDateTime tourStartDate;
-    private LocalDateTime tourEndDate;
-
-    @Column(length = 255)
-    private String tourMeetingPoint;
-
-    @Column
-    private Integer tourRemainingSlots;
 
     @ManyToOne
     @JoinColumn(name = "accommodation_id")
