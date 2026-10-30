@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface TourDepartureRepository extends JpaRepository<TourDeparture, Long> {
+    boolean existsByTourTourId(Long tourId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select departure from TourDeparture departure where departure.departureId = :id")
     Optional<TourDeparture> findByIdForUpdate(@Param("id") Long id);
