@@ -45,9 +45,11 @@ INSERT INTO promotions (promotion_id, promotion_name, discount_percentage, start
 (3, 'Siêu Sale Tháng 11', 15.0, '2025-11-01', '2025-12-31', 'Khuyến mãi test chức năng.');
 
 -- G. ACCOUNTS (Pass: 123456)
-INSERT INTO accounts (account_id, username, password, email_verified, status, account_created_at, account_updated_at, role_id) VALUES
-(1, 'user01', '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 1, 1, NOW(), NOW(), 2),
-(2, 'user02', '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 1, 1, NOW(), NOW(), 2);
+INSERT INTO accounts (account_id, username, password, account_email, email_verified, status, account_created_at, account_updated_at, role_id) VALUES
+(1, 'user01',  '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 'user01@example.com',  1, 1, NOW(), NOW(), 2),
+(2, 'user02',  '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 'user02@example.com',  1, 1, NOW(), NOW(), 2),
+(3, 'admin',   '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 'admin@example.com',   1, 1, NOW(), NOW(), 1),
+(4, 'staff01', '$2a$10$EnfdjqhOU9a7wzPUVFYENO3i6K..WMO1M92uKmhZnMReJjZl/rxr6', 'staff01@example.com', 1, 1, NOW(), NOW(), 3);
 
 -- H. CUSTOMERS
 INSERT INTO customers (customer_id, customer_name, customer_email, customer_phone, customer_address, customer_date_of_birth, account_id) VALUES
@@ -63,16 +65,14 @@ INSERT INTO tours (tour_id, tour_name, tour_description, tour_duration_days, tou
 'Ngày 1: Đón khách tại sân bay Cam Ranh. Về trung tâm thành phố, nhận phòng Vinpearl Resort.|Ngày 2: Du ngoạn 4 đảo: Hòn Mun, Hòn Một, Bãi Tranh. Lặn ngắm san hô.|Ngày 3: Vui chơi không giới hạn tại VinWonders Nha Trang.|Ngày 4: Tắm bùn khoáng nóng I-Resort. Tiễn đoàn.',
 4, 'OPEN', 2, 2, NULL);
 
--- J. TOUR IMAGES
+-- J. TOUR IMAGES (urls left blank until real images are uploaded)
 INSERT INTO tour_images (image_url, tour_id) VALUES
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764752418/tours/68a8ed00-a2ca-4c8c-8d94-ef65e878f805_40-trai-nghiem-du-thuyen-tren-song-hoai.png.png', 1),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764752414/tours/86aeb11f-acdd-4bc9-a9b9-9d71e8a73766_hoi-an-1680591517857660432696.webp.webp', 1),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764752414/tours/5ae3201b-903f-4090-828b-f1b02ed491c2_du-lich-da-nang-hoi-an-kinh-nghiem-cho-nguoi-moi-bat-dau-1.png.png', 1),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764752413/tours/96bdc303-a1ef-43c5-8ed7-3a7b56cef264_tour-da-nang.jpg.jpg', 1),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764751830/tours/1d0193d8-32e0-4144-8ff1-2f5f4f3e3611_adgahjd-1755152740753.jpg.jpg', 2),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764751830/tours/ec62a7f6-c557-4c8f-9a9b-9d71e8a73766_Bien-nha-trang-3-jpg.webp.webp', 2),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764751830/tours/db9f9072-4c8b-405f-8b84-2b93b882e3ea_nha-trang_1.jpg.jpg', 2),
-('https://res.cloudinary.com/dafcmtcp2/image/upload/v1764751830/tours/981214ff-327b-4f46-89ec-0263125e4d5b_kinh-nghiem-du-lich-nha-trang-2_1689411065.jpg.jpg', 2);
+('', 1),
+('', 1),
+('', 1),
+('', 2),
+('', 2),
+('', 2);
 
 -- K. LIÊN KẾT BẢNG
 INSERT INTO tour_destinations (tour_id, destination_id) VALUES
@@ -87,36 +87,49 @@ INSERT INTO tour_vehicles (tour_id, vehicle_id) VALUES
 -- L. BOOKING FLOOR - DEPARTURES
 INSERT INTO tour_departures (departure_id, tour_id, departure_start_date, departure_end_date,
     departure_capacity, departure_booked_slots, departure_price, departure_meeting_point, departure_status)
-VALUES (1, 1, '2026-06-15 08:00:00', '2026-06-17 17:00:00', 30, 2, 4500000, 'Sân bay Đà Nẵng', 'OPEN');
+VALUES
+(1, 1, '2026-06-15 08:00:00', '2026-06-17 17:00:00', 30, 2, 4500000, 'Sân bay Đà Nẵng', 'OPEN'),
+(2, 2, '2026-07-10 07:00:00', '2026-07-13 18:00:00', 40, 0, 6500000, 'Sân bay Cam Ranh', 'OPEN'),
+(3, 1, '2026-09-20 08:00:00', '2026-09-22 17:00:00', 20, 20, 4800000, 'Sân bay Đà Nẵng', 'FULL'),
+(4, 2, '2026-08-15 07:00:00', '2026-08-18 18:00:00', 25, 5, 6800000, 'Sân bay Cam Ranh', 'OPEN');
 
-INSERT INTO tour_departures (departure_id, tour_id, departure_start_date, departure_end_date,
-    departure_capacity, departure_booked_slots, departure_price, departure_meeting_point, departure_status)
-VALUES (2, 2, '2026-07-10 07:00:00', '2026-07-13 18:00:00', 40, 0, 6500000, 'Sân bay Cam Ranh', 'OPEN');
-
--- M. BOOKING + MANIFEST + PAYMENT
+-- M. BOOKINGS + MANIFEST + PAYMENTS + REFUNDS
 INSERT INTO bookings (booking_id, booking_code, account_id, departure_id,
     booking_created_at, booking_guest_count, booking_unit_price, booking_subtotal,
     booking_discount_amount, booking_total_amount, booking_status, booking_note)
-VALUES (1, 'BK-20260303-0001', 2, 1,
-    NOW(), 2, 4500000, 9000000, 0, 9000000, 'PAID', 'Xin đón tại cổng A');
+VALUES
+(1, 'BK-20260303-0001', 2, 1, NOW(), 2, 4500000, 9000000, 0, 9000000, 'PAID', 'Xin đón tại cổng A'),
+(2, 'BK-20260304-0002', 1, 2, NOW(), 1, 6500000, 6500000, 650000, 5850000, 'PENDING', 'Áp dụng mã Chào Hè 2026'),
+(3, 'BK-20260305-0003', 2, 4, NOW(), 3, 6800000, 20400000, 0, 20400000, 'CANCELLED', 'Khách hủy trước khởi hành');
 
 INSERT INTO travelers (traveler_id, booking_id, traveler_name, traveler_date_of_birth, traveler_gender, traveler_id_document) VALUES
 (1, 1, 'Nguyễn Văn Khách', '1995-05-15', 'MALE',   '012345678901'),
-(2, 1, 'Lê Thị Mua',        '2000-10-20', 'FEMALE', '098765432109');
+(2, 1, 'Lê Thị Mua',        '2000-10-20', 'FEMALE', '098765432109'),
+(3, 2, 'Trần Văn Độc',      '1992-03-08', 'MALE',   '036789012345');
 
 INSERT INTO payments (payment_id, booking_id, payment_amount, payment_method,
     payment_provider_txn_id, payment_status, payment_paid_at)
-VALUES (1, 1, 9000000, 'VNPAY', 'VNP_20260303_000123456', 'SUCCESS', NOW());
+VALUES
+(1, 1, 9000000, 'VNPAY', 'VNP_20260303_000123456', 'SUCCESS', NOW()),
+(2, 2, 5850000, 'MOMO',  'MOMO_20260304_987654321', 'FAILED', NULL);
 
--- N. INVOICE FOR THE BOOKING
+INSERT INTO refunds (refund_id, payment_id, booking_id, refund_amount, refund_reason,
+    refund_status, refund_requested_at, refund_processed_at)
+VALUES
+(1, 1, 1, 1500000, 'Khách hủy một chỗ', 'REQUESTED', NOW() - INTERVAL '2 days', NULL),
+(2, 1, 1, 500000, 'Hoàn tiền dịch vụ không đạt', 'DONE', NOW() - INTERVAL '12 days', NOW() - INTERVAL '11 days');
+
+-- N. INVOICES + PROMOTION LINKS
 INSERT INTO invoices (invoice_id, invoice_created_at, status, discount_amount, tax_amount,
     total_amount, payment_method, customer_name, customer_phone, customer_email, booking_id, service_fee)
-VALUES (1, NOW(), 'PAID', 0, 0, 9000000, 'VNPAY',
-    'Nguyễn Văn Khách', '0911111111', 'khach01@gmail.com', 1, 0);
+VALUES
+(1, NOW(), 'PAID',   0,      0, 9000000, 'VNPAY', 'Nguyễn Văn Khách', '0911111111', 'khach01@gmail.com', 1, 0),
+(2, NOW(), 'UNPAID', 650000, 0, 5850000, NULL,    'Nguyễn Văn Khách', '0911111111', 'khach01@gmail.com', 2, 0);
 
--- Refund ma vidu (kich hoat khi can test hoan tien):
--- INSERT INTO refunds (refund_id, payment_id, booking_id, refund_amount, refund_reason, refund_status)
--- VALUES (1, 1, 1, 4500000, 'Khách xin hoàn một chỗ', 'REQUESTED');
+INSERT INTO invoice_promotions (invoice_id, promotion_id) VALUES
+(2, 1);
+
+-- refresh_tokens is intentionally not seeded: tokens are issued at login/refresh.
 
 -- Explicit seed IDs do not advance identity sequences. Align them before application inserts.
 SELECT setval(pg_get_serial_sequence('account_roles', 'account_role_id'),
@@ -151,12 +164,3 @@ SELECT setval(pg_get_serial_sequence('payments', 'payment_id'),
               COALESCE((SELECT MAX(payment_id) FROM payments), 1), true);
 SELECT setval(pg_get_serial_sequence('refunds', 'refund_id'),
               COALESCE((SELECT MAX(refund_id) FROM refunds), 1), true);
-
--- ============================================================
--- MIGRATION (sau khi da thay code doc tu departures):
--- INSERT INTO tour_departures (departure_id, tour_id, departure_start_date, departure_end_date, departure_capacity, departure_booked_slots, departure_price, departure_meeting_point, departure_status)
--- SELECT 'DEPA' || LPAD(ROW_NUMBER() OVER (ORDER BY tour_id)::text, 6, '0'), tour_id, tour_start_date, tour_end_date,
---        tour_remaining_slots, 0, tour_price, tour_meeting_point, 'OPEN' FROM tours;
--- ALTER TABLE tours DROP COLUMN tour_remaining_slots, drop column tour_start_date,
---   drop column tour_end_date, drop column tour_price, drop column tour_meeting_point;
--- ============================================================
