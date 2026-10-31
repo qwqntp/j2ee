@@ -32,3 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 .env
+
+
+### frontend ###
+/fe-tour/.next/
+/fe-tour/node_modules/
+/fe-tour/next-env.d.ts
