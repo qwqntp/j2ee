@@ -11,6 +11,12 @@ import com.j2ee.tour.model.TourImage;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TourRepository;
 import com.j2ee.tour.repository.TourStatsProjection;
+import com.j2ee.tour.repository.AccommodationRepository;
+import com.j2ee.tour.repository.PromotionRepository;
+import com.j2ee.tour.repository.TourGuideRepository;
+import com.j2ee.tour.repository.TourImageRepository;
+import com.j2ee.tour.repository.TouristDestinationRepository;
+import com.j2ee.tour.repository.TravelVehicleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -52,7 +58,13 @@ class TourServiceTest {
     void setUp() {
         tourRepository = mock(TourRepository.class);
         departureRepository = mock(TourDepartureRepository.class);
-        tourService = new TourService(tourRepository, departureRepository, CLOCK);
+        tourService = new TourService(tourRepository, departureRepository, CLOCK,
+                mock(AccommodationRepository.class),
+                mock(TourGuideRepository.class),
+                mock(PromotionRepository.class),
+                mock(TouristDestinationRepository.class),
+                mock(TravelVehicleRepository.class),
+                mock(TourImageRepository.class));
     }
 
     @Test

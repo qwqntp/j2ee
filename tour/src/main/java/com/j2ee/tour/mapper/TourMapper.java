@@ -58,7 +58,13 @@ public final class TourMapper {
                 itinerary(tour.getTourDescription()),
                 tour.getDestinations().stream().map(TouristDestination::getDestinationName).toList(),
                 tour.getVehicles().stream().map(TravelVehicle::getVehicleType).toList(),
-                responses
+                responses,
+                tour.getTourDurationDays(),
+                accommodation == null ? null : accommodation.getAccommodationId(),
+                guide == null ? null : guide.getTourGuideId(),
+                tour.getPromotion() == null ? null : tour.getPromotion().getPromotionId(),
+                tour.getDestinations().stream().map(TouristDestination::getDestinationId).toList(),
+                tour.getVehicles().stream().map(TravelVehicle::getVehicleId).toList()
         );
     }
 

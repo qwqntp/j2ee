@@ -99,7 +99,7 @@ class RefreshTokenServiceTest {
     @Test
     void rejectsDisabledAccount() {
         Account account = account();
-        account.setStatus((short) 0);
+        account.setStatus(0);
         RefreshToken current = token(account, false, NOW.plusDays(1));
         when(repository.findByTokenHashForUpdate(RefreshTokenService.hash("disabled")))
                 .thenReturn(Optional.of(current));
@@ -170,8 +170,8 @@ class RefreshTokenServiceTest {
         account.setUsername("user01");
         account.setPassword("$2a$10$hash");
         account.setAccountEmail("user01@example.com");
-        account.setEmailVerified((short) 0);
-        account.setStatus((short) 1);
+        account.setEmailVerified(0);
+        account.setStatus(1);
         account.setAccountCreatedAt(NOW.minusDays(10));
         account.setAccountUpdatedAt(NOW.minusDays(10));
         account.setRole(role);

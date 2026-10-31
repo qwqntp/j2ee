@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 public class AuthService {
 
     private static final String DEFAULT_ROLE = "ROLE_USER";
-    private static final short ACTIVE = 1;
+    private static final int ACTIVE = 1;
     private static final int BCRYPT_MAX_BYTES = 72;
     // BCrypt hash of an arbitrary value, used to keep unknown-user login timing similar.
     private static final String DUMMY_HASH =
@@ -61,7 +61,7 @@ public class AuthService {
         account.setUsername(request.username());
         account.setPassword(passwordEncoder.encode(request.password()));
         account.setAccountEmail(request.email());
-        account.setEmailVerified((short) 0);
+        account.setEmailVerified(0);
         account.setStatus(ACTIVE);
         account.setAccountCreatedAt(now);
         account.setAccountUpdatedAt(now);

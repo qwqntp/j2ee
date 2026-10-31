@@ -24,7 +24,7 @@ import java.util.HexFormat;
 public class RefreshTokenService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final short ACTIVE = 1;
+    private static final int ACTIVE = 1;
 
     private final RefreshTokenRepository repository;
     private final Clock clock;

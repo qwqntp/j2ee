@@ -54,14 +54,14 @@ INSERT INTO customers (customer_id, customer_name, customer_email, customer_phon
 (2, 'Nguyễn Văn Khách', 'khach01@gmail.com', '0911111111', 'TP.HCM', '1995-05-15', 2),
 (3, 'Lê Thị Mua', 'mua.le@gmail.com', '0922222222', 'Đà Nẵng', '2000-10-20', 1);
 
--- I. TOURS
-INSERT INTO tours (tour_id, tour_name, tour_description, tour_price, tour_status, tour_start_date, tour_end_date, tour_meeting_point, tour_remaining_slots, accommodation_id, tour_guide_id, promotion_id) VALUES
+-- I. TOURS (dates, capacity, and price live in tour_departures)
+INSERT INTO tours (tour_id, tour_name, tour_description, tour_duration_days, tour_status, accommodation_id, tour_guide_id, promotion_id) VALUES
 (1, 'Đà Nẵng - Hội An: Hành Trình Di Sản',
 'Ngày 1: Xe đón quý khách tại sân bay Đà Nẵng, đưa về khách sạn Mường Thanh nhận phòng. Chiều tham quan Bán đảo Sơn Trà.|Ngày 2: Khởi hành đi Bà Nà Hills - Đường lên tiên cảnh. Check-in Cầu Vàng. Ăn trưa Buffet. Chiều về Hội An tham quan phố cổ.|Ngày 3: Mua sắm đặc sản Miền Trung tại chợ Hàn. Xe đưa quý khách ra sân bay.',
-4500000, 'OPEN', '2026-06-15 08:00:00', '2026-06-17 17:00:00', 'Sân bay Đà Nẵng', 28, 1, 1, 1),
+3, 'OPEN', 1, 1, 1),
 (2, 'Nha Trang Biển Gọi',
 'Ngày 1: Đón khách tại sân bay Cam Ranh. Về trung tâm thành phố, nhận phòng Vinpearl Resort.|Ngày 2: Du ngoạn 4 đảo: Hòn Mun, Hòn Một, Bãi Tranh. Lặn ngắm san hô.|Ngày 3: Vui chơi không giới hạn tại VinWonders Nha Trang.|Ngày 4: Tắm bùn khoáng nóng I-Resort. Tiễn đoàn.',
-6500000, 'OPEN', '2026-07-10 07:00:00', '2026-07-13 18:00:00', 'Sân bay Cam Ranh', 40, 2, 2, NULL);
+4, 'OPEN', 2, 2, NULL);
 
 -- J. TOUR IMAGES
 INSERT INTO tour_images (image_url, tour_id) VALUES

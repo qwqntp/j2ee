@@ -13,6 +13,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -38,14 +40,16 @@ public class Account {
     @NotNull
     @Min(0)
     @Max(1)
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     @Column(nullable = false)
-    private Short emailVerified;
+    private Integer emailVerified;
 
     @NotNull
     @Min(0)
     @Max(1)
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     @Column(nullable = false)
-    private Short status;
+    private Integer status;
 
     @NotNull
     @Column(nullable = false)

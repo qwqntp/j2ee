@@ -137,7 +137,7 @@ class AuthServiceTest {
     @Test
     void loginRejectsDisabledAccount() {
         Account account = account();
-        account.setStatus((short) 0);
+        account.setStatus(0);
         when(accountRepository.findByUsername("user01")).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("password123", account.getPassword())).thenReturn(true);
 
@@ -187,8 +187,8 @@ class AuthServiceTest {
         account.setUsername("user01");
         account.setPassword("$2a$10$hash");
         account.setAccountEmail("user01@example.com");
-        account.setEmailVerified((short) 0);
-        account.setStatus((short) 1);
+        account.setEmailVerified(0);
+        account.setStatus(1);
         account.setAccountCreatedAt(LocalDateTime.of(2026, 1, 1, 0, 0));
         account.setAccountUpdatedAt(LocalDateTime.of(2026, 1, 1, 0, 0));
         account.setRole(role);
