@@ -1,5 +1,6 @@
 package com.j2ee.tour;
 
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.request.CreateRefundRequest;
@@ -10,6 +11,7 @@ import com.j2ee.tour.model.Accommodation;
 import com.j2ee.tour.model.Tour;
 import com.j2ee.tour.model.TourDeparture;
 import com.j2ee.tour.model.TourGuide;
+import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
 import com.j2ee.tour.repository.AccommodationRepository;
@@ -47,6 +49,8 @@ class BookingFlowIntegrationTests {
     @Autowired private TourDepartureRepository tourDepartureRepository;
 
     private TourDeparture departure;
+    private Account account;
+    private AuthPrincipal principal;
 
     @BeforeEach
     void setUp() {
@@ -54,7 +58,7 @@ class BookingFlowIntegrationTests {
         role.setRoleName("USER");
         role = accountRoleRepository.save(role);
 
-        Account account = new Account();
+        account = new Account();
         account.setUsername("tester");
         account.setPassword("secret");
         account.setAccountEmail("tester@example.com");
@@ -63,7 +67,8 @@ class BookingFlowIntegrationTests {
         account.setAccountCreatedAt(LocalDateTime.now());
         account.setAccountUpdatedAt(LocalDateTime.now());
         account.setRole(role);
-        accountRepository.save(account);
+        account = accountRepository.save(account);
+        principal = new AuthPrincipal(account.getAccountId(), account.getUsername(), role.getRoleName());
 
         Accommodation accommodation = new Accommodation();
         accommodation.setAccommodationName("Hotel");
@@ -96,7 +101,7 @@ class BookingFlowIntegrationTests {
 
     @Test
     void bookingReservesSeatsAndMarksDepartureFull() {
-        bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"));
+        bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"), principal);
 
         TourDeparture updated = tourDepartureRepository.findById(departure.getDepartureId()).orElseThrow();
         assertEquals(2, updated.getDepartureBookedSlots());
@@ -106,13 +111,13 @@ class BookingFlowIntegrationTests {
     @Test
     void bookingFailsWhenNotEnoughSeats() {
         assertThrows(IllegalStateException.class,
-                () -> bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 3, "note")));
+                () -> bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 3, "note"), principal));
     }
 
     @Test
     void cancellationReleasesSeats() {
-        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"));
-        bookingService.update(booking.id(), new BookingUpdateRequest(null, null, null, "CANCELLED"));
+        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"), principal);
+        bookingService.update(booking.id(), new BookingUpdateRequest(null, null, null, "CANCELLED"), principal);
 
         TourDeparture updated = tourDepartureRepository.findById(departure.getDepartureId()).orElseThrow();
         assertEquals(0, updated.getDepartureBookedSlots());
@@ -121,18 +126,18 @@ class BookingFlowIntegrationTests {
 
     @Test
     void paymentCompletesBookingWhenSumReachesTotal() {
-        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"));
+        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"), principal);
 
         paymentService.handleCallback(booking.id(),
                 new PaymentCallbackRequest("txn-1", new BigDecimal("1000.00"), "CARD", true));
 
-        var updated = bookingService.get(booking.id());
+        var updated = bookingService.get(booking.id(), principal);
         assertEquals("PAID", updated.status());
     }
 
     @Test
     void refundRejectsAmountExceedingPayment() {
-        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"));
+        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 2, "note"), principal);
         var payment = paymentService.handleCallback(booking.id(),
                 new PaymentCallbackRequest("txn-2", new BigDecimal("1000.00"), "CARD", true));
 
@@ -144,10 +149,37 @@ class BookingFlowIntegrationTests {
 
     @Test
     void bookingDeleteRejectedWhenPaymentsExist() {
-        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 1, "note"));
+        var booking = bookingService.create(new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
         paymentService.handleCallback(booking.id(),
                 new PaymentCallbackRequest("txn-3", new BigDecimal("500.00"), "CASH", true));
 
-        assertThrows(IllegalStateException.class, () -> bookingService.delete(booking.id()));
+        assertThrows(IllegalStateException.class, () -> bookingService.delete(booking.id(), principal));
+    }
+
+    @Test
+    void bookingIsLinkedToSignedInAccount() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+
+        assertEquals(account.getAccountId(), booking.accountId());
+    }
+
+    @Test
+    void otherUserCannotReadOrDeleteBooking() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        AuthPrincipal other = new AuthPrincipal(account.getAccountId() + 1, "other", "ROLE_USER");
+
+        assertThrows(ApiException.class, () -> bookingService.get(booking.id(), other));
+        assertThrows(ApiException.class, () -> bookingService.delete(booking.id(), other));
+    }
+
+    @Test
+    void adminCanReadAnyBooking() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        AuthPrincipal admin = new AuthPrincipal(account.getAccountId() + 1, "admin", "ROLE_ADMIN");
+
+        assertEquals(booking.id(), bookingService.get(booking.id(), admin).id());
     }
 }

@@ -52,19 +52,21 @@ class TourServiceTest {
 
     private TourRepository tourRepository;
     private TourDepartureRepository departureRepository;
+    private TourImageRepository tourImageRepository;
     private TourService tourService;
 
     @BeforeEach
     void setUp() {
         tourRepository = mock(TourRepository.class);
         departureRepository = mock(TourDepartureRepository.class);
+        tourImageRepository = mock(TourImageRepository.class);
         tourService = new TourService(tourRepository, departureRepository, CLOCK,
                 mock(AccommodationRepository.class),
                 mock(TourGuideRepository.class),
                 mock(PromotionRepository.class),
                 mock(TouristDestinationRepository.class),
                 mock(TravelVehicleRepository.class),
-                mock(TourImageRepository.class));
+                tourImageRepository);
     }
 
     @Test
@@ -75,6 +77,10 @@ class TourServiceTest {
         when(tourRepository.findByTourStatus(eq("OPEN"), any(Pageable.class))).thenReturn(page);
         when(departureRepository.findStatsByTourIds(anyCollection(), any(LocalDateTime.class)))
                 .thenReturn(List.of(stats));
+        TourImageRepository.TourImageProjection image = mock(TourImageRepository.TourImageProjection.class);
+        when(image.getTourId()).thenReturn(1L);
+        when(image.getImageUrl()).thenReturn("https://img/1.jpg");
+        when(tourImageRepository.findImageUrlsByTourIds(anyCollection())).thenReturn(List.of(image));
 
         PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, null);
 

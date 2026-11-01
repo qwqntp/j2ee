@@ -85,7 +85,7 @@ public class TourService {
                         PUBLIC_TOUR_STATUS, search, pageable);
 
         if (tours.isEmpty()) {
-            return PageResponse.from(tours, tour -> TourMapper.toSummary(tour, null));
+            return PageResponse.from(tours, tour -> TourMapper.toSummary(tour, null, null));
         }
 
         List<Long> tourIds = tours.getContent().stream().map(Tour::getTourId).toList();
@@ -93,8 +93,18 @@ public class TourService {
                 .findStatsByTourIds(tourIds, now())
                 .stream()
                 .collect(Collectors.toMap(TourStatsProjection::getTourId, Function.identity()));
+        Map<Long, String> firstImages = tourImageRepository
+                .findImageUrlsByTourIds(tourIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        TourImageRepository.TourImageProjection::getTourId,
+                        TourImageRepository.TourImageProjection::getImageUrl,
+                        (first, second) -> first));
 
-        return PageResponse.from(tours, tour -> TourMapper.toSummary(tour, stats.get(tour.getTourId())));
+        return PageResponse.from(tours, tour -> TourMapper.toSummary(
+                tour,
+                stats.get(tour.getTourId()),
+                firstImages.get(tour.getTourId())));
     }
 
     public TourResponse getTour(Long tourId) {

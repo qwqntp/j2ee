@@ -9,6 +9,7 @@ const links = [
   { href: "/#destinations", label: "Destinations" },
   { href: "/#stories", label: "Travel notes" },
   { href: "/#why", label: "Why us" },
+  { href: "/login", label: "Sign in" },
 ];
 
 export function SiteHeader() {

@@ -2,15 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { DemoNotice } from "@/components/demo-notice";
 import { EmptyState } from "@/components/empty-state";
 import { IconSearch } from "@/components/icons";
 import { Pagination } from "@/components/pagination";
 import { TourGridSkeleton } from "@/components/skeleton";
 import { TourCard } from "@/components/tour-card";
-import { demoToursPage } from "@/lib/demo-tours";
 import { loadTours } from "@/lib/tours";
-import type { PageData, TourSummary } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Journeys",
@@ -74,16 +71,7 @@ async function TourResults({ searchParams }: { searchParams: SearchParams }) {
 
   await connection();
 
-  let result: PageData<TourSummary>;
-  let usedDemo = false;
-
-  try {
-    result = await loadTours(page, keyword);
-  } catch {
-    // Kept outside the cached read so sample data is never cached as live data.
-    result = demoToursPage(page, keyword);
-    usedDemo = true;
-  }
+  const result = await loadTours(page, keyword);
 
   const outOfRange = result.content.length === 0 && result.totalElements > 0;
   const countLabel =
@@ -128,12 +116,6 @@ async function TourResults({ searchParams }: { searchParams: SearchParams }) {
           {keyword ? ` for “${keyword}”` : ""}
         </p>
       </div>
-
-      {usedDemo ? (
-        <div className="mt-6">
-          <DemoNotice />
-        </div>
-      ) : null}
 
       {result.content.length === 0 ? (
         <div className="mt-8">

@@ -5,11 +5,13 @@ import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.BookingResponse;
+import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.BookingService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,35 +31,48 @@ public class BookingController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<BookingResponse>>> list(Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(bookingService.list(pageable)));
+    public ResponseEntity<ApiResponse<PageResponse<BookingResponse>>> list(
+            Pageable pageable,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.list(pageable, principal)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<BookingResponse>> get(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success(bookingService.get(id)));
+    public ResponseEntity<ApiResponse<BookingResponse>> get(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.get(id, principal)));
     }
 
     @GetMapping("/code/{bookingCode}")
-    public ResponseEntity<ApiResponse<BookingResponse>> getByCode(@PathVariable String bookingCode) {
-        return ResponseEntity.ok(ApiResponse.success(bookingService.getByCode(bookingCode)));
+    public ResponseEntity<ApiResponse<BookingResponse>> getByCode(
+            @PathVariable String bookingCode,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.getByCode(bookingCode, principal)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(bookingService.create(request)));
+    public ResponseEntity<ApiResponse<BookingResponse>> create(
+            @Valid @RequestBody CreateBookingRequest request,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                bookingService.create(request, principal)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<BookingResponse>> update(
             @PathVariable Long id,
-            @Valid @RequestBody BookingUpdateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(bookingService.update(id, request)));
+            @Valid @RequestBody BookingUpdateRequest request,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.update(id, request, principal)));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        bookingService.delete(id);
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        bookingService.delete(id, principal);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 }

@@ -22,13 +22,13 @@ public final class TourMapper {
     private TourMapper() {
     }
 
-    public static TourSummaryResponse toSummary(Tour tour, TourStatsProjection stats) {
+    public static TourSummaryResponse toSummary(Tour tour, TourStatsProjection stats, String imageUrl) {
         return new TourSummaryResponse(
                 tour.getTourId(),
                 tour.getTourName(),
                 truncate(firstSegment(tour.getTourDescription()), SUMMARY_DESCRIPTION_LENGTH),
                 tour.getTourStatus(),
-                firstImageUrl(tour),
+                imageUrl,
                 stats == null ? null : stats.getPriceFrom(),
                 stats == null ? null : stats.getNextDepartureDate(),
                 stats == null || stats.getSeatsAvailable() == null ? 0 : stats.getSeatsAvailable().intValue(),
@@ -82,13 +82,6 @@ public final class TourMapper {
                 departure.getDepartureStatus(),
                 departure.getDepartureCreatedAt()
         );
-    }
-
-    private static String firstImageUrl(Tour tour) {
-        return tour.getTourImages().stream()
-                .map(TourImage::getImageUrl)
-                .findFirst()
-                .orElse(null);
     }
 
     private static List<String> itinerary(String description) {

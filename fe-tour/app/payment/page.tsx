@@ -2,20 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { DemoNotice } from "@/components/demo-notice";
 import { EmptyState } from "@/components/empty-state";
 import { PaymentForm } from "@/components/payment-form";
 import { CheckoutSkeleton } from "@/components/skeleton";
 import { ApiError } from "@/lib/api";
-import { demoTour } from "@/lib/demo-tours";
 import { isSoldOut } from "@/lib/format";
 import { tourFallbackImage } from "@/lib/tour-images";
 import { loadTour } from "@/lib/tours";
 import type { TourDetail } from "@/lib/types";
 
 export const metadata: Metadata = {
-  title: "Checkout preview",
-  description: "A UI-only preview of the booking checkout. No payment is processed.",
+  title: "Checkout",
+  description: "Reserve seats on a departure. Payment is arranged separately.",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -37,13 +35,13 @@ export default function PaymentPage({ searchParams }: Props) {
         <div className="shell py-12 sm:py-16">
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
-              <p className="eyebrow text-terracotta">Checkout preview</p>
+              <p className="eyebrow text-terracotta">Checkout</p>
               <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.04] tracking-tight text-charcoal sm:text-5xl">
                 A quiet moment before the journey.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-6 text-muted">
-                This is a UI preview only. No booking is created, no payment is taken and nothing
-                is sent to a server.
+                Reserve seats on this departure. Payment is arranged separately, so no card details
+                are collected here.
               </p>
             </div>
             <Link href="/tours" className="btn-secondary">
@@ -73,22 +71,18 @@ async function PaymentContent({ searchParams }: { searchParams: SearchParams }) 
     return (
       <EmptyState
         title="Start with a journey."
-        description="Pick a departure from any journey to preview the checkout. This demo never takes a payment."
+        description="Pick a departure from any journey to reserve seats. Payment is arranged separately."
         action={{ href: "/tours", label: "Browse journeys" }}
       />
     );
   }
 
-  let tour: TourDetail | null = null;
-  let usedDemo = false;
+  let tour: TourDetail;
 
   try {
     tour = await loadTour(tourId);
   } catch (error) {
-    // Kept outside the cached read so sample data is never cached as live data.
-    tour = demoTour(tourId);
-    usedDemo = tour !== null;
-    if (!tour && error instanceof ApiError && error.status === 404) {
+    if (error instanceof ApiError && error.status === 404) {
       return (
         <EmptyState
           title="This journey is no longer available."
@@ -97,16 +91,7 @@ async function PaymentContent({ searchParams }: { searchParams: SearchParams }) 
         />
       );
     }
-  }
-
-  if (!tour) {
-    return (
-      <EmptyState
-        title="We could not open this checkout."
-        description="The booking service may be taking a short break. Try again from the journey page."
-        action={{ href: "/tours", label: "Back to journeys" }}
-      />
-    );
+    throw error;
   }
 
   const departure = departureId
@@ -119,7 +104,7 @@ async function PaymentContent({ searchParams }: { searchParams: SearchParams }) 
     return (
       <EmptyState
         title="Choose a departure first."
-        description="This preview needs a specific date so it can show the right price and seats."
+        description="Choose a specific date so the booking has the right price and seats."
         action={{ href: `/tours/${tour.id}#departures`, label: "See dates" }}
       />
     );
@@ -137,11 +122,6 @@ async function PaymentContent({ searchParams }: { searchParams: SearchParams }) 
 
   return (
     <>
-      {usedDemo ? (
-        <div className="mb-6">
-          <DemoNotice />
-        </div>
-      ) : null}
       <PaymentForm
         tourId={tour.id}
         tourName={tour.name}

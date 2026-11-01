@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { DemoNotice } from "@/components/demo-notice";
 import { EmptyState } from "@/components/empty-state";
 import {
   IconArrowRight,
@@ -17,7 +16,6 @@ import {
 import { TourDetailSkeleton } from "@/components/skeleton";
 import { TourImage } from "@/components/tour-image";
 import { ApiError } from "@/lib/api";
-import { demoTour } from "@/lib/demo-tours";
 import {
   formatDate,
   formatDateRange,
@@ -55,30 +53,15 @@ async function TourDetailContent({ params }: Props) {
 
   await connection();
 
-  let tour: TourDetail | null = null;
-  let usedDemo = false;
+  let tour: TourDetail;
 
   try {
     tour = await loadTour(id);
   } catch (error) {
-    // Kept outside the cached read so sample data is never cached as live data.
-    tour = demoTour(id);
-    usedDemo = tour !== null;
-    if (!tour && error instanceof ApiError && error.status === 404) {
+    if (error instanceof ApiError && error.status === 404) {
       notFound();
     }
-  }
-
-  if (!tour) {
-    return (
-      <section className="shell py-20">
-        <EmptyState
-          title="We could not load this journey."
-          description="The booking service may be taking a short break. Try again, or browse the rest of the collection."
-          action={{ href: "/tours", label: "Back to journeys" }}
-        />
-      </section>
-    );
+    throw error;
   }
 
   const nextDeparture = tour.departures[0] ?? null;
@@ -115,12 +98,6 @@ async function TourDetailContent({ params }: Props) {
               </li>
             </ol>
           </nav>
-
-          {usedDemo ? (
-            <div className="mt-6">
-              <DemoNotice />
-            </div>
-          ) : null}
 
           <div className="mt-7 grid gap-8 lg:grid-cols-[1.4fr_0.6fr] lg:items-end">
             <div>

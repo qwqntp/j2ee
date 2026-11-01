@@ -1,5 +1,6 @@
 package com.j2ee.tour.service;
 
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
@@ -13,7 +14,10 @@ import com.j2ee.tour.repository.InvoiceRepository;
 import com.j2ee.tour.repository.PaymentRepository;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TravelerRepository;
+import com.j2ee.tour.security.AuthPrincipal;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +30,7 @@ import java.util.UUID;
 @Service
 public class BookingService {
     private static final DateTimeFormatter CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final String ADMIN_ROLE = "ROLE_ADMIN";
 
     private final BookingRepository bookingRepository;
     private final TourDepartureRepository departureRepository;
@@ -49,23 +54,31 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<BookingResponse> list(Pageable pageable) {
-        return PageResponse.from(bookingRepository.findAll(pageable), BookingResponse::from);
+    public PageResponse<BookingResponse> list(Pageable pageable, AuthPrincipal principal) {
+        Page<Booking> bookings = isAdmin(principal)
+                ? bookingRepository.findAll(pageable)
+                : bookingRepository.findByAccountAccountId(principal.id(), pageable);
+        return PageResponse.from(bookings, BookingResponse::from);
     }
 
     @Transactional(readOnly = true)
-    public BookingResponse get(Long id) {
-        return BookingResponse.from(find(id));
+    public BookingResponse get(Long id, AuthPrincipal principal) {
+        return BookingResponse.from(findOwned(id, principal));
     }
 
     @Transactional(readOnly = true)
-    public BookingResponse getByCode(String bookingCode) {
-        return BookingResponse.from(bookingRepository.findByBookingCode(bookingCode)
-                .orElseThrow(() -> new NoSuchElementException("Booking not found")));
+    public BookingResponse getByCode(String bookingCode, AuthPrincipal principal) {
+        Booking booking = bookingRepository.findByBookingCode(bookingCode)
+                .orElseThrow(() -> new NoSuchElementException("Booking not found"));
+        ensureOwner(booking, principal);
+        return BookingResponse.from(booking);
     }
 
     @Transactional
-    public BookingResponse create(CreateBookingRequest request) {
+    public BookingResponse create(CreateBookingRequest request, AuthPrincipal principal) {
+        Account account = isAdmin(principal) ? null : accountRepository.findById(principal.id())
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account not found"));
+
         TourDeparture departure = departureRepository.findByIdForUpdate(request.departureId())
                 .orElseThrow(() -> new NoSuchElementException("Departure not found"));
 
@@ -86,12 +99,13 @@ public class BookingService {
         booking.setBookingStatus("PENDING");
         booking.setBookingNote(request.note());
         booking.setDeparture(departure);
+        booking.setAccount(account);
         return BookingResponse.from(bookingRepository.save(booking));
     }
 
     @Transactional
-    public BookingResponse update(Long id, BookingUpdateRequest request) {
-        Booking booking = find(id);
+    public BookingResponse update(Long id, BookingUpdateRequest request, AuthPrincipal principal) {
+        Booking booking = findOwned(id, principal);
         boolean seatsMayChange = request.guestCount() != null || request.status() != null;
         TourDeparture departure = seatsMayChange
                 ? departureRepository.findByIdForUpdate(booking.getDeparture().getDepartureId())
@@ -142,8 +156,8 @@ public class BookingService {
     }
 
     @Transactional
-    public void delete(Long id) {
-        Booking booking = find(id);
+    public void delete(Long id, AuthPrincipal principal) {
+        Booking booking = findOwned(id, principal);
         if (paymentRepository.existsByBookingBookingId(id)) {
             throw new IllegalStateException("Cannot delete a booking that has payments");
         }
@@ -190,5 +204,25 @@ public class BookingService {
     private Booking find(Long id) {
         return bookingRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
+    }
+
+    private Booking findOwned(Long id, AuthPrincipal principal) {
+        Booking booking = find(id);
+        ensureOwner(booking, principal);
+        return booking;
+    }
+
+    private void ensureOwner(Booking booking, AuthPrincipal principal) {
+        if (isAdmin(principal)) {
+            return;
+        }
+        if (booking.getAccount() == null
+                || !principal.id().equals(booking.getAccount().getAccountId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Booking not found");
+        }
+    }
+
+    private boolean isAdmin(AuthPrincipal principal) {
+        return ADMIN_ROLE.equals(principal.role());
     }
 }

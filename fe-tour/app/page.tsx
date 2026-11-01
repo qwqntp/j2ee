@@ -1,17 +1,14 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { DemoNotice } from "@/components/demo-notice";
 import { EmptyState } from "@/components/empty-state";
 import { IconArrowRight, IconSearch } from "@/components/icons";
 import { Photo } from "@/components/photo";
 import { SectionHeading } from "@/components/section-heading";
 import { TourGridSkeleton } from "@/components/skeleton";
 import { TourCard } from "@/components/tour-card";
-import { demoFeaturedTours } from "@/lib/demo-tours";
 import { destinations, travelNotes, trustReasons } from "@/lib/editorial";
 import { loadFeaturedTours } from "@/lib/tours";
-import type { TourSummary } from "@/lib/types";
 
 export default function HomePage() {
   return (
@@ -252,16 +249,7 @@ export default function HomePage() {
 async function FeaturedJourneys() {
   await connection();
 
-  let tours: TourSummary[];
-  let usedDemo = false;
-
-  try {
-    tours = await loadFeaturedTours();
-  } catch {
-    // Kept outside the cached read so sample data is never cached as live data.
-    tours = demoFeaturedTours();
-    usedDemo = true;
-  }
+  const tours = await loadFeaturedTours();
 
   if (tours.length === 0) {
     return (
@@ -275,7 +263,6 @@ async function FeaturedJourneys() {
 
   return (
     <>
-      {usedDemo ? <DemoNotice /> : null}
       <div className="grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
         {tours.map((tour) => (
           <TourCard key={tour.id} tour={tour} />

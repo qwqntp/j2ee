@@ -51,3 +51,42 @@ export type TourDetail = {
   vehicleTypes: string[];
   departures: TourDeparture[];
 };
+
+export type Account = {
+  id: number;
+  username: string;
+  email: string;
+  emailVerified: number | null;
+  status: number | null;
+  roleId: number | null;
+  roleName: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type AuthSession = {
+  accessToken: string;
+  account: Account;
+};
+
+export type Booking = {
+  id: number;
+  bookingCode: string;
+  departureId: number | null;
+  accountId: number | null;
+  createdAt: string;
+  guestCount: number;
+  unitPrice: number;
+  subtotal: number;
+  discountAmount: number;
+  totalAmount: number;
+  status: string;
+  note: string | null;
+  travelers: Array<{
+    id: number;
+    name: string;
+    dateOfBirth: string | null;
+    gender: string | null;
+    idDocument: string | null;
+  }>;
+};
