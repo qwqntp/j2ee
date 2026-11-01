@@ -37,9 +37,12 @@ type RequestOptions = {
   allowEmpty?: boolean;
 };
 
+// Server renders fill a `use cache` entry and can wait on a cold database pool.
+const TIMEOUT_MS = typeof window === "undefined" ? 30_000 : 10_000;
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
     const response = await fetch(`${BASE_URL}${path}`, {
@@ -72,6 +75,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
 
     return envelope.data as T;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError(504, "The booking service took too long to respond.");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
