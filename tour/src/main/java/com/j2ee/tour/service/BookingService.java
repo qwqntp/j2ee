@@ -181,6 +181,25 @@ public class BookingService {
         int newGuestCount = request.guestCount() == null ? oldGuestCount : request.guestCount();
         String newStatus = request.status() == null ? oldStatus : request.status();
 
+        BigDecimal newSubtotal = null;
+        BigDecimal newDiscount = null;
+        if (request.guestCount() != null) {
+            newSubtotal = departure.getDeparturePrice()
+                    .multiply(BigDecimal.valueOf(newGuestCount));
+            newDiscount = booking.getBookingDiscountAmount() == null
+                    ? BigDecimal.ZERO
+                    : booking.getBookingDiscountAmount();
+            Promotion promotion = booking.getPromotion();
+            if (promotion != null) {
+                if (promotion.getPromotionMinOrderAmount() != null
+                        && newSubtotal.compareTo(promotion.getPromotionMinOrderAmount()) < 0) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST,
+                            "Order does not meet promotion minimum amount");
+                }
+                newDiscount = calculateDiscount(promotion, newSubtotal);
+            }
+        }
+
         int oldReserved = "CANCELLED".equals(oldStatus) ? 0 : oldGuestCount;
         int newReserved = "CANCELLED".equals(newStatus) ? 0 : newGuestCount;
         int delta = newReserved - oldReserved;
@@ -196,13 +215,11 @@ public class BookingService {
             booking.setAccount(account);
         }
         if (request.guestCount() != null) {
-            BigDecimal newSubtotal = departure.getDeparturePrice()
-                    .multiply(BigDecimal.valueOf(newGuestCount));
             booking.setBookingUnitPrice(departure.getDeparturePrice());
             booking.setBookingSubtotal(newSubtotal);
-            BigDecimal discount = booking.getBookingDiscountAmount();
-            BigDecimal total = newSubtotal.subtract(discount);
-            if (total.compareTo(BigDecimal.ZERO) < 0) {
+            booking.setBookingDiscountAmount(newDiscount);
+            BigDecimal total = newSubtotal.subtract(newDiscount);
+            if (total.signum() < 0) {
                 total = BigDecimal.ZERO;
             }
             booking.setBookingTotalAmount(total);

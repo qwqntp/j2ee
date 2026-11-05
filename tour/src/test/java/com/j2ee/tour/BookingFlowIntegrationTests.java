@@ -290,6 +290,46 @@ class BookingFlowIntegrationTests {
     }
 
     @Test
+    void reducingGuestCountRecomputesPromotionDiscount() {
+        makePromotion("REDUCE10");
+        var booking = bookingService.create(new CreateBookingRequest(
+                        departure.getDepartureId(), 2, "note", null, "REDUCE10"),
+                principal);
+
+        var updated = bookingService.update(booking.id(),
+                new BookingUpdateRequest(null, 1, null, null), principal);
+
+        assertEquals(1, updated.guestCount());
+        assertEquals(new BigDecimal("500.00"), updated.subtotal());
+        assertEquals(new BigDecimal("50.00"), updated.discountAmount());
+        assertEquals(new BigDecimal("450.00"), updated.totalAmount());
+        TourDeparture stored = tourDepartureRepository.findById(departure.getDepartureId()).orElseThrow();
+        assertEquals(1, stored.getDepartureBookedSlots());
+    }
+
+    @Test
+    void reducingGuestCountBelowPromotionMinimumReturnsBadRequest() {
+        Promotion promotion = makePromotion("MIN600");
+        promotion.setPromotionMinOrderAmount(new BigDecimal("600.00"));
+        promotionRepository.save(promotion);
+        var booking = bookingService.create(new CreateBookingRequest(
+                        departure.getDepartureId(), 2, "note", null, "MIN600"),
+                principal);
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                bookingService.update(booking.id(),
+                        new BookingUpdateRequest(null, 1, null, null), principal));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("Order does not meet promotion minimum amount", exception.getMessage());
+        var unchanged = bookingService.get(booking.id(), principal);
+        assertEquals(2, unchanged.guestCount());
+        assertEquals(new BigDecimal("100.00"), unchanged.discountAmount());
+        TourDeparture stored = tourDepartureRepository.findById(departure.getDepartureId()).orElseThrow();
+        assertEquals(2, stored.getDepartureBookedSlots());
+    }
+
+    @Test
     void createWithTravelersAndPromotionPersistsEverything() {
         makePromotion("SAVE10");
         var booking = bookingService.create(new CreateBookingRequest(

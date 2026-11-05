@@ -199,6 +199,47 @@ class BookingServiceTest {
     }
 
     @Test
+    void reducingGuestCountRecomputesPromotionDiscount() {
+        Promotion promotion = promotion("SUMMER", "10", 5, 1, "500.00");
+        booking.setPromotion(promotion);
+        booking.setBookingDiscountAmount(new BigDecimal("100.00"));
+        booking.setBookingTotalAmount(new BigDecimal("900.00"));
+        departure.setDepartureBookedSlots(2);
+
+        var response = bookingService.update(30L,
+                new BookingUpdateRequest(null, 1, null, null),
+                principal(10L, "ROLE_USER"));
+
+        assertEquals(1, departure.getDepartureBookedSlots());
+        assertEquals(new BigDecimal("500.00"), response.subtotal());
+        assertEquals(new BigDecimal("50.00"), response.discountAmount());
+        assertEquals(new BigDecimal("450.00"), response.totalAmount());
+        assertEquals(new BigDecimal("50.00"), booking.getBookingDiscountAmount());
+        assertEquals(new BigDecimal("450.00"), booking.getBookingTotalAmount());
+    }
+
+    @Test
+    void reducingGuestCountBelowPromotionMinimumReturnsBadRequest() {
+        Promotion promotion = promotion("SUMMER", "10", 5, 1, "600.00");
+        booking.setPromotion(promotion);
+        booking.setBookingDiscountAmount(new BigDecimal("100.00"));
+        booking.setBookingTotalAmount(new BigDecimal("900.00"));
+        departure.setDepartureBookedSlots(2);
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                bookingService.update(30L,
+                        new BookingUpdateRequest(null, 1, null, null),
+                        principal(10L, "ROLE_USER")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("Order does not meet promotion minimum amount", exception.getMessage());
+        assertEquals(2, departure.getDepartureBookedSlots());
+        assertEquals(2, booking.getBookingGuestCount());
+        assertEquals(new BigDecimal("1000.00"), booking.getBookingSubtotal());
+        assertEquals(new BigDecimal("100.00"), booking.getBookingDiscountAmount());
+    }
+
+    @Test
     void createWithTravelersSavesThemLinkedToBooking() {
         var response = bookingService.create(new CreateBookingRequest(
                         20L, 2, "note",
