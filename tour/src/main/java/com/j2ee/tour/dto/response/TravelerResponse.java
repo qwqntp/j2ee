@@ -9,7 +9,9 @@ public record TravelerResponse(
         String name,
         LocalDate dateOfBirth,
         String gender,
-        String idDocument
+        String idDocument,
+        String phone,
+        String email
 ) {
     public static TravelerResponse from(Traveler traveler) {
         return new TravelerResponse(
@@ -17,7 +19,9 @@ public record TravelerResponse(
                 traveler.getTravelerName(),
                 traveler.getTravelerDateOfBirth(),
                 traveler.getTravelerGender(),
-                traveler.getTravelerIdDocument()
+                traveler.getTravelerIdDocument(),
+                traveler.getTravelerPhone(),
+                traveler.getTravelerEmail()
         );
     }
 }

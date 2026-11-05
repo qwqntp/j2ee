@@ -68,6 +68,13 @@ public class BookingController {
         return ResponseEntity.ok(ApiResponse.success(bookingService.update(id, request, principal)));
     }
 
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<BookingResponse>> cancel(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.cancel(id, principal)));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable Long id,

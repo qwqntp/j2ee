@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
+@ActiveProfiles("test")
 @Transactional
 class CrudIntegrationTests {
 
@@ -36,6 +38,7 @@ class CrudIntegrationTests {
     @Autowired private CustomerService customerService;
     @Autowired private InvoiceService invoiceService;
     @Autowired private PaymentService paymentService;
+    @Autowired private PaymentSignatureService paymentSignatureService;
     @Autowired private RefundService refundService;
     @Autowired private BookingService bookingService;
 
@@ -94,6 +97,13 @@ class CrudIntegrationTests {
         AccountRole role = accountRoleRepository.save(makeRole("T" + System.nanoTime()));
         Account account = accountRepository.save(makeAccount(role));
         return new AuthPrincipal(account.getAccountId(), account.getUsername(), role.getRoleName());
+    }
+
+    private PaymentCallbackRequest callback(Long bookingId, String txnId, String amount,
+                                            String method, boolean successful) {
+        BigDecimal value = new BigDecimal(amount);
+        return new PaymentCallbackRequest(txnId, value, method, successful,
+                paymentSignatureService.sign(bookingId, txnId, method, value, successful));
     }
 
     private Account makeAccount(AccountRole role) {
@@ -252,9 +262,9 @@ class CrudIntegrationTests {
         Tour tour = tourRepository.save(makeTour());
         TourDeparture dep = tourDepartureRepository.save(makeDeparture(tour));
         var booking = bookingService.create(new CreateBookingRequest(dep.getDepartureId(), 1, "n"), principal());
-        var created = paymentService.create(new PaymentCreateRequest(booking.id(), new BigDecimal("100.00"), "CASH", "txn-p", "PENDING", null));
+        var created = paymentService.create(new PaymentCreateRequest(booking.id(), "CASH", "txn-p"));
         assertEquals("PENDING", paymentService.get(created.id()).status());
-        paymentService.update(created.id(), new PaymentUpdateRequest("CARD", "txn-p2", "SUCCESS", null));
+        paymentService.update(created.id(), new PaymentUpdateRequest("CARD", "txn-p2", "SUCCESS"));
         assertEquals("SUCCESS", paymentService.get(created.id()).status());
         paymentService.delete(created.id());
         assertThrows(Exception.class, () -> paymentService.get(created.id()));
@@ -264,8 +274,10 @@ class CrudIntegrationTests {
     void refundUpdateAndDelete() {
         Tour tour = tourRepository.save(makeTour());
         TourDeparture dep = tourDepartureRepository.save(makeDeparture(tour));
-        var booking = bookingService.create(new CreateBookingRequest(dep.getDepartureId(), 1, "n"), principal());
-        var payment = paymentService.handleCallback(booking.id(), new PaymentCallbackRequest("txn-r", new BigDecimal("500.00"), "CASH", true));
+        AuthPrincipal principal = principal();
+        var booking = bookingService.create(new CreateBookingRequest(dep.getDepartureId(), 1, "n"), principal);
+        var payment = paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-r", "500.00", "CASH", true), principal);
         var refund = refundService.request(payment.id(), new CreateRefundRequest(new BigDecimal("100.00"), "r"));
         refundService.update(refund.id(), new RefundUpdateRequest("APPROVED", "ok"));
         assertEquals("APPROVED", refundService.get(refund.id()).status());

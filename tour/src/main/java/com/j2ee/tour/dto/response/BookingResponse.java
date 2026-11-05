@@ -17,7 +17,8 @@ public record BookingResponse(
         BigDecimal totalAmount,
         String status,
         String note,
-        List<TravelerResponse> travelers
+        List<TravelerResponse> travelers,
+        BookingPromotionResponse promotion
 ) {
     public static BookingResponse from(com.j2ee.tour.model.Booking booking) {
         List<TravelerResponse> travelers = booking.getTravelers() == null
@@ -36,7 +37,10 @@ public record BookingResponse(
                 booking.getBookingTotalAmount(),
                 booking.getBookingStatus(),
                 booking.getBookingNote(),
-                travelers
+                travelers,
+                booking.getPromotion() == null
+                        ? null
+                        : BookingPromotionResponse.from(booking.getPromotion())
         );
     }
 }

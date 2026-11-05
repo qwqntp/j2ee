@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 import java.util.NoSuchElementException;
 
 @Service
@@ -52,11 +53,40 @@ public class PromotionService {
         if (request.endDate().isBefore(request.startDate())) {
             throw new IllegalStateException("Promotion end date must not be before start date");
         }
+        String code = normalizeCode(request.code());
+        if (code != null) {
+            promotionRepository.findByPromotionCodeIgnoreCase(code)
+                    .filter(existing -> !existing.getPromotionId().equals(promotion.getPromotionId()))
+                    .ifPresent(existing -> {
+                        throw new IllegalStateException("Promotion code is already in use");
+                    });
+        }
+        int usedCount = promotion.getPromotionUsedCount() == null
+                ? 0
+                : promotion.getPromotionUsedCount();
+        if (request.usageLimit() != null && request.usageLimit() < usedCount) {
+            throw new IllegalStateException(
+                    "Usage limit cannot be lower than the current used count");
+        }
         promotion.setPromotionName(request.name());
         promotion.setDiscountPercentage(request.discountPercentage());
         promotion.setStartDate(request.startDate());
         promotion.setEndDate(request.endDate());
         promotion.setDescription(request.description());
+        promotion.setPromotionCode(code);
+        promotion.setPromotionActive(request.active() == null ? Boolean.TRUE : request.active());
+        promotion.setPromotionUsageLimit(request.usageLimit());
+        promotion.setPromotionMinOrderAmount(request.minOrderAmount());
+        if (promotion.getPromotionUsedCount() == null) {
+            promotion.setPromotionUsedCount(0);
+        }
+    }
+
+    private String normalizeCode(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        return code.trim().toUpperCase(Locale.ROOT);
     }
 
     private Promotion find(Long id) {

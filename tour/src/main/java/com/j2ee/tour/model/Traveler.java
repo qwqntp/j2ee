@@ -13,6 +13,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.time.LocalDate;
 
@@ -29,6 +31,8 @@ public class Traveler {
     @NotNull
     @ManyToOne
     @JoinColumn(name = "booking_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Booking booking;
 
     @NotBlank
@@ -43,4 +47,10 @@ public class Traveler {
 
     @Column(length = 64)
     private String travelerIdDocument;
+
+    @Column(length = 20)
+    private String travelerPhone;
+
+    @Column(length = 255)
+    private String travelerEmail;
 }

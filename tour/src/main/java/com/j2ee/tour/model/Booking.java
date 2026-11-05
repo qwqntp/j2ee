@@ -83,6 +83,10 @@ public class Booking {
     @JoinColumn(name = "departure_id", nullable = false)
     private TourDeparture departure;
 
+    @ManyToOne
+    @JoinColumn(name = "promotion_id")
+    private Promotion promotion;
+
     @OneToMany(mappedBy = "booking")
     private List<Traveler> travelers = new ArrayList<>();
 

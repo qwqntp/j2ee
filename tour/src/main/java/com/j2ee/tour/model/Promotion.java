@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -43,4 +44,24 @@ public class Promotion {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(length = 64)
+    private String promotionCode;
+
+    @NotNull
+    @Column(name = "is_active", nullable = false)
+    private Boolean promotionActive = true;
+
+    @Min(0)
+    @Column(name = "usage_limit")
+    private Integer promotionUsageLimit;
+
+    @NotNull
+    @Min(0)
+    @Column(name = "used_count", nullable = false)
+    private Integer promotionUsedCount = 0;
+
+    @DecimalMin("0")
+    @Column(name = "min_order_amount", precision = 12, scale = 2)
+    private BigDecimal promotionMinOrderAmount;
 }

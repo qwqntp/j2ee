@@ -5,10 +5,15 @@ import com.j2ee.tour.common.GlobalExceptionHandler;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.controller.AdminController;
 import com.j2ee.tour.controller.AuthController;
+import com.j2ee.tour.controller.BookingController;
+import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AuthService;
+import com.j2ee.tour.service.BookingService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -20,14 +25,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {AuthController.class, AdminController.class})
+@WebMvcTest(controllers = {AuthController.class, AdminController.class, BookingController.class})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -47,6 +54,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private AdminService adminService;
+
+    @MockitoBean
+    private BookingService bookingService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -114,5 +124,73 @@ class SecurityConfigTest {
         mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].username").value("user01"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/accounts",
+            "/api/account-roles",
+            "/api/tour-departures",
+            "/api/promotions",
+            "/api/payments",
+            "/api/refunds",
+            "/api/invoices",
+            "/api/customers",
+            "/api/travelers",
+            "/api/tour-guides",
+            "/api/tour-images",
+            "/api/accommodations",
+            "/api/travel-vehicles",
+            "/api/tourist-destinations"
+    })
+    void userCannotReadAdminOnlyCrudEndpoints(String path) throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get(path).header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void userCannotCreatePaymentOrInvokeFakeCallback() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(post("/api/payments")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/bookings/1/payments/callback")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void alreadyStartedDepartureReturns409() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(bookingService.create(any(CreateBookingRequest.class), any(AuthPrincipal.class)))
+                .thenThrow(new IllegalStateException("Departure has already started"));
+
+        mockMvc.perform(post("/api/bookings")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{\"departureId\":1,\"guestCount\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Departure has already started"));
+    }
+
+    @Test
+    void publicTourReadDoesNotRequireAuthentication() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/tours"))
+                .andExpect(status().isNotFound());
     }
 }

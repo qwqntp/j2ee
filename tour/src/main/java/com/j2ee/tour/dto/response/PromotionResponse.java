@@ -11,7 +11,12 @@ public record PromotionResponse(
         BigDecimal discountPercentage,
         LocalDate startDate,
         LocalDate endDate,
-        String description
+        String description,
+        String code,
+        Boolean active,
+        Integer usageLimit,
+        Integer usedCount,
+        BigDecimal minOrderAmount
 ) {
     public static PromotionResponse from(Promotion promotion) {
         return new PromotionResponse(
@@ -20,7 +25,12 @@ public record PromotionResponse(
                 promotion.getDiscountPercentage(),
                 promotion.getStartDate(),
                 promotion.getEndDate(),
-                promotion.getDescription()
+                promotion.getDescription(),
+                promotion.getPromotionCode(),
+                promotion.getPromotionActive(),
+                promotion.getPromotionUsageLimit(),
+                promotion.getPromotionUsedCount(),
+                promotion.getPromotionMinOrderAmount()
         );
     }
 }

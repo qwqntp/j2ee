@@ -60,6 +60,8 @@ public class TravelerService {
         traveler.setTravelerDateOfBirth(request.dateOfBirth());
         traveler.setTravelerGender(request.gender());
         traveler.setTravelerIdDocument(request.idDocument());
+        traveler.setTravelerPhone(request.phone());
+        traveler.setTravelerEmail(request.email());
     }
 
     private Traveler find(Long id) {
