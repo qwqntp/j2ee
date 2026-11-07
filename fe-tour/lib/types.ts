@@ -55,7 +55,7 @@ export type TourDetail = {
 export type Account = {
   id: number;
   username: string;
-  email: string;
+  email: string | null;
   emailVerified: number | null;
   status: number | null;
   roleId: number | null;

@@ -1,45 +1,24 @@
 "use client";
 
 import {
+  ApiError,
   getMe,
   login as apiLogin,
   logout as apiLogout,
   refresh as apiRefresh,
   register as apiRegister,
 } from "./api";
+import { clearSession, getStoredSession, saveSession, useSession } from "./session";
 import type { Account, AuthSession } from "./types";
 
-const TOKEN_KEY = "tour_access_token";
-const ACCOUNT_KEY = "tour_account";
-
-export function getStoredSession(): AuthSession | null {
-  if (typeof window === "undefined") return null;
-  const accessToken = window.localStorage.getItem(TOKEN_KEY);
-  const rawAccount = window.localStorage.getItem(ACCOUNT_KEY);
-  if (!accessToken || !rawAccount) return null;
-  try {
-    return { accessToken, account: JSON.parse(rawAccount) as Account };
-  } catch {
-    return null;
-  }
-}
-
-function storeSession(session: AuthSession): void {
-  window.localStorage.setItem(TOKEN_KEY, session.accessToken);
-  window.localStorage.setItem(ACCOUNT_KEY, JSON.stringify(session.account));
-}
-
-export function clearSession(): void {
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(ACCOUNT_KEY);
-}
+export { clearSession, getStoredSession, useSession };
 
 export async function signIn(input: {
   username: string;
   password: string;
 }): Promise<AuthSession> {
   const session = await apiLogin(input);
-  storeSession(session);
+  saveSession(session);
   return session;
 }
 
@@ -49,7 +28,7 @@ export async function signUp(input: {
   email: string;
 }): Promise<AuthSession> {
   const session = await apiRegister(input);
-  storeSession(session);
+  saveSession(session);
   return session;
 }
 
@@ -66,21 +45,33 @@ export async function ensureSession(): Promise<AuthSession | null> {
   const stored = getStoredSession();
   if (stored) {
     try {
-      await getMe(stored.accessToken);
-      return stored;
-    } catch {
-      // Fall through to the refresh cookie.
+      const account = await getMe(stored.accessToken);
+      const session = { accessToken: stored.accessToken, account };
+      saveSession(session);
+      return session;
+    } catch (error) {
+      if (!isUnauthorized(error)) {
+        // A timeout or outage should not sign the visitor out.
+        return stored;
+      }
     }
   }
 
   try {
     const session = await apiRefresh();
-    storeSession(session);
+    saveSession(session);
     return session;
-  } catch {
-    clearSession();
-    return null;
+  } catch (error) {
+    if (isUnauthorized(error)) {
+      clearSession();
+      return null;
+    }
+    return stored;
   }
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 export async function currentAccount(): Promise<Account | null> {

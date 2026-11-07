@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { signIn, signUp } from "@/lib/auth";
+import { publishFlash } from "@/lib/flash";
 
 type Props = { mode: "login" | "register" };
 
@@ -23,18 +24,22 @@ export function AuthForm({ mode }: Props) {
 
     const data = new FormData(event.currentTarget);
     try {
-      if (isRegister) {
-        await signUp({
-          username: String(data.get("username") ?? ""),
-          password: String(data.get("password") ?? ""),
-          email: String(data.get("email") ?? ""),
-        });
-      } else {
-        await signIn({
-          username: String(data.get("username") ?? ""),
-          password: String(data.get("password") ?? ""),
-        });
-      }
+      const session = isRegister
+        ? await signUp({
+            username: String(data.get("username") ?? ""),
+            password: String(data.get("password") ?? ""),
+            email: String(data.get("email") ?? ""),
+          })
+        : await signIn({
+            username: String(data.get("username") ?? ""),
+            password: String(data.get("password") ?? ""),
+          });
+
+      publishFlash(
+        isRegister
+          ? `Account created — welcome, ${session.account.username}!`
+          : `Welcome back, ${session.account.username}!`,
+      );
       router.push(next);
       router.refresh();
     } catch (err) {

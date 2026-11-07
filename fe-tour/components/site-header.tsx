@@ -1,19 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useRef } from "react";
-import { IconArrowRight, IconMenu } from "./icons";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { ensureSession, getStoredSession, signOut, useSession } from "@/lib/auth";
+import { IconArrowRight, IconChevronRight, IconMenu } from "./icons";
 
 const links = [
   { href: "/tours", label: "Journeys" },
   { href: "/#destinations", label: "Destinations" },
   { href: "/#stories", label: "Travel notes" },
   { href: "/#why", label: "Why us" },
-  { href: "/login", label: "Sign in" },
 ];
 
 export function SiteHeader() {
   const menu = useRef<HTMLDetailsElement>(null);
+  const accountMenu = useRef<HTMLDetailsElement>(null);
+  const session = useSession();
+  const account = session?.account ?? null;
+  const initial = account?.username.slice(0, 1).toUpperCase() ?? "";
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    if (!getStoredSession()) return;
+    void ensureSession();
+  }, []);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    accountMenu.current?.removeAttribute("open");
+    menu.current?.removeAttribute("open");
+    try {
+      await signOut();
+    } catch {
+      // The local session is cleared even when the server call fails.
+    } finally {
+      setSigningOut(false);
+      router.refresh();
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-ivory">
@@ -39,10 +66,53 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <Link href="/tours" className="btn-primary hidden md:inline-flex">
-          Find a journey
-          <IconArrowRight className="h-4 w-4" />
-        </Link>
+        <div className="hidden items-center gap-6 md:flex">
+          {account ? (
+            <details ref={accountMenu} className="relative">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-[3px] border border-line bg-white/60 py-1 pl-1 pr-3 text-sm transition-colors hover:border-forest [&::-webkit-details-marker]:hidden">
+                <span
+                  aria-hidden="true"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-forest text-xs font-semibold text-white"
+                >
+                  {initial}
+                </span>
+                <span className="max-w-32 truncate font-medium text-charcoal">
+                  {account.username}
+                </span>
+                <IconChevronRight className="h-3.5 w-3.5 rotate-90 text-muted" />
+              </summary>
+              <div className="absolute right-0 top-12 w-72 rounded-[3px] border border-line bg-ivory p-4 shadow-panel">
+                <p className="eyebrow text-terracotta">Signed in</p>
+                <p className="mt-2 truncate font-medium text-charcoal">{account.username}</p>
+                {account.email ? (
+                  <p className="truncate text-sm text-muted">{account.email}</p>
+                ) : null}
+                <div className="mt-4 border-t border-line pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    className="w-full rounded-[2px] px-3 py-2 text-left text-sm font-medium text-terracotta transition-colors hover:bg-terracotta/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </button>
+                </div>
+              </div>
+            </details>
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm font-medium text-muted transition-colors hover:text-forest"
+            >
+              Sign in
+            </Link>
+          )}
+
+          <Link href="/tours" className="btn-primary">
+            Find a journey
+            <IconArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
 
         <details ref={menu} className="relative md:hidden">
           <summary className="grid h-11 w-11 cursor-pointer list-none place-items-center rounded-[3px] border border-line text-charcoal transition-colors hover:border-forest hover:text-forest [&::-webkit-details-marker]:hidden">
@@ -68,6 +138,44 @@ export function SiteHeader() {
                 Find a journey
                 <IconArrowRight className="h-4 w-4" />
               </Link>
+
+              <div className="mt-2 border-t border-line pt-2">
+                {account ? (
+                  <>
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <span
+                        aria-hidden="true"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-forest text-xs font-semibold text-white"
+                      >
+                        {initial}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-charcoal">
+                          {account.username}
+                        </p>
+                        {account.email ? (
+                          <p className="truncate text-xs text-muted">{account.email}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      disabled={signingOut}
+                      className="w-full rounded-[2px] px-4 py-3 text-left text-sm font-medium text-terracotta transition-colors hover:bg-terracotta/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {signingOut ? "Signing out…" : "Sign out"}
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="block rounded-[2px] px-4 py-3 text-sm font-medium text-muted transition-colors hover:bg-sage/20 hover:text-forest"
+                  >
+                    Sign in
+                  </Link>
+                )}
+              </div>
             </nav>
           </div>
         </details>
