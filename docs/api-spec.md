@@ -3,9 +3,10 @@
 Base path: `/api`  
 Default local base URL: `http://localhost:8080`
 
-> **Scope:** endpoints marked **Implemented** exist in the backend today. The booking and payment
-> section is a **planned contract** — those routes are not implemented and the frontend payment page
-> is UI-only.
+> **Scope:** endpoints marked **Implemented** exist in the backend today. Booking, payment callback,
+> refund, promotion, traveler, invoice and tour-rating endpoints are implemented. The historical
+> “Planned booking and payment contract” section at the end is retained for design history and is
+> superseded by the Batch 1–3 additions below.
 
 ## Conventions
 
@@ -129,6 +130,180 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | `POST` | `/api/auth/logout` | Refresh cookie (optional) | `200` |
 | `GET` | `/api/auth/me` | Bearer | `200` |
 | `GET` | `/api/admin/accounts` | Bearer `ROLE_ADMIN` | `200` |
+
+### Batch 1–3 additions (implemented)
+
+#### Auth, booking, payment, invoice and rating endpoints
+
+| Method | Path | Auth | Success |
+|---|---|---|---|
+| `POST` | `/api/auth/forgot-password` | Public | `200` |
+| `POST` | `/api/auth/reset-password` | Public | `200` |
+| `POST` | `/api/auth/verify-email` | Public | `200` |
+| `POST` | `/api/bookings` | Bearer | `201` |
+| `GET` | `/api/bookings` | Bearer | `200` |
+| `GET` | `/api/bookings/{id}` | Bearer | `200` |
+| `GET` | `/api/bookings/code/{bookingCode}` | Bearer | `200` |
+| `PUT` | `/api/bookings/{id}` | Bearer | `200` |
+| `POST` | `/api/bookings/{id}/cancel` | Bearer | `200` |
+| `DELETE` | `/api/bookings/{id}` | Bearer | `200` |
+| `POST` | `/api/bookings/{bookingId}/payments/callback` | Bearer `ROLE_ADMIN` | `200` |
+| `GET` | `/api/invoices/me` | Bearer | `200` |
+| `GET` | `/api/tours/{tourId}/ratings` | Public | `200` |
+| `POST` | `/api/tours/{tourId}/ratings` | Bearer | `201` |
+
+Admin CRUD for accounts, roles, departures, promotions, travelers, tour guides, images,
+accommodations, vehicles, destinations, invoices and refunds remains under the existing admin-only
+paths (`/api/admin/**`, `/api/invoices/**`, `/api/payments/**`, and the other resource paths listed
+in `SecurityConfig`).
+
+#### Bookings and promotions
+
+- `POST /api/bookings` keeps the original frontend payload
+  `{ "departureId": 1, "guestCount": 2, "note": "optional" }` working.
+- Optional additions: `travelers[]` and `promotionCode`.
+- If `travelers` is supplied, its size must equal `guestCount`.
+- Pricing is server-side; the client never sends a price or total.
+- Promotion lookup is case-insensitive, the code is stored uppercase, and the discount is calculated
+  from the subtotal, rounded to 2 decimals and capped at the subtotal.
+- `GET /api/bookings` returns only the caller's bookings (admins see all) and defaults to newest first.
+- `GET /api/bookings/{id}` returns `404` for another user's booking.
+- `POST /api/bookings/{id}/cancel` is allowed only for `PENDING` bookings with no successful
+  payments; it releases seats and promotion usage and returns `409` otherwise.
+- A booking becomes `PAID` when the sum of `SUCCESS` payments reaches its total amount.
+
+#### Email verification and password reset
+
+- Verification and reset tokens are random, one-time values. Only their SHA-256 hashes are stored in
+  `auth_tokens`; the raw token appears only in the email link.
+- Default expiries: password reset 30 minutes, email verification 2 days.
+- `POST /api/auth/forgot-password` always returns:
+  ```json
+  {
+    "success": true,
+    "message": "If the email exists, a password reset link has been sent",
+    "data": null,
+    "timestamp": "..."
+  }
+  ```
+  The same response is returned for unknown emails, so account existence is not revealed.
+- `POST /api/auth/reset-password` consumes the token, updates the BCrypt hash, and revokes all
+  refresh tokens for the account. A reused, expired or unknown token returns `400`
+  `Invalid or expired token`.
+- `POST /api/auth/verify-email` consumes the token and sets `emailVerified = 1`.
+- Email sending is asynchronous and failure-tolerant. If SMTP is not configured, the API continues
+  to work and logs a warning; mail failures never fail registration, booking, reset or cancellation.
+- Mail is configured through `SPRING_MAIL_HOST`/`MAIL_HOST` and the other `SPRING_MAIL_*`/`MAIL_*`
+  variables, `MAIL_FROM`, and `APP_FRONTEND_URL`.
+
+Example reset request:
+
+```json
+{
+  "token": "raw-token-from-email",
+  "newPassword": "new-password"
+}
+```
+
+Example verification request:
+
+```json
+{ "token": "raw-token-from-email" }
+```
+
+#### Invoices
+
+- An invoice is created automatically and idempotently whenever a booking becomes `PAID`, through
+  either the payment callback/update path or an admin status update.
+- Automatic invoices are `PAID`, copy the booking discount and total, snapshot the customer name /
+  email / phone, and link any applied promotion.
+- `GET /api/invoices/me` returns only invoices for bookings owned by the authenticated account,
+  newest first:
+  ```json
+  {
+    "success": true,
+    "message": "Success",
+    "data": {
+      "content": [
+        {
+          "id": 1,
+          "bookingId": 30,
+          "createdAt": "2026-11-07T10:00:00",
+          "status": "PAID",
+          "discountAmount": 0.00,
+          "taxAmount": 0.00,
+          "serviceFee": 0.00,
+          "totalAmount": 1000.00,
+          "paymentMethod": null,
+          "customerName": "traveler",
+          "customerPhone": "0901234567",
+          "customerEmail": "traveler@example.com",
+          "promotionIds": []
+        }
+      ],
+      "page": 0,
+      "size": 20,
+      "totalElements": 1,
+      "totalPages": 1,
+      "last": true,
+      "hasNext": false,
+      "hasPrevious": false
+    },
+    "timestamp": "..."
+  }
+  ```
+- Admin invoice CRUD remains under `/api/invoices/**` and requires `ROLE_ADMIN`.
+
+#### Tour ratings
+
+- One rating per booking, enforced by a unique constraint and a service check.
+- Only the owner of a `PAID` or `COMPLETED` booking for that tour may rate it.
+- Non-owner or unknown booking: `404`. Unpaid/invalid status: `403`. Duplicate rating: `409`.
+  Booking/tour mismatch: `400`.
+- Rating value is 1..5; comment is optional up to 2000 characters.
+
+Create rating:
+
+```json
+{
+  "bookingId": 30,
+  "rating": 5,
+  "comment": "Great trip"
+}
+```
+
+Public list response includes pagination, `averageRating` rounded to 2 decimals, and `ratingCount`:
+
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "content": [
+      {
+        "id": 1,
+        "tourId": 1,
+        "accountId": 2,
+        "accountUsername": "traveler",
+        "bookingId": 30,
+        "rating": 5,
+        "comment": "Great trip",
+        "createdAt": "2026-11-07T10:00:00"
+      }
+    ],
+    "page": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "last": true,
+    "hasNext": false,
+    "hasPrevious": false,
+    "averageRating": 5.00,
+    "ratingCount": 1
+  },
+  "timestamp": "..."
+}
+```
 
 ### GET /api/tours
 
@@ -410,11 +585,11 @@ Errors: `401` unauthenticated, `403` authenticated without `ROLE_ADMIN`.
 |---|---|
 | `200` | Success |
 | `201` | Account created |
-| `400` | Validation failure, malformed JSON, wrong parameter type, or password over 72 bytes |
+| `400` | Validation failure, malformed JSON, wrong parameter type, password over 72 bytes, invalid/expired one-time token, or a rating booking/tour mismatch |
 | `401` | Missing/invalid access token, bad credentials, or invalid/reused refresh token |
-| `403` | Authenticated but not allowed, or disabled account |
-| `404` | Tour not found or not public |
-| `409` | Username/email conflict or data integrity conflict |
+| `403` | Authenticated but not allowed, disabled account, or rating a non-paid/non-completed booking |
+| `404` | Tour, booking or invoice not found, not public, or not owned by the caller |
+| `409` | Username/email conflict, duplicate rating, invalid booking-state transition, or another data-integrity conflict |
 | `429` | Rate limit exceeded; see `Retry-After` |
 | `500` | Unexpected server error; no stack trace is returned |
 
@@ -425,6 +600,10 @@ Errors: `401` unauthenticated, `403` authenticated without `ROLE_ADMIN`.
   `FULL` only.
 - Account status: `1` active, `0` disabled.
 - Roles: `ROLE_USER`, `ROLE_ADMIN`.
+- Booking status: `PENDING`, `PAID`, `CONFIRMED`, `COMPLETED`, `CANCELLED`.
+- Payment status: `PENDING`, `SUCCESS`, `FAILED` (plus the existing payment-model values).
+- Invoice status: `PAID`, `UNPAID`.
+- Auth token types: `PASSWORD_RESET`, `EMAIL_VERIFICATION`.
 
 ## OpenAPI / Swagger
 
@@ -432,16 +611,18 @@ Errors: `401` unauthenticated, `403` authenticated without `ROLE_ADMIN`.
 - OpenAPI JSON: `GET /v3/api-docs`.
 - Both are public in `SecurityConfig`.
 - `OpenApiConfig` sets the title, version, description and the `bearerAuth` HTTP bearer scheme.
-- Use the **Authorize** button in Swagger UI to paste an access token for `/api/auth/me` and
-  `/api/admin/accounts`.
+- Use the **Authorize** button in Swagger UI to paste an access token for `/api/auth/me`,
+  `/api/bookings/**`, `/api/invoices/me`, `/api/tours/{tourId}/ratings` (`POST`) and the
+  admin-only endpoints.
 - For production, disable the docs or put them behind an admin/network boundary:
   `springdoc.api-docs.enabled=false`, `springdoc.swagger-ui.enabled=false`.
 
-## Planned booking and payment contract
+## Planned booking and payment contract (historical)
 
-> **Not implemented.** There is no booking controller, payment controller, seat-hold table, VNPay
-> integration, or booking persistence in the current backend. The frontend `/payment` page is a
-> UI preview and never calls a booking endpoint.
+> **Historical design note — superseded.** The booking, payment-callback, promotion, traveler and
+> refund backend is now implemented; see “Batch 1–3 additions (implemented)” above. This section is
+> kept only as design history and is not normative. VNPay-specific return/IPN endpoints remain out
+> of scope; the implemented payment callback is the signed callback endpoint listed above.
 
 ### Proposed endpoints
 
@@ -591,10 +772,18 @@ amount from the booking. Response:
 ## Known limitations
 
 - In-memory rate limiting is single-instance only.
-- Expired refresh-token rows are not purged yet. The `expires_at` index is ready for a scheduled
-  cleanup.
+- Refresh-token cleanup is scheduled in-process; expired `auth_tokens` rows are not purged yet.
 - Email uniqueness is a service-level case-insensitive check with a documented concurrent race.
 - The seeded departures are in the past, so the non-empty summary/aggregate path is unverified
   against the shared database.
-- Booking and payment are not implemented; the planned contract above is a design target.
+- SMTP delivery is implemented but was not verified against a real mail server in the final run.
+  When SMTP is unconfigured, sending is skipped with a warning.
+- Password-reset has the required generic response but is not separately rate-limited.
+- Automatically created invoices leave `paymentMethod` null because the booking model does not store
+  the payment method.
+- Ratings cannot be edited or deleted through the API.
+- VNPay-specific return/IPN endpoints are not implemented; only the signed payment callback endpoint
+  exists.
 - The frontend has build/lint/manual runtime checks, but no automated browser or component tests.
+- The final verification pass ran only non-database tests because of a slow/unreliable Supabase
+  connection. The database-backed tests are written and had passed earlier, but should be rerun.

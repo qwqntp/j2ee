@@ -46,6 +46,12 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
+		<!-- Email (password reset, verification, booking notifications) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
 		<!-- Persistence (Spring Data JPA + PostgreSQL + Flyway) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

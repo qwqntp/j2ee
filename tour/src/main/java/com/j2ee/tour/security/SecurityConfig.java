@@ -64,7 +64,10 @@ public class SecurityConfig {
                                 "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
-                                "/api/auth/logout")
+                                "/api/auth/logout",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password",
+                                "/api/auth/verify-email")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/tours/**",
@@ -73,6 +76,7 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/invoices/me").authenticated()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(
                                 "/api/admin/**",

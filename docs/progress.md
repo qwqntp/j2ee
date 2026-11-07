@@ -1,6 +1,6 @@
 # Progress — Tour Booking System
 
-Updated: 2026-10-26 (Asia/Ho_Chi_Minh)
+Updated: 2026-11-07 (Asia/Ho_Chi_Minh)
 
 ## Status
 
@@ -9,8 +9,54 @@ Updated: 2026-10-26 (Asia/Ho_Chi_Minh)
 - **Phase 3 — Next.js landing, tour, and payment pages: done and verified.**
 - **Phase 4 — API spec, Swagger config, final documentation: done and verified.**
 - **Frontend redesign — Editorial Explorer visual refresh: done and verified.**
+- **Task A — security hardening: done and verified.**
+- **Batch 1 — bookings, travelers, promotions: done and verified.**
+- **Batch 1 fix — guest-count promotion totals: done and verified.**
+- **Batch 3 — email flows, invoices, tour ratings: done; non-database tests verified.**
+- **Batch 2 — not started.**
 
 No commits were made. The existing uncommitted change in `docs/tech-stack.md` was not touched.
+
+## Batch 3 — Email, invoices, tour ratings (2026-11-07)
+
+See `docs/task-b3-report.md` for the full implementation report.
+
+### Email and auth tokens
+
+- Added `spring-boot-starter-mail`, `@EnableAsync`, and an async, failure-tolerant `EmailService`.
+- Mail is skipped with a one-time warning when no SMTP host is configured; SMTP failures never break registration, booking, reset or cancellation.
+- Mail configuration uses `SPRING_MAIL_HOST`/`MAIL_HOST` (and the other `SPRING_MAIL_*`/`MAIL_*` variables), `MAIL_FROM`, and `APP_FRONTEND_URL`.
+- Added `auth_tokens` via V6 with SHA-256-hashed, one-time, expiring tokens:
+  - `PASSWORD_RESET` default 30 minutes;
+  - `EMAIL_VERIFICATION` default 2 days.
+- Registration issues an email-verification token; `POST /api/auth/verify-email` sets `emailVerified = 1`.
+- `POST /api/auth/forgot-password` always returns a generic message and does not reveal whether the email exists.
+- `POST /api/auth/reset-password` consumes the token, changes the BCrypt password, and revokes all refresh tokens for the account.
+
+### Invoices
+
+- Added idempotent `InvoiceService.createForPaidBooking`.
+- Invoices are created automatically when a booking becomes `PAID` through:
+  - the payment callback/update path (`PaymentService.recomputeBookingStatus`);
+  - the admin booking status update path.
+- Added `GET /api/invoices/me`, owner-scoped and newest first. Admin invoice CRUD remains admin-only.
+- Payment behavior, VNPay, callbacks and refunds were not changed.
+
+### Tour ratings
+
+- Added `tour_ratings` via the same V6 migration: one rating per booking, 1..5 value, optional comment.
+- Only the owner of a `PAID` or `COMPLETED` booking for the tour can rate.
+- Non-owner/unknown booking -> `404`; non-paid booking -> `403`; duplicate booking rating -> `409`.
+- Added public `GET /api/tours/{tourId}/ratings` with pagination and a 2-decimal average.
+- Added authenticated `POST /api/tours/{tourId}/ratings`.
+
+### Verification
+
+- Latest executed command:
+  `.\mvnw.cmd "-Dtest=!*IntegrationTests,!TourApplicationTests" test`
+- Result: **130 tests, 0 failures, 0 errors, 0 skipped, BUILD SUCCESS**.
+- Database-backed tests were written but not part of the final verification pass because of the supplied network rule. They are `BookingFlowIntegrationTests` (24) and `CrudIntegrationTests` (13); both passed in an earlier full-suite attempt, but a fresh final DB run is still recommended. The pre-existing `TourApplicationTests` remains disabled/skipped.
+- V6 was applied to the shared Supabase database during an earlier integration-test run. Do not edit V6; use V7+ for further schema changes.
 
 ## Phase 4 — API spec and Swagger
 
@@ -385,12 +431,19 @@ Changed:
 
 ## Next
 
-1. Implement the booking/payment backend described in `docs/api-spec.md`: seat holds, server-derived
-   totals, VNPay signature verification, IPN idempotency and expiry cleanup.
-2. Add an auth UI or a guest-checkout decision before wiring the payment page to a real endpoint.
-3. Revalidate the `tours` / `tour-{id}` cache tags after admin tour or departure changes.
-4. Finish keyboard and screen-reader checks, plus a non-empty departure fixture.
-5. Decide on image hosting/optimization and an allowlist for remote tour images; repair or replace
+1. Run the full database-backed suite when the Supabase connection is stable:
+   `.\mvnw.cmd test`; confirm Flyway is at version 6 and that `BookingFlowIntegrationTests` and
+   `CrudIntegrationTests` pass.
+2. Start Batch 2 if it is still in scope. Batch 2 was not started in this run.
+3. Wire the frontend to the new auth, invoice and rating endpoints, and adopt the cancel/traveler/
+   promotion fields from Batch 1 where useful.
+4. Configure real SMTP credentials and verify delivery of verification, reset, confirmation and
+   cancellation emails. Consider HTML templates and a scheduled purge for expired `auth_tokens`.
+5. Decide whether to rate-limit `POST /api/auth/forgot-password` separately from the existing auth
+   limits.
+6. Revalidate the `tours` / `tour-{id}` cache tags after admin tour or departure changes.
+7. Finish keyboard and screen-reader checks, plus a non-empty departure fixture.
+8. Decide on image hosting/optimization and an allowlist for remote tour images; repair or replace
    the dead seeded Cloudinary URLs.
-6. Add automated frontend tests and a VNPay sandbox integration test.
-7. Disable or protect Swagger/OpenAPI in production.
+9. Add automated frontend tests; add a VNPay sandbox integration test only if VNPay remains in scope.
+10. Disable or protect Swagger/OpenAPI in production.

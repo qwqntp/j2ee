@@ -84,6 +84,11 @@ public class RefreshTokenService {
                 .ifPresent(token -> token.setRevoked(true));
     }
 
+    @Transactional
+    public void revokeAllForAccount(Long accountId) {
+        repository.revokeAllByAccountId(accountId);
+    }
+
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void purgeExpired() {

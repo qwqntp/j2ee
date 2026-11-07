@@ -3,8 +3,11 @@ package com.j2ee.tour.service;
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
+import com.j2ee.tour.dto.request.ResetPasswordRequest;
+import com.j2ee.tour.dto.request.VerifyEmailRequest;
 import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.AccountRole;
+import com.j2ee.tour.model.AuthToken;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
 import com.j2ee.tour.security.JwtService;
@@ -25,6 +28,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -49,6 +53,12 @@ class AuthServiceTest {
     private RefreshTokenService refreshTokenService;
 
     @Mock
+    private AuthTokenService authTokenService;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -62,6 +72,8 @@ class AuthServiceTest {
                 accountRepository,
                 roleRepository,
                 refreshTokenService,
+                authTokenService,
+                emailService,
                 passwordEncoder,
                 jwtService,
                 CLOCK);
@@ -93,6 +105,86 @@ class AuthServiceTest {
                         .isEqualTo(HttpStatus.CONFLICT));
 
         verify(accountRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void registerSendsEmailVerificationToken() {
+        AccountRole role = account().getRole();
+        when(accountRepository.existsByUsername("new-user")).thenReturn(false);
+        when(accountRepository.existsByAccountEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(roleRepository.findByRoleName("ROLE_USER")).thenReturn(Optional.of(role));
+        when(passwordEncoder.encode("password123")).thenReturn("hash");
+        when(authTokenService.issue(any(Account.class), eq(AuthTokenService.EMAIL_VERIFICATION)))
+                .thenReturn("verify-token");
+        when(refreshTokenService.issue(any(Account.class))).thenReturn("refresh-1");
+        when(jwtService.issue(any(), eq("new-user"), eq("ROLE_USER"))).thenReturn("access-1");
+
+        authService.register(new RegisterRequest("new-user", "password123", "new@example.com"));
+
+        verify(emailService).sendEmailVerification("new@example.com", "verify-token");
+    }
+
+    @Test
+    void forgotPasswordDoesNotRevealUnknownEmail() {
+        when(accountRepository.findByAccountEmailIgnoreCase("missing@example.com"))
+                .thenReturn(Optional.empty());
+
+        authService.forgotPassword("missing@example.com");
+
+        verifyNoInteractions(authTokenService, emailService);
+    }
+
+    @Test
+    void forgotPasswordSendsResetTokenForKnownEmail() {
+        Account account = account();
+        when(accountRepository.findByAccountEmailIgnoreCase("user01@example.com"))
+                .thenReturn(Optional.of(account));
+        when(authTokenService.issue(account, AuthTokenService.PASSWORD_RESET))
+                .thenReturn("reset-token");
+
+        authService.forgotPassword("user01@example.com");
+
+        verify(emailService).sendPasswordReset("user01@example.com", "reset-token");
+    }
+
+    @Test
+    void resetPasswordConsumesTokenChangesPasswordAndRevokesRefreshTokens() {
+        Account account = account();
+        when(authTokenService.consume("reset-token", AuthTokenService.PASSWORD_RESET))
+                .thenReturn(authToken(account));
+        when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
+
+        authService.resetPassword(new ResetPasswordRequest("reset-token", "new-password"));
+
+        assertThat(account.getPassword()).isEqualTo("new-hash");
+        verify(accountRepository).save(account);
+        verify(refreshTokenService).revokeAllForAccount(1L);
+    }
+
+    @Test
+    void resetPasswordRejectsExpiredOrReusedToken() {
+        when(authTokenService.consume("expired", AuthTokenService.PASSWORD_RESET))
+                .thenThrow(new ApiException(HttpStatus.BAD_REQUEST, "Invalid or expired token"));
+
+        assertThatThrownBy(() ->
+                authService.resetPassword(new ResetPasswordRequest("expired", "new-password")))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("Invalid or expired token");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void verifyEmailConsumesTokenAndMarksAccountVerified() {
+        Account account = account();
+        when(authTokenService.consume("verify-token", AuthTokenService.EMAIL_VERIFICATION))
+                .thenReturn(authToken(account));
+
+        authService.verifyEmail(new VerifyEmailRequest("verify-token"));
+
+        assertThat(account.getEmailVerified()).isEqualTo(1);
+        verify(accountRepository).save(account);
     }
 
     @Test
@@ -175,6 +267,13 @@ class AuthServiceTest {
         when(accountRepository.findById(1L)).thenReturn(Optional.of(account()));
 
         assertThat(authService.me(1L).email()).isEqualTo("user01@example.com");
+    }
+
+    private AuthToken authToken(Account account) {
+        AuthToken token = new AuthToken();
+        token.setAccount(account);
+        token.setTokenType(AuthTokenService.PASSWORD_RESET);
+        return token;
     }
 
     private Account account() {

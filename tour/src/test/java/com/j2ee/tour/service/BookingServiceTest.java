@@ -54,7 +54,9 @@ class BookingServiceTest {
     private PromotionRepository promotionRepository;
     private PaymentRepository paymentRepository;
     private InvoiceRepository invoiceRepository;
+    private InvoiceService invoiceService;
     private TravelerRepository travelerRepository;
+    private EmailService emailService;
     private BookingService bookingService;
     private Clock clock;
 
@@ -70,14 +72,18 @@ class BookingServiceTest {
         promotionRepository = mock(PromotionRepository.class);
         paymentRepository = mock(PaymentRepository.class);
         invoiceRepository = mock(InvoiceRepository.class);
+        invoiceService = mock(InvoiceService.class);
         travelerRepository = mock(TravelerRepository.class);
+        emailService = mock(EmailService.class);
         clock = Clock.fixed(Instant.parse("2026-11-05T03:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
         bookingService = new BookingService(bookingRepository, departureRepository, accountRepository,
-                promotionRepository, paymentRepository, invoiceRepository, travelerRepository, clock);
+                promotionRepository, paymentRepository, invoiceRepository, invoiceService,
+                travelerRepository, emailService, clock);
 
         account = new Account();
         account.setAccountId(10L);
         account.setUsername("user");
+        account.setAccountEmail("user@example.com");
 
         departure = new TourDeparture();
         departure.setDepartureId(20L);
@@ -166,8 +172,8 @@ class BookingServiceTest {
 
     @Test
     void createRejectsDepartureThatAlreadyStarted() {
-        departure.setDepartureStartDate(LocalDateTime.now().minusDays(1));
-        departure.setDepartureEndDate(LocalDateTime.now().plusDays(1));
+        departure.setDepartureStartDate(LocalDateTime.now(clock).minusDays(1));
+        departure.setDepartureEndDate(LocalDateTime.now(clock).plusDays(1));
 
         assertThrows(IllegalStateException.class, () ->
                 bookingService.create(new CreateBookingRequest(20L, 1, "note"),
@@ -181,6 +187,28 @@ class BookingServiceTest {
                 principal(99L, "ROLE_ADMIN"));
 
         assertEquals("CANCELLED", response.status());
+    }
+
+    @Test
+    void adminSettingStatusPaidCreatesInvoice() {
+        when(paymentRepository.sumSuccessfulPayments(30L))
+                .thenReturn(new BigDecimal("1000.00"));
+
+        var response = bookingService.update(30L,
+                new BookingUpdateRequest(null, null, null, "PAID"),
+                principal(99L, "ROLE_ADMIN"));
+
+        assertEquals("PAID", response.status());
+        verify(invoiceService).createForPaidBooking(booking);
+    }
+
+    @Test
+    void cancellationSendsEmail() {
+        booking.setBookingStatus("PENDING");
+
+        bookingService.cancel(30L, principal(10L, "ROLE_USER"));
+
+        verify(emailService).sendBookingCancellation("user@example.com", "BK-20261105-0001");
     }
 
     @Test
@@ -261,6 +289,16 @@ class BookingServiceTest {
         verify(bookingRepository).save(bookingCaptor.capture());
         assertSame(bookingCaptor.getValue(), captor.getValue().get(0).getBooking());
         assertEquals("0901234567", captor.getValue().get(0).getTravelerPhone());
+    }
+
+    @Test
+    void createSendsConfirmationEmail() {
+        var response = bookingService.create(
+                new CreateBookingRequest(20L, 1, "note"),
+                principal(10L, "ROLE_USER"));
+
+        verify(emailService).sendBookingConfirmation(
+                "user@example.com", response.bookingCode(), response.totalAmount());
     }
 
     @Test

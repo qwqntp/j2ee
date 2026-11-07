@@ -2,8 +2,11 @@ package com.j2ee.tour.controller;
 
 import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.OpenApiConfig;
+import com.j2ee.tour.dto.request.ForgotPasswordRequest;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
+import com.j2ee.tour.dto.request.ResetPasswordRequest;
+import com.j2ee.tour.dto.request.VerifyEmailRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.dto.response.AuthResponse;
 import com.j2ee.tour.security.AuthCookieService;
@@ -67,6 +70,32 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookieService.clear().toString())
                 .body(ApiResponse.<Void>success("Logged out", null));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request a password reset link",
+            description = "Always returns the same message so account existence is not revealed. "
+                    + "The reset token is stored hashed and expires after 30 minutes.")
+    public ApiResponse<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request.email());
+        return ApiResponse.success(
+                "If the email exists, a password reset link has been sent", null);
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset a password with a one-time token",
+            description = "Consumes the reset token, changes the password, and revokes all refresh tokens.")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ApiResponse.success("Password reset", null);
+    }
+
+    @PostMapping("/verify-email")
+    @Operation(summary = "Verify an email address with a one-time token",
+            description = "Consumes the verification token and marks the account email as verified.")
+    public ApiResponse<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request);
+        return ApiResponse.success("Email verified", null);
     }
 
     @GetMapping("/me")

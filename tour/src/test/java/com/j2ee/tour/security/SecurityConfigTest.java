@@ -6,11 +6,13 @@ import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.controller.AdminController;
 import com.j2ee.tour.controller.AuthController;
 import com.j2ee.tour.controller.BookingController;
+import com.j2ee.tour.controller.InvoiceController;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AuthService;
 import com.j2ee.tour.service.BookingService;
+import com.j2ee.tour.service.InvoiceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -18,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -34,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {AuthController.class, AdminController.class, BookingController.class})
+@WebMvcTest(controllers = {AuthController.class, AdminController.class,
+        BookingController.class, InvoiceController.class})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -57,6 +62,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private BookingService bookingService;
+
+    @MockitoBean
+    private InvoiceService invoiceService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -183,6 +191,27 @@ class SecurityConfigTest {
                         .content("{\"departureId\":1,\"guestCount\":1}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Departure has already started"));
+    }
+
+    @Test
+    void forgotPasswordEndpointIsPublic() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType("application/json")
+                        .content("{\"email\":\"user01@example.com\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void userCanReadOwnInvoices() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(invoiceService.listMine(anyLong(), any(Pageable.class)))
+                .thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0, true));
+
+        mockMvc.perform(get("/api/invoices/me")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").isEmpty());
     }
 
     @Test

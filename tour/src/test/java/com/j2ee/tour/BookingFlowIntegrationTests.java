@@ -6,6 +6,7 @@ import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.request.CreateRefundRequest;
 import com.j2ee.tour.dto.request.PaymentCallbackRequest;
+import com.j2ee.tour.dto.request.TourRatingRequest;
 import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.AccountRole;
 import com.j2ee.tour.model.Accommodation;
@@ -19,14 +20,17 @@ import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
 import com.j2ee.tour.repository.AccommodationRepository;
 import com.j2ee.tour.repository.BookingRepository;
+import com.j2ee.tour.repository.InvoiceRepository;
 import com.j2ee.tour.repository.PromotionRepository;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TourGuideRepository;
 import com.j2ee.tour.repository.TourRepository;
 import com.j2ee.tour.service.BookingService;
+import com.j2ee.tour.service.InvoiceService;
 import com.j2ee.tour.service.PaymentService;
 import com.j2ee.tour.service.PaymentSignatureService;
 import com.j2ee.tour.service.RefundService;
+import com.j2ee.tour.service.TourRatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +58,8 @@ class BookingFlowIntegrationTests {
     @Autowired private PaymentService paymentService;
     @Autowired private RefundService refundService;
     @Autowired private PaymentSignatureService paymentSignatureService;
+    @Autowired private TourRatingService tourRatingService;
+    @Autowired private InvoiceService invoiceService;
 
     @Autowired private AccountRoleRepository accountRoleRepository;
     @Autowired private AccountRepository accountRepository;
@@ -63,6 +69,7 @@ class BookingFlowIntegrationTests {
     @Autowired private TourDepartureRepository tourDepartureRepository;
     @Autowired private BookingRepository bookingRepository;
     @Autowired private PromotionRepository promotionRepository;
+    @Autowired private InvoiceRepository invoiceRepository;
 
     private TourDeparture departure;
     private Account account;
@@ -223,6 +230,111 @@ class BookingFlowIntegrationTests {
 
         var updated = bookingService.get(booking.id(), principal);
         assertEquals("PAID", updated.status());
+        assertTrue(invoiceRepository.findByBookingBookingId(booking.id()).isPresent());
+    }
+
+    @Test
+    void paidBookingInvoiceIsVisibleOnlyToOwner() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-invoice-1", "500.00", "CARD", true), principal);
+
+        var mine = invoiceService.listMine(account.getAccountId(), PageRequest.of(0, 10));
+
+        assertEquals(1, mine.totalElements());
+        assertEquals(booking.id(), mine.content().get(0).bookingId());
+        assertEquals("PAID", mine.content().get(0).status());
+
+        Account other = createAccount("other-invoice");
+        var otherInvoices = invoiceService.listMine(other.getAccountId(), PageRequest.of(0, 10));
+        assertEquals(0, otherInvoices.totalElements());
+    }
+
+    @Test
+    void ownerCanRatePaidBookingAndAverageIsPublic() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-rating-1", "500.00", "CARD", true), principal);
+
+        var rating = tourRatingService.create(departure.getTour().getTourId(),
+                new TourRatingRequest(booking.id(), 5, "Great"),
+                principal);
+
+        assertEquals(5, rating.rating());
+        var page = tourRatingService.list(departure.getTour().getTourId(),
+                PageRequest.of(0, 10));
+        assertEquals(new BigDecimal("5.00"), page.averageRating());
+        assertEquals(1, page.ratingCount());
+    }
+
+    @Test
+    void ratingAverageIncludesAllRatingsForTour() {
+        TourDeparture wide = createDeparture(10);
+        var first = bookingService.create(
+                new CreateBookingRequest(wide.getDepartureId(), 1, "first"), principal);
+        var second = bookingService.create(
+                new CreateBookingRequest(wide.getDepartureId(), 1, "second"), principal);
+        paymentService.handleCallback(first.id(),
+                callback(first.id(), "txn-rating-2", "500.00", "CARD", true), principal);
+        paymentService.handleCallback(second.id(),
+                callback(second.id(), "txn-rating-3", "500.00", "CARD", true), principal);
+
+        tourRatingService.create(departure.getTour().getTourId(),
+                new TourRatingRequest(first.id(), 5, null), principal);
+        tourRatingService.create(departure.getTour().getTourId(),
+                new TourRatingRequest(second.id(), 3, null), principal);
+
+        var page = tourRatingService.list(departure.getTour().getTourId(),
+                PageRequest.of(0, 10));
+        assertEquals(new BigDecimal("4.00"), page.averageRating());
+        assertEquals(2, page.ratingCount());
+    }
+
+    @Test
+    void unpaidBookingCannotBeRated() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                tourRatingService.create(departure.getTour().getTourId(),
+                        new TourRatingRequest(booking.id(), 5, null), principal));
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+    }
+
+    @Test
+    void bookingCanOnlyBeRatedOnce() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-rating-4", "500.00", "CARD", true), principal);
+        tourRatingService.create(departure.getTour().getTourId(),
+                new TourRatingRequest(booking.id(), 5, null), principal);
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                tourRatingService.create(departure.getTour().getTourId(),
+                        new TourRatingRequest(booking.id(), 4, null), principal));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+    }
+
+    @Test
+    void otherUserCannotRateBooking() {
+        var booking = bookingService.create(
+                new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);
+        paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-rating-5", "500.00", "CARD", true), principal);
+        Account other = createAccount("other-rating");
+        AuthPrincipal otherPrincipal = new AuthPrincipal(
+                other.getAccountId(), other.getUsername(), "ROLE_USER");
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                tourRatingService.create(departure.getTour().getTourId(),
+                        new TourRatingRequest(booking.id(), 5, null), otherPrincipal));
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
     }
 
     @Test

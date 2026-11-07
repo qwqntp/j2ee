@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PaymentServiceTest {
@@ -43,6 +44,7 @@ class PaymentServiceTest {
 
     private BookingRepository bookingRepository;
     private PaymentRepository paymentRepository;
+    private InvoiceService invoiceService;
     private PaymentService paymentService;
 
     private Booking booking;
@@ -53,10 +55,11 @@ class PaymentServiceTest {
         bookingRepository = mock(BookingRepository.class);
         paymentRepository = mock(PaymentRepository.class);
         RefundRepository refundRepository = mock(RefundRepository.class);
+        invoiceService = mock(InvoiceService.class);
         Clock clock = Clock.fixed(Instant.parse("2026-11-05T03:30:00Z"),
                 ZoneId.of("Asia/Ho_Chi_Minh"));
         paymentService = new PaymentService(bookingRepository, paymentRepository, refundRepository,
-                new PaymentSignatureService(SECRET), clock);
+                new PaymentSignatureService(SECRET), invoiceService, clock);
 
         account = new Account();
         account.setAccountId(10L);
@@ -140,6 +143,7 @@ class PaymentServiceTest {
         assertEquals("SUCCESS", response.status());
         assertEquals(NOW, response.paidAt());
         assertEquals("PAID", booking.getBookingStatus());
+        verify(invoiceService).createForPaidBooking(booking);
     }
 
     @Test

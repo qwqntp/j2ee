@@ -109,6 +109,34 @@ class AuthControllerTest {
     }
 
     @Test
+    void forgotPasswordReturnsGenericMessage() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType("application/json")
+                        .content("{\"email\":\"user01@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message")
+                        .value("If the email exists, a password reset link has been sent"));
+    }
+
+    @Test
+    void resetPasswordReturnsOk() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType("application/json")
+                        .content("{\"token\":\"reset-token\",\"newPassword\":\"new-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password reset"));
+    }
+
+    @Test
+    void verifyEmailReturnsOk() throws Exception {
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType("application/json")
+                        .content("{\"token\":\"verify-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Email verified"));
+    }
+
+    @Test
     void logoutClearsCookie() throws Exception {
         when(cookieService.clear()).thenReturn(cookie("", Duration.ZERO));
 

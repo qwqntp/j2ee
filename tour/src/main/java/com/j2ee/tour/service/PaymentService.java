@@ -30,17 +30,20 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final PaymentSignatureService paymentSignatureService;
+    private final InvoiceService invoiceService;
     private final Clock clock;
 
     public PaymentService(BookingRepository bookingRepository,
                           PaymentRepository paymentRepository,
                           RefundRepository refundRepository,
                           PaymentSignatureService paymentSignatureService,
+                          InvoiceService invoiceService,
                           Clock clock) {
         this.bookingRepository = bookingRepository;
         this.paymentRepository = paymentRepository;
         this.refundRepository = refundRepository;
         this.paymentSignatureService = paymentSignatureService;
+        this.invoiceService = invoiceService;
         this.clock = clock;
     }
 
@@ -168,6 +171,9 @@ public class PaymentService {
         if (!newStatus.equals(status)) {
             booking.setBookingStatus(newStatus);
             bookingRepository.save(booking);
+            if ("PAID".equals(newStatus)) {
+                invoiceService.createForPaidBooking(booking);
+            }
         }
     }
 

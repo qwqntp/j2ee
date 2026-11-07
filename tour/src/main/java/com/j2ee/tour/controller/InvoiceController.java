@@ -4,11 +4,13 @@ import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.InvoiceRequest;
 import com.j2ee.tour.dto.response.InvoiceResponse;
+import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.InvoiceService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,6 +32,14 @@ public class InvoiceController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<InvoiceResponse>>> list(Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(invoiceService.list(pageable)));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<PageResponse<InvoiceResponse>>> mine(
+            Pageable pageable,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(
+                invoiceService.listMine(principal.id(), pageable)));
     }
 
     @GetMapping("/{id}")

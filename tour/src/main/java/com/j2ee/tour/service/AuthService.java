@@ -3,10 +3,13 @@ package com.j2ee.tour.service;
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
+import com.j2ee.tour.dto.request.ResetPasswordRequest;
+import com.j2ee.tour.dto.request.VerifyEmailRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.mapper.AccountMapper;
 import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.AccountRole;
+import com.j2ee.tour.model.AuthToken;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
 import com.j2ee.tour.security.JwtService;
@@ -34,6 +37,8 @@ public class AuthService {
     private final AccountRepository accountRepository;
     private final AccountRoleRepository roleRepository;
     private final RefreshTokenService refreshTokenService;
+    private final AuthTokenService authTokenService;
+    private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final Clock clock;
@@ -68,6 +73,8 @@ public class AuthService {
         account.setRole(role);
         accountRepository.save(account);
 
+        String verificationToken = authTokenService.issue(account, AuthTokenService.EMAIL_VERIFICATION);
+        emailService.sendEmailVerification(account.getAccountEmail(), verificationToken);
         return issue(account, refreshTokenService.issue(account));
     }
 
@@ -98,6 +105,40 @@ public class AuthService {
 
     public void logout(String rawToken) {
         refreshTokenService.revoke(rawToken);
+    }
+
+    @Transactional
+    public void forgotPassword(String email) {
+        accountRepository.findByAccountEmailIgnoreCase(email.trim())
+                .ifPresent(account -> {
+                    String token = authTokenService.issue(account, AuthTokenService.PASSWORD_RESET);
+                    emailService.sendPasswordReset(account.getAccountEmail(), token);
+                });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (request.newPassword().getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must be at most 72 bytes");
+        }
+        AuthToken token = authTokenService.consume(
+                request.token(), AuthTokenService.PASSWORD_RESET);
+        Account account = token.getAccount();
+        account.setPassword(passwordEncoder.encode(request.newPassword()));
+        account.setAccountUpdatedAt(LocalDateTime.now(clock));
+        accountRepository.save(account);
+        refreshTokenService.revokeAllForAccount(account.getAccountId());
+    }
+
+    @Transactional
+    public void verifyEmail(VerifyEmailRequest request) {
+        AuthToken token = authTokenService.consume(
+                request.token(), AuthTokenService.EMAIL_VERIFICATION);
+        Account account = token.getAccount();
+        account.setEmailVerified(1);
+        account.setAccountUpdatedAt(LocalDateTime.now(clock));
+        accountRepository.save(account);
     }
 
     @Transactional(readOnly = true)

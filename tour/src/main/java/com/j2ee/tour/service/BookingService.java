@@ -49,7 +49,9 @@ public class BookingService {
     private final PromotionRepository promotionRepository;
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceService invoiceService;
     private final TravelerRepository travelerRepository;
+    private final EmailService emailService;
     private final Clock clock;
 
     public BookingService(BookingRepository bookingRepository,
@@ -58,7 +60,9 @@ public class BookingService {
                           PromotionRepository promotionRepository,
                           PaymentRepository paymentRepository,
                           InvoiceRepository invoiceRepository,
+                          InvoiceService invoiceService,
                           TravelerRepository travelerRepository,
+                          EmailService emailService,
                           Clock clock) {
         this.bookingRepository = bookingRepository;
         this.departureRepository = departureRepository;
@@ -66,7 +70,9 @@ public class BookingService {
         this.promotionRepository = promotionRepository;
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
+        this.invoiceService = invoiceService;
         this.travelerRepository = travelerRepository;
+        this.emailService = emailService;
         this.clock = clock;
     }
 
@@ -160,6 +166,7 @@ public class BookingService {
                     .toList();
             saved.getTravelers().addAll(travelerRepository.saveAll(travelers));
         }
+        sendBookingConfirmation(saved);
         return BookingResponse.from(saved);
     }
 
@@ -238,7 +245,14 @@ public class BookingService {
         if (request.note() != null) {
             booking.setBookingNote(request.note());
         }
-        return BookingResponse.from(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        if (!"PAID".equals(oldStatus) && "PAID".equals(newStatus)) {
+            invoiceService.createForPaidBooking(saved);
+        }
+        if (!"CANCELLED".equals(oldStatus) && "CANCELLED".equals(newStatus)) {
+            sendBookingCancellation(saved);
+        }
+        return BookingResponse.from(saved);
     }
 
     @Transactional
@@ -260,7 +274,9 @@ public class BookingService {
         releaseSeats(departure, booking.getBookingGuestCount());
         releasePromotionUsage(booking);
         booking.setBookingStatus("CANCELLED");
-        return BookingResponse.from(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        sendBookingCancellation(saved);
+        return BookingResponse.from(saved);
     }
 
     @Transactional
@@ -280,6 +296,23 @@ public class BookingService {
         }
         travelerRepository.deleteAll(booking.getTravelers());
         bookingRepository.delete(booking);
+    }
+
+    private void sendBookingConfirmation(Booking booking) {
+        if (booking.getAccount() != null) {
+            emailService.sendBookingConfirmation(
+                    booking.getAccount().getAccountEmail(),
+                    booking.getBookingCode(),
+                    booking.getBookingTotalAmount());
+        }
+    }
+
+    private void sendBookingCancellation(Booking booking) {
+        if (booking.getAccount() != null) {
+            emailService.sendBookingCancellation(
+                    booking.getAccount().getAccountEmail(),
+                    booking.getBookingCode());
+        }
     }
 
     private Traveler toTraveler(Booking booking, BookingTravelerRequest request) {
