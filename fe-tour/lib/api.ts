@@ -148,3 +148,7 @@ export function getBooking(token: string, id: number): Promise<Booking> {
 export function listBookings(token: string, page = 0, size = 10): Promise<PageData<Booking>> {
   return apiRequest<PageData<Booking>>(`/api/bookings?page=${page}&size=${size}`, { token });
 }
+
+export function cancelBooking(token: string, id: number): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}/cancel`, { method: "POST", token });
+}

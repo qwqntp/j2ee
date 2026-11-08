@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ensureSession, getStoredSession, signOut, useSession } from "@/lib/auth";
-import { IconArrowRight, IconChevronRight, IconMenu } from "./icons";
+import { IconArrowRight, IconChevronRight, IconCompass, IconMenu } from "./icons";
 
 const links = [
   { href: "/tours", label: "Journeys" },
@@ -87,7 +87,16 @@ export function SiteHeader() {
                 {account.email ? (
                   <p className="truncate text-sm text-muted">{account.email}</p>
                 ) : null}
-                <div className="mt-4 border-t border-line pt-2">
+                <Link
+                  href="/my-trips"
+                  onClick={() => accountMenu.current?.removeAttribute("open")}
+                  className="mt-4 flex min-h-11 items-center gap-2 rounded-[2px] border-t border-line px-3 pt-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                >
+                  <IconCompass className="h-4 w-4 text-forest" />
+                  My trips
+                  <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                </Link>
+                <div className="border-t border-line pt-2">
                   <button
                     type="button"
                     onClick={handleSignOut}
@@ -158,6 +167,14 @@ export function SiteHeader() {
                         ) : null}
                       </div>
                     </div>
+                    <Link
+                      href="/my-trips"
+                      className="flex min-h-11 items-center gap-2 rounded-[2px] px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                    >
+                      <IconCompass className="h-4 w-4 text-forest" />
+                      My trips
+                      <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                    </Link>
                     <button
                       type="button"
                       onClick={handleSignOut}

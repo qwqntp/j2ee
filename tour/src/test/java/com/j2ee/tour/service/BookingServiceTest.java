@@ -7,7 +7,9 @@ import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.Booking;
 import com.j2ee.tour.model.Promotion;
+import com.j2ee.tour.model.Tour;
 import com.j2ee.tour.model.TourDeparture;
+import com.j2ee.tour.model.TourImage;
 import com.j2ee.tour.model.Traveler;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.BookingRepository;
@@ -37,6 +39,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -473,5 +476,37 @@ class BookingServiceTest {
 
         assertEquals("SUMMER", response.promotion().code());
         assertEquals("Promo", response.promotion().name());
+    }
+
+    @Test
+    void bookingResponseIncludesTourAndDepartureSummary() {
+        Tour tour = new Tour();
+        tour.setTourId(50L);
+        tour.setTourName("Hoi An Slow Days");
+        TourImage image = new TourImage();
+        image.setImageUrl("https://example.com/hoi-an.jpg");
+        tour.setTourImages(List.of(image));
+        departure.setTour(tour);
+        departure.setDepartureStartDate(LocalDateTime.of(2026, 12, 1, 9, 0));
+        departure.setDepartureEndDate(LocalDateTime.of(2026, 12, 3, 18, 0));
+        departure.setDepartureMeetingPoint("Hoi An old town");
+
+        var response = bookingService.get(30L, principal(10L, "ROLE_USER"));
+
+        assertNotNull(response.tour());
+        assertEquals(50L, response.tour().tourId());
+        assertEquals("Hoi An Slow Days", response.tour().tourName());
+        assertEquals("https://example.com/hoi-an.jpg", response.tour().imageUrl());
+        assertEquals(LocalDateTime.of(2026, 12, 1, 9, 0), response.tour().startDate());
+        assertEquals(LocalDateTime.of(2026, 12, 3, 18, 0), response.tour().endDate());
+        assertEquals("Hoi An old town", response.tour().meetingPoint());
+        assertEquals("OPEN", response.tour().departureStatus());
+    }
+
+    @Test
+    void bookingResponseLeavesTourSummaryEmptyWithoutTour() {
+        var response = bookingService.get(30L, principal(10L, "ROLE_USER"));
+
+        assertNull(response.tour());
     }
 }

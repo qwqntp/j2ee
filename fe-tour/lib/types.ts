@@ -69,10 +69,28 @@ export type AuthSession = {
   account: Account;
 };
 
+export type BookingTour = {
+  tourId: number;
+  tourName: string;
+  imageUrl: string | null;
+  startDate: string;
+  endDate: string;
+  meetingPoint: string | null;
+  departureStatus: string;
+};
+
+export type BookingPromotion = {
+  id: number;
+  code: string;
+  name: string;
+  discountPercentage: number;
+};
+
 export type Booking = {
   id: number;
   bookingCode: string;
   departureId: number | null;
+  tour: BookingTour | null;
   accountId: number | null;
   createdAt: string;
   guestCount: number;
@@ -88,5 +106,8 @@ export type Booking = {
     dateOfBirth: string | null;
     gender: string | null;
     idDocument: string | null;
+    phone: string | null;
+    email: string | null;
   }>;
+  promotion: BookingPromotion | null;
 };

@@ -62,3 +62,49 @@ export function CheckoutSkeleton() {
     </div>
   );
 }
+
+export function MyTripsSkeleton() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading your trips…</span>
+      <div aria-hidden="true" className="space-y-4">
+        <div className="h-9 w-48 animate-pulse rounded-[2px] bg-sage/25" />
+        <div className="h-11 w-full animate-pulse rounded-[2px] bg-sage/25" />
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            key={index}
+            className="grid gap-4 rounded-[4px] border border-line bg-white p-4 sm:grid-cols-[15rem_1fr]"
+          >
+            <div className="aspect-[4/3] animate-pulse rounded-[3px] bg-sage/25 sm:aspect-auto" />
+            <div className="space-y-3 py-2">
+              <div className="h-3 w-28 animate-pulse rounded-[2px] bg-sage/25" />
+              <div className="h-7 w-2/3 animate-pulse rounded-[2px] bg-sage/25" />
+              <div className="h-4 w-1/2 animate-pulse rounded-[2px] bg-sage/25" />
+              <div className="h-4 w-3/4 animate-pulse rounded-[2px] bg-sage/25" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function TripDetailSkeleton() {
+  return (
+    <div role="status" aria-live="polite" className="shell py-10 sm:py-12">
+      <span className="sr-only">Loading trip details…</span>
+      <div aria-hidden="true" className="space-y-6">
+        <div className="h-3 w-40 animate-pulse rounded-[2px] bg-sage/25" />
+        <div className="h-12 w-3/4 animate-pulse rounded-[2px] bg-sage/25" />
+        <div className="h-5 w-1/2 animate-pulse rounded-[2px] bg-sage/25" />
+        <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
+          <div className="space-y-4">
+            <div className="h-40 animate-pulse rounded-[3px] bg-sage/25" />
+            <div className="h-40 animate-pulse rounded-[3px] bg-sage/25" />
+          </div>
+          <div className="h-80 animate-pulse rounded-[3px] bg-sage/25" />
+        </div>
+      </div>
+    </div>
+  );
+}
