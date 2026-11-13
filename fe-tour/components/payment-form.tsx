@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ApiError, createBooking } from "@/lib/api";
+import { ApiError, createBooking, payBooking } from "@/lib/api";
 import { clearSession, ensureSession } from "@/lib/auth";
 import { formatDateRange, formatDuration, formatPrice } from "@/lib/format";
-import type { Booking, TourDeparture } from "@/lib/types";
+import type { Booking, Payment, TourDeparture } from "@/lib/types";
 import { IconArrowRight, IconCheck, IconShield, IconUsers } from "./icons";
 import { TourImage } from "./tour-image";
 
@@ -22,9 +22,16 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
   const router = useRouter();
   const maxGuests = Math.max(1, Math.min(departure.seatsAvailable, 20));
   const [guests, setGuests] = useState(Math.min(2, maxGuests));
+  const [travelerNames, setTravelerNames] = useState<string[]>(() =>
+    Array.from({ length: Math.min(2, maxGuests) }, () => ""),
+  );
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [payment, setPayment] = useState<Payment | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [method, setMethod] = useState<"online" | "office">("online");
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const total = Math.round(departure.price * guests);
   const loginHref = `/login?next=${encodeURIComponent(
@@ -43,6 +50,49 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
       active = false;
     };
   }, []);
+
+  function changeGuests(next: number) {
+    const clamped = Math.max(1, Math.min(maxGuests, next));
+    setGuests(clamped);
+    setTravelerNames((current) =>
+      Array.from({ length: clamped }, (_, index) => current[index] ?? ""),
+    );
+  }
+
+  async function payForBooking(bookingId: number, token: string) {
+    setPaying(true);
+    setPaymentError(null);
+    try {
+      const result = await payBooking(token, bookingId);
+      setPayment(result);
+      setBooking((current) =>
+        current && current.id === bookingId && result.status === "SUCCESS"
+          ? { ...current, status: "PAID" }
+          : current,
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        router.push(loginHref);
+        return;
+      }
+      setPaymentError(
+        err instanceof ApiError ? err.message : "Could not complete the demo payment. Try again.",
+      );
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function handlePayNow() {
+    if (!booking || paying) return;
+    const session = await ensureSession();
+    if (!session) {
+      router.push(loginHref);
+      return;
+    }
+    await payForBooking(booking.id, session.accessToken);
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,8 +118,12 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
         departureId: departure.id,
         guestCount: guests,
         note: note || undefined,
+        travelers: travelerNames.map((fullName) => ({ fullName: fullName.trim() })),
       });
       setBooking(created);
+      if (method === "online") {
+        await payForBooking(created.id, session.accessToken);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         clearSession();
@@ -84,6 +138,8 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
     }
   }
 
+  const paid = booking?.status === "PAID" || payment?.status === "SUCCESS";
+
   if (booking) {
     return (
       <div
@@ -94,31 +150,55 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
         <span className="mx-auto grid h-14 w-14 place-items-center rounded-[3px] bg-sage/25 text-forest">
           <IconCheck className="h-7 w-7" />
         </span>
-        <p className="eyebrow mt-6 text-terracotta">Seats reserved</p>
+        <p className="eyebrow mt-6 text-terracotta">
+          {paying ? "Processing payment" : paid ? "Payment received" : "Seats reserved"}
+        </p>
         <h2 className="mt-3 font-display text-3xl tracking-tight sm:text-4xl">
           Your booking is {booking.bookingCode}.
         </h2>
         <p className="mt-3 leading-7 text-muted">
           {booking.guestCount} {booking.guestCount === 1 ? "traveler" : "travelers"} on{" "}
-          {formatDateRange(departure.startDate, departure.endDate)}. Status: {booking.status}.
-          Payment is collected separately.
+          {formatDateRange(departure.startDate, departure.endDate)}. Status: {booking.status}.{" "}
+          {paying
+            ? "Processing the demo card payment now."
+            : paid
+              ? "Paid in full. We have recorded your payment."
+              : method === "online"
+                ? "Your seats are held, but the demo payment did not complete. Try again below."
+                : "Your seats are held. Pay at the office to complete the booking."}
         </p>
         <dl className="mx-auto mt-6 max-w-sm space-y-2 text-left text-sm">
           <div className="flex justify-between gap-4 border-b border-line pb-2">
             <dt className="text-muted">Booking code</dt>
             <dd className="font-semibold">{booking.bookingCode}</dd>
           </div>
-          <div className="flex justify-between gap-4">
+          <div className="flex justify-between gap-4 border-b border-line pb-2">
             <dt className="text-muted">Total</dt>
             <dd className="font-semibold text-forest">{formatPrice(booking.totalAmount)}</dd>
           </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted">Payment</dt>
+            <dd className="font-semibold">{paid ? "Paid (demo card)" : "Pending"}</dd>
+          </div>
         </dl>
+        {paymentError ? (
+          <p role="alert" className="mt-4 text-sm text-terracotta">
+            {paymentError}
+          </p>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link href={`/tours/${tourId}`} className="btn-primary">
+          {!paid && !paying ? (
+            <button type="button" onClick={handlePayNow} className="btn-primary">
+              Pay {formatPrice(booking.totalAmount)} now
+              <IconArrowRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <Link href={`/my-trips/${booking.id}`} className="btn-primary">
+              View booking
+            </Link>
+          )}
+          <Link href={`/tours/${tourId}`} className="btn-secondary">
             Back to the journey
-          </Link>
-          <Link href="/tours" className="btn-secondary">
-            Browse more journeys
           </Link>
         </div>
       </div>
@@ -214,7 +294,7 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
               <div className="mt-2 flex min-h-12 items-center justify-between rounded-[3px] border border-line bg-white px-2">
                 <button
                   type="button"
-                  onClick={() => setGuests((current) => Math.max(1, current - 1))}
+                  onClick={() => changeGuests(guests - 1)}
                   disabled={guests <= 1}
                   aria-label="Remove a traveler"
                   className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
@@ -226,7 +306,7 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
                 </span>
                 <button
                   type="button"
-                  onClick={() => setGuests((current) => Math.min(maxGuests, current + 1))}
+                  onClick={() => changeGuests(guests + 1)}
                   disabled={guests >= maxGuests}
                   aria-label="Add a traveler"
                   className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
@@ -239,6 +319,41 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
               </p>
             </div>
           </div>
+
+          <fieldset className="mt-5">
+            <legend className="label">
+              Traveler names{" "}
+              <span className="font-normal text-muted">(as they appear on IDs)</span>
+            </legend>
+            <div className="mt-2 grid gap-4 sm:grid-cols-2">
+              {travelerNames.map((name, index) => (
+                <div key={index}>
+                  <label htmlFor={`traveler-${index}`} className="label">
+                    Traveler {index + 1}
+                  </label>
+                  <input
+                    id={`traveler-${index}`}
+                    type="text"
+                    autoComplete={index === 0 ? "name" : "off"}
+                    required
+                    value={name}
+                    onChange={(event) =>
+                      setTravelerNames((current) =>
+                        current.map((value, position) =>
+                          position === index ? event.target.value : value,
+                        ),
+                      )
+                    }
+                    className="field"
+                    placeholder="Full name"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted">
+              Names can be changed later by contacting us. One name per seat.
+            </p>
+          </fieldset>
 
           <div className="mt-5">
             <label htmlFor="notes" className="label">
@@ -261,31 +376,39 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
             How would you like to pay?
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Seats are reserved now and payment is arranged separately. No card details are collected
-            here.
+            Online payment is a demo card: no real card details are collected and no money moves.
+            You can also hold the seats now and pay at the office later.
           </p>
           <div className="mt-6 space-y-3">
             <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-line bg-ivory/60 p-4 transition has-[:checked]:border-forest has-[:checked]:bg-sage/15">
               <input
                 type="radio"
                 name="payment"
+                value="online"
+                checked={method === "online"}
+                onChange={() => setMethod("online")}
+                className="mt-1 accent-forest"
+              />
+              <span>
+                <span className="block text-sm font-semibold">Pay online now (demo card)</span>
+                <span className="mt-0.5 block text-sm text-muted">
+                  Reserve and mark the booking paid immediately. No real charge is made.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-line bg-ivory/60 p-4 transition has-[:checked]:border-forest has-[:checked]:bg-sage/15">
+              <input
+                type="radio"
+                name="payment"
                 value="office"
-                defaultChecked
+                checked={method === "office"}
+                onChange={() => setMethod("office")}
                 className="mt-1 accent-forest"
               />
               <span>
                 <span className="block text-sm font-semibold">Pay at the office</span>
                 <span className="mt-0.5 block text-sm text-muted">
-                  Hold the seats now, settle in person later.
-                </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-line bg-ivory/60 p-4 transition has-[:checked]:border-forest has-[:checked]:bg-sage/15">
-              <input type="radio" name="payment" value="transfer" className="mt-1 accent-forest" />
-              <span>
-                <span className="block text-sm font-semibold">Bank transfer</span>
-                <span className="mt-0.5 block text-sm text-muted">
-                  We would send the account details after a real booking.
+                  Hold the seats now, then complete payment from My trips or in person.
                 </span>
               </span>
             </label>
@@ -295,10 +418,22 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
         <div className="flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-center gap-2 text-xs text-muted">
             <IconShield className="h-4 w-4 text-forest" />
-            {error ? <span role="alert" className="text-terracotta">{error}</span> : "Reserves seats now. Payment is arranged separately."}
+            {error ? (
+              <span role="alert" className="text-terracotta">{error}</span>
+            ) : method === "online" ? (
+              "Demo card payment. No real charge."
+            ) : (
+              "Seats held now. Pay later from My trips."
+            )}
           </p>
           <button type="submit" disabled={pending} className="btn-primary">
-            {pending ? "Reserving…" : "Reserve these seats"}
+            {pending
+              ? method === "online"
+                ? "Reserving & paying…"
+                : "Reserving…"
+              : method === "online"
+                ? "Reserve & pay"
+                : "Reserve these seats"}
             <IconArrowRight className="h-4 w-4" />
           </button>
         </div>

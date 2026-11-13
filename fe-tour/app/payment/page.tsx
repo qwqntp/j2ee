@@ -13,7 +13,7 @@ import type { TourDetail } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Checkout",
-  description: "Reserve seats on a departure. Payment is arranged separately.",
+  description: "Reserve seats on a departure and complete a demo card payment.",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -40,8 +40,8 @@ export default function PaymentPage({ searchParams }: Props) {
                 A quiet moment before the journey.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-6 text-muted">
-                Reserve seats on this departure. Payment is arranged separately, so no card details
-                are collected here.
+                Reserve seats and complete a demo card payment, or hold the seats now and pay at
+                the office. No real card details are collected here.
               </p>
             </div>
             <Link href="/tours" className="btn-secondary">
@@ -71,7 +71,7 @@ async function PaymentContent({ searchParams }: { searchParams: SearchParams }) 
     return (
       <EmptyState
         title="Start with a journey."
-        description="Pick a departure from any journey to reserve seats. Payment is arranged separately."
+        description="Pick a departure from any journey to reserve seats and complete payment."
         action={{ href: "/tours", label: "Browse journeys" }}
       />
     );

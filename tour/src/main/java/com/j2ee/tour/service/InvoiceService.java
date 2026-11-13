@@ -71,16 +71,21 @@ public class InvoiceService {
                     invoice.setTotalAmount(nonNull(booking.getBookingTotalAmount()));
                     invoice.setBooking(booking);
 
-                    if (booking.getAccount() != null) {
-                        invoice.setCustomerName(booking.getAccount().getUsername());
-                        invoice.setCustomerEmail(booking.getAccount().getAccountEmail());
-                    }
                     if (booking.getTravelers() != null && !booking.getTravelers().isEmpty()) {
                         var traveler = booking.getTravelers().get(0);
-                        if (invoice.getCustomerName() == null) {
-                            invoice.setCustomerName(traveler.getTravelerName());
-                        }
+                        invoice.setCustomerName(traveler.getTravelerName());
                         invoice.setCustomerPhone(traveler.getTravelerPhone());
+                        if (traveler.getTravelerEmail() != null) {
+                            invoice.setCustomerEmail(traveler.getTravelerEmail());
+                        }
+                    }
+                    if (booking.getAccount() != null) {
+                        if (invoice.getCustomerName() == null) {
+                            invoice.setCustomerName(booking.getAccount().getUsername());
+                        }
+                        if (invoice.getCustomerEmail() == null) {
+                            invoice.setCustomerEmail(booking.getAccount().getAccountEmail());
+                        }
                     }
                     if (booking.getPromotion() != null) {
                         invoice.getPromotions().add(booking.getPromotion());

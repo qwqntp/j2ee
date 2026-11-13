@@ -77,6 +77,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/invoices/me").authenticated()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/bookings/*/payments/mock").authenticated()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(
                                 "/api/admin/**",

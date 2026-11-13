@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -184,6 +185,65 @@ class PaymentServiceTest {
 
         ApiException exception = assertThrows(ApiException.class,
                 () -> paymentService.handleCallback(30L, callback("txn-ok", "1000.00", true), admin()));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+    }
+
+    @Test
+    void mockPaymentMarksBookingPaidAndCreatesInvoice() {
+        when(bookingRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(booking));
+        when(paymentRepository.sumSuccessfulPayments(30L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("1000.00"));
+
+        var response = paymentService.payMock(30L, owner());
+
+        assertEquals("SUCCESS", response.status());
+        assertEquals(new BigDecimal("1000.00"), response.amount());
+        assertEquals("PAID", booking.getBookingStatus());
+        verify(invoiceService).createForPaidBooking(booking);
+    }
+
+    @Test
+    void mockPaymentIsIdempotentForPaidBooking() {
+        booking.setBookingStatus("PAID");
+        Payment existing = new Payment();
+        existing.setPaymentId(50L);
+        existing.setBooking(booking);
+        existing.setPaymentAmount(new BigDecimal("1000.00"));
+        existing.setPaymentMethod("CARD");
+        existing.setPaymentProviderTxnId("MOCK-existing");
+        existing.setPaymentStatus("SUCCESS");
+        existing.setPaymentPaidAt(NOW);
+        existing.setPaymentCreatedAt(NOW);
+
+        when(bookingRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(booking));
+        when(paymentRepository
+                .findFirstByBookingBookingIdAndPaymentStatusOrderByPaymentIdDesc(30L, "SUCCESS"))
+                .thenReturn(Optional.of(existing));
+
+        var response = paymentService.payMock(30L, owner());
+
+        assertEquals(50L, response.id());
+        verify(paymentRepository, never()).save(any(Payment.class));
+    }
+
+    @Test
+    void otherUserCannotUseMockPayment() {
+        when(bookingRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(booking));
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> paymentService.payMock(30L, otherUser()));
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+    }
+
+    @Test
+    void mockPaymentRejectsCancelledBooking() {
+        booking.setBookingStatus("CANCELLED");
+        when(bookingRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(booking));
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> paymentService.payMock(30L, owner()));
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatus());
     }

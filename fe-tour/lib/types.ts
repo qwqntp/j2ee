@@ -86,6 +86,33 @@ export type BookingPromotion = {
   discountPercentage: number;
 };
 
+export type Payment = {
+  id: number;
+  bookingId: number;
+  amount: number;
+  paymentMethod: string;
+  providerTxnId: string | null;
+  status: string;
+  paidAt: string | null;
+  createdAt: string;
+};
+
+export type Invoice = {
+  id: number;
+  bookingId: number;
+  createdAt: string;
+  status: string;
+  discountAmount: number;
+  taxAmount: number;
+  serviceFee: number;
+  totalAmount: number;
+  paymentMethod: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerEmail: string | null;
+  promotionIds: number[];
+};
+
 export type Booking = {
   id: number;
   bookingCode: string;

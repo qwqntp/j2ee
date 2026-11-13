@@ -3,10 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ApiError, cancelBooking, getBooking } from "@/lib/api";
+import {
+  ApiError,
+  cancelBooking,
+  completeBooking,
+  confirmBooking,
+  getBooking,
+  payBooking,
+} from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
 import {
   canCancelBooking,
+  canViewInvoice,
   statusDescription,
   statusLabel,
   statusTone,
@@ -31,6 +39,10 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+  const [advanceError, setAdvanceError] = useState<string | null>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const loginHref = `/login?next=${encodeURIComponent(`/my-trips/${bookingId}`)}`;
 
@@ -93,6 +105,73 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
     setLoading(true);
     setError(null);
     setReloadKey((key) => key + 1);
+  }
+
+  async function handlePay() {
+    if (!booking || paying) return;
+    setPaying(true);
+    setPayError(null);
+
+    try {
+      const current = await ensureSession();
+      if (!current) {
+        router.replace(loginHref);
+        return;
+      }
+      const result = await payBooking(current.accessToken, booking.id);
+      if (result.status === "SUCCESS") {
+        setBooking({ ...booking, status: "PAID" });
+        publishFlash("Payment received. Your booking is secured.");
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        router.replace(loginHref);
+        return;
+      }
+      setPayError(
+        err instanceof ApiError ? err.message : "Could not complete the demo payment. Try again.",
+      );
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function handleLifecycle(action: "confirm" | "complete") {
+    if (!booking || advancing) return;
+    setAdvancing(true);
+    setAdvanceError(null);
+
+    try {
+      const current = await ensureSession();
+      if (!current) {
+        router.replace(loginHref);
+        return;
+      }
+      const updated =
+        action === "confirm"
+          ? await confirmBooking(current.accessToken, booking.id)
+          : await completeBooking(current.accessToken, booking.id);
+      setBooking({ ...booking, status: updated.status });
+      publishFlash(
+        action === "confirm"
+          ? "Booking confirmed. Seats are secured."
+          : "Trip marked as completed. Enjoy the memories.",
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        router.replace(loginHref);
+        return;
+      }
+      setAdvanceError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not update the booking. Try again.",
+      );
+    } finally {
+      setAdvancing(false);
+    }
   }
 
   async function handleCancel() {
@@ -349,9 +428,110 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
               </div>
             </dl>
             <p className="mt-4 border-t border-line pt-4 text-xs leading-5 text-muted">
-              Payment is arranged separately. This page shows the booking status on record.
+              {booking.status === "PENDING"
+                ? "Complete payment to secure this booking."
+                : booking.status === "PAID"
+                  ? "Payment received in full."
+                  : booking.status === "CONFIRMED"
+                    ? "Confirmed. Your seats are secured."
+                    : booking.status === "COMPLETED"
+                      ? "Trip completed."
+                      : "This page shows the booking status on record."}
             </p>
           </section>
+
+          {booking.status === "PENDING" ? (
+            <section className="rounded-[4px] border border-terracotta/30 bg-white p-6">
+              <p className="eyebrow text-terracotta">Payment pending</p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Complete payment to secure your seats. This is a demo card payment; no real charge
+                is made.
+              </p>
+              {payError ? (
+                <p role="alert" className="mt-3 text-sm text-terracotta">
+                  {payError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={handlePay}
+                disabled={paying}
+                className="btn-primary mt-4 w-full"
+              >
+                {paying
+                  ? "Processing…"
+                  : `Pay ${formatPrice(booking.totalAmount)} now`}
+                <IconArrowRight className="h-4 w-4" />
+              </button>
+            </section>
+          ) : booking.status === "PAID" ? (
+            <section className="rounded-[4px] border border-forest/30 bg-white p-6">
+              <p className="eyebrow text-forest">Payment received</p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Paid in full. Confirm the booking to secure the trip.
+              </p>
+              {advanceError ? (
+                <p role="alert" className="mt-3 text-sm text-terracotta">
+                  {advanceError}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLifecycle("confirm")}
+                  disabled={advancing}
+                  className="btn-primary w-full"
+                >
+                  {advancing ? "Confirming…" : "Confirm booking"}
+                  <IconArrowRight className="h-4 w-4" />
+                </button>
+                {canViewInvoice(booking) ? (
+                  <Link href={`/invoices/${booking.id}`} className="btn-secondary w-full text-center">
+                    View invoice
+                  </Link>
+                ) : null}
+              </div>
+            </section>
+          ) : booking.status === "CONFIRMED" ? (
+            <section className="rounded-[4px] border border-forest/30 bg-white p-6">
+              <p className="eyebrow text-forest">Booking confirmed</p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Your seats are secured. Once the trip is over, you can mark the booking
+                completed.
+              </p>
+              {advanceError ? (
+                <p role="alert" className="mt-3 text-sm text-terracotta">
+                  {advanceError}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLifecycle("complete")}
+                  disabled={advancing}
+                  className="btn-primary w-full"
+                >
+                  {advancing ? "Completing…" : "Mark trip completed"}
+                  <IconArrowRight className="h-4 w-4" />
+                </button>
+                {canViewInvoice(booking) ? (
+                  <Link href={`/invoices/${booking.id}`} className="btn-secondary w-full text-center">
+                    View invoice
+                  </Link>
+                ) : null}
+              </div>
+            </section>
+          ) : booking.status === "COMPLETED" ? (
+            <section className="rounded-[4px] border border-line bg-white p-6">
+              <p className="eyebrow text-forest">Trip completed</p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                This journey is complete. Your invoice is available below.
+              </p>
+              <Link href={`/invoices/${booking.id}`} className="btn-secondary mt-4 w-full text-center">
+                View invoice
+              </Link>
+            </section>
+          ) : null}
 
           {canCancelBooking(booking) ? (
             <section className="rounded-[4px] border border-terracotta/30 bg-white p-6">

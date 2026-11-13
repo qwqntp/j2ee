@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 @Service
 public class PaymentService {
@@ -86,6 +87,51 @@ public class PaymentService {
         payment.setPaymentProviderTxnId(request.providerTransactionId());
         payment.setPaymentStatus(successful ? "SUCCESS" : "FAILED");
         payment.setPaymentPaidAt(successful ? LocalDateTime.now(clock) : null);
+        payment.setPaymentCreatedAt(LocalDateTime.now(clock));
+        Payment saved = paymentRepository.save(payment);
+        recomputeBookingStatus(booking);
+        return PaymentResponse.from(saved);
+    }
+
+    /**
+     * Demo payment: records a successful card payment for the booking owner.
+     * No provider is called and no card data is accepted. The controller that
+     * exposes this is gated by app.payment.mock-enabled.
+     */
+    @Transactional
+    public PaymentResponse payMock(Long bookingId, AuthPrincipal principal) {
+        Booking booking = findOwnedBookingForUpdate(bookingId, principal);
+        String status = booking.getBookingStatus();
+        if (!"PENDING".equals(status) && !"PAID".equals(status)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Booking is not awaiting payment");
+        }
+
+        BigDecimal paid = paymentRepository.sumSuccessfulPayments(bookingId);
+        if (paid == null) {
+            paid = BigDecimal.ZERO;
+        }
+        if (paid.compareTo(booking.getBookingTotalAmount()) >= 0) {
+            return paymentRepository
+                    .findFirstByBookingBookingIdAndPaymentStatusOrderByPaymentIdDesc(
+                            bookingId, "SUCCESS")
+                    .map(PaymentResponse::from)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT,
+                            "Booking is already paid"));
+        }
+
+        BigDecimal remaining = booking.getBookingTotalAmount().subtract(paid);
+        if (remaining.signum() <= 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "Booking has no amount due");
+        }
+
+        Payment payment = new Payment();
+        payment.setBooking(booking);
+        payment.setPaymentAmount(remaining);
+        payment.setPaymentMethod("CARD");
+        payment.setPaymentProviderTxnId("MOCK-" + UUID.randomUUID());
+        payment.setPaymentStatus("SUCCESS");
+        payment.setPaymentPaidAt(LocalDateTime.now(clock));
         payment.setPaymentCreatedAt(LocalDateTime.now(clock));
         Payment saved = paymentRepository.save(payment);
         recomputeBookingStatus(booking);
@@ -183,7 +229,16 @@ public class PaymentService {
     }
 
     private Booking findOwnedBooking(Long id, AuthPrincipal principal) {
-        Booking booking = findBooking(id);
+        return ensureOwned(findBooking(id), principal);
+    }
+
+    private Booking findOwnedBookingForUpdate(Long id, AuthPrincipal principal) {
+        Booking booking = bookingRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NoSuchElementException("Booking not found"));
+        return ensureOwned(booking, principal);
+    }
+
+    private Booking ensureOwned(Booking booking, AuthPrincipal principal) {
         if (ADMIN_ROLE.equals(principal.role())) {
             return booking;
         }

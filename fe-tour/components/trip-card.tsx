@@ -86,7 +86,7 @@ export function TripCard({ booking }: { booking: Booking }) {
               href={`/my-trips/${booking.id}`}
               className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest transition-colors hover:text-forest-deep hover:underline"
             >
-              View trip
+              {booking.status === "PENDING" ? "Complete payment" : "View trip"}
               <IconArrowRight className="h-4 w-4" />
             </Link>
           </div>

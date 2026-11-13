@@ -23,15 +23,17 @@ Spring Boot 4.1.1 REST API for tour booking (Java 21, Maven wrapper). Package-by
 
 ## Gotchas / never-do
 - `ddl-auto=validate` means missing/renamed columns fail startup. Change schema through a new Flyway migration and update the entity together.
-- Never modify an applied Flyway migration (`V1`–`V4` exist). Add `V5__*.sql` or later; keep `V1__create_refresh_tokens.sql` and `V2__create_schema.sql` names stable because the shared Supabase database already has them applied.
+- Never modify an applied Flyway migration (`V1`–`V7` exist). Add `V8__*.sql` or later; keep `V1__create_refresh_tokens.sql` and `V2__create_schema.sql` names stable because the shared Supabase database already has them applied.
 - Do not add a second seat-decrement path. Booking creation currently locks the departure row and increments booked slots in one transaction.
-- `BookingService.create` links the booking to the authenticated `Account` and reserves seats; it does not create `Traveler` rows yet. Reads/updates/deletes are owner-scoped (`ROLE_ADMIN` bypasses).
+- `BookingService.create` links the booking to the authenticated `Account`, reserves seats, and persists one `Traveler` row per guest from `CreateBookingRequest.travelers` (must match `guestCount` when provided); it does not create `Traveler` rows when none are sent. Reads/updates/deletes are owner-scoped (`ROLE_ADMIN` bypasses).
+- Booking lifecycle: `PENDING` → `PAID` via payments; `PAID` → `CONFIRMED` via `POST /api/bookings/{id}/confirm`; `CONFIRMED` → `COMPLETED` via `POST /api/bookings/{id}/complete`. Confirm/complete are owner-or-admin, locked with `findByIdForUpdate`, and return `409` out of state.
 - Payments are counted, not flagged: a booking becomes `PAID` when the sum of `SUCCESS` payments reaches `booking_total_amount`.
 - `PaymentService` deduplicates by `payment_provider_txn_id`; preserve that idempotency when touching callbacks.
+- Demo payment: `POST /api/bookings/{bookingId}/payments/mock` is owner-only (admin bypass), records a `SUCCESS` `CARD` payment, pays the remaining balance, and creates the invoice. Repeated calls return the existing successful payment. It is gated by `app.payment.mock-enabled` (`PAYMENT_MOCK_ENABLED`, default `false`); tests enable it. The existing signed gateway callback is unchanged and admin-only.
 - `RefundService` locks the payment row and reserves refunds against the payment total; never validate refunds by reading without the lock.
 - JWT auth is implemented in `security/`: `SecurityFilterChain`, access-token filter, opaque refresh-token rotation, rate limits. Public reads are limited to `GET /api/tours/**`, auth `POST`s, Swagger and health; everything else needs a Bearer token.
 - CORS is configured in `SecurityConfig` from `APP_CORS_ALLOWED_ORIGINS` (default `http://localhost:3000`) with credentials allowed. Keep the frontend origin in that list when deploying.
-- DB env vars: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` (optional `.env` import). Redis/RabbitMQ auto-config is disabled until those services are configured. Do not commit real credentials.
+- DB env vars: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` (optional `.env` import). Redis read caching is enabled by default (`SPRING_DATA_REDIS_URL`; set `SPRING_CACHE_TYPE=none` to disable). RabbitMQ auto-config is disabled until configured. Do not commit real credentials.
 - `tour/src/main/resources/db/quanlybantour_booking_floor.sql` is a full reference schema + seed, not a migration. Never apply it on top of a Flyway database.
 
 ## Where things live
@@ -44,7 +46,8 @@ Spring Boot 4.1.1 REST API for tour booking (Java 21, Maven wrapper). Package-by
 - Errors/envelope: `src/main/java/com/j2ee/tour/common/` (`ApiResponse`, `GlobalExceptionHandler`)
 - Requests/responses: `src/main/java/com/j2ee/tour/dto/`
 - Shared envelope/paging: `src/main/java/com/j2ee/tour/common/`
-- Migrations: `src/main/resources/db/migration/`
+- Migrations: `src/main/resources/db/migration/` (`V1`–`V7`)
+- Demo payment: `src/main/java/com/j2ee/tour/controller/MockPaymentController.java`, `PaymentService.payMock`
 - Dev seed: `src/main/resources/db/seed/dev_seed.sql` (run manually via psql; not a Flyway migration)
 - Config: `src/main/resources/application.properties`
 

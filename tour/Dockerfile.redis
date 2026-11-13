@@ -1,0 +1,33 @@
+# Dedicated Redis for the tour backend.
+#
+# Build:
+#   docker build -f Dockerfile.redis -t tour-redis .
+#
+# Run:
+#   docker run -d --name tour-redis --restart unless-stopped \
+#     -p 127.0.0.1:6380:6379 \
+#     -e REDIS_PASSWORD= \
+#     -v tour-redis-data:/data \
+#     tour-redis
+#
+# Then set in tour/.env:
+#   SPRING_DATA_REDIS_URL=redis://localhost:6380/0
+#
+# With a password:
+#   docker run ... -e REDIS_PASSWORD='change-me' tour-redis
+#   SPRING_DATA_REDIS_URL=redis://:change-me@localhost:6380/0
+
+FROM redis:7-alpine
+
+# Empty means no auth. Set at runtime; credentials are not baked into the image.
+ENV REDIS_PASSWORD=""
+
+VOLUME /data
+EXPOSE 6379
+
+USER redis
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD sh -c 'if [ -n "$REDIS_PASSWORD" ]; then redis-cli -a "$REDIS_PASSWORD" ping; else redis-cli ping; fi' | grep -q PONG
+
+CMD ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]

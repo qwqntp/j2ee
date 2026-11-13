@@ -8,6 +8,7 @@ import com.j2ee.tour.model.TourDeparture;
 import com.j2ee.tour.repository.BookingRepository;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TourRepository;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class TourDepartureService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourDepartureResponse create(TourDepartureRequest request) {
         TourDeparture departure = new TourDeparture();
         departure.setDepartureCreatedAt(LocalDateTime.now());
@@ -48,6 +50,7 @@ public class TourDepartureService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourDepartureResponse update(Long id, TourDepartureRequest request) {
         TourDeparture departure = departureRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NoSuchElementException("Tour departure not found"));
@@ -56,6 +59,7 @@ public class TourDepartureService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id) {
         TourDeparture departure = departureRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NoSuchElementException("Tour departure not found"));

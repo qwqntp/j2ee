@@ -19,6 +19,7 @@ import com.j2ee.tour.repository.PromotionRepository;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TravelerRepository;
 import com.j2ee.tour.security.AuthPrincipal;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -103,6 +104,7 @@ public class BookingService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse create(CreateBookingRequest request, AuthPrincipal principal) {
         List<BookingTravelerRequest> travelerRequests = request.travelers();
         if (travelerRequests != null && travelerRequests.size() != request.guestCount()) {
@@ -171,6 +173,7 @@ public class BookingService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse update(Long id, BookingUpdateRequest request, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         if (!isAdmin(principal) && (request.accountId() != null || request.status() != null)) {
@@ -255,7 +258,38 @@ public class BookingService {
         return BookingResponse.from(saved);
     }
 
+    /**
+     * Owner (or admin) confirms a PAID booking, signalling the seats are secured
+     * and the trip is accepted. Part of the PENDING -> PAID -> CONFIRMED ->
+     * COMPLETED lifecycle.
+     */
     @Transactional
+    public BookingResponse confirm(Long id, AuthPrincipal principal) {
+        Booking booking = findOwnedForUpdate(id, principal);
+        if (!"PAID".equals(booking.getBookingStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Only paid bookings can be confirmed");
+        }
+        booking.setBookingStatus("CONFIRMED");
+        return BookingResponse.from(bookingRepository.save(booking));
+    }
+
+    /**
+     * Owner (or admin) marks a CONFIRMED booking COMPLETED after the trip.
+     */
+    @Transactional
+    public BookingResponse complete(Long id, AuthPrincipal principal) {
+        Booking booking = findOwnedForUpdate(id, principal);
+        if (!"CONFIRMED".equals(booking.getBookingStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Only confirmed bookings can be completed");
+        }
+        booking.setBookingStatus("COMPLETED");
+        return BookingResponse.from(bookingRepository.save(booking));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse cancel(Long id, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         if (!"PENDING".equals(booking.getBookingStatus())) {
@@ -280,6 +314,7 @@ public class BookingService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id, AuthPrincipal principal) {
         Booking booking = findOwned(id, principal);
         if (paymentRepository.existsByBookingBookingId(id)) {

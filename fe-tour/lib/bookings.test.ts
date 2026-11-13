@@ -3,6 +3,9 @@ import type { Booking } from "./types";
 import {
   bookingTab,
   canCancelBooking,
+  canCompleteBooking,
+  canConfirmBooking,
+  canViewInvoice,
   groupBookings,
   statusDescription,
   statusLabel,
@@ -132,6 +135,33 @@ describe("canCancelBooking", () => {
     expect(canCancelBooking(booking({ id: 2, status: "PAID" }))).toBe(false);
     expect(canCancelBooking(booking({ id: 3, status: "CONFIRMED" }))).toBe(false);
     expect(canCancelBooking(booking({ id: 4, status: "CANCELLED" }))).toBe(false);
+  });
+});
+
+describe("canConfirmBooking", () => {
+  it("allows confirmation only for paid bookings", () => {
+    expect(canConfirmBooking(booking({ id: 1, status: "PENDING" }))).toBe(false);
+    expect(canConfirmBooking(booking({ id: 2, status: "PAID" }))).toBe(true);
+    expect(canConfirmBooking(booking({ id: 3, status: "CONFIRMED" }))).toBe(false);
+    expect(canConfirmBooking(booking({ id: 4, status: "COMPLETED" }))).toBe(false);
+  });
+});
+
+describe("canCompleteBooking", () => {
+  it("allows completion only for confirmed bookings", () => {
+    expect(canCompleteBooking(booking({ id: 1, status: "PAID" }))).toBe(false);
+    expect(canCompleteBooking(booking({ id: 2, status: "CONFIRMED" }))).toBe(true);
+    expect(canCompleteBooking(booking({ id: 3, status: "COMPLETED" }))).toBe(false);
+  });
+});
+
+describe("canViewInvoice", () => {
+  it("allows viewing once payment is received", () => {
+    expect(canViewInvoice(booking({ id: 1, status: "PENDING" }))).toBe(false);
+    expect(canViewInvoice(booking({ id: 2, status: "PAID" }))).toBe(true);
+    expect(canViewInvoice(booking({ id: 3, status: "CONFIRMED" }))).toBe(true);
+    expect(canViewInvoice(booking({ id: 4, status: "COMPLETED" }))).toBe(true);
+    expect(canViewInvoice(booking({ id: 5, status: "CANCELLED" }))).toBe(false);
   });
 });
 

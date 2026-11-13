@@ -17,7 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_DESCRIPTIONS: Record<string, string> = {
-  PENDING: "Your seats are held. Payment is arranged separately.",
+  PENDING: "Payment is pending. Your seats are held; complete payment to secure them.",
   PAID: "Payment received. Your seats are secured.",
   CONFIRMED: "Your booking is confirmed and your seats are secured.",
   COMPLETED: "This journey has finished. We hope it stayed with you.",
@@ -83,6 +83,18 @@ export function groupBookings(
   groups.cancelled.sort(byCreatedDesc);
 
   return groups;
+}
+
+export function canConfirmBooking(booking: Booking): boolean {
+  return booking.status === "PAID";
+}
+
+export function canCompleteBooking(booking: Booking): boolean {
+  return booking.status === "CONFIRMED";
+}
+
+export function canViewInvoice(booking: Booking): boolean {
+  return booking.status === "PAID" || booking.status === "CONFIRMED" || booking.status === "COMPLETED";
 }
 
 export function canCancelBooking(booking: Booking): boolean {

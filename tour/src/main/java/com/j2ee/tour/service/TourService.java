@@ -21,6 +21,8 @@ import com.j2ee.tour.repository.TourRepository;
 import com.j2ee.tour.repository.TourStatsProjection;
 import com.j2ee.tour.repository.TouristDestinationRepository;
 import com.j2ee.tour.repository.TravelVehicleRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -75,6 +77,7 @@ public class TourService {
         this.tourImageRepository = tourImageRepository;
     }
 
+    @Cacheable(cacheNames = "tours")
     public PageResponse<TourSummaryResponse> listTours(int page, int size, String keyword) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "tourId"));
         String search = sanitizeKeyword(keyword);
@@ -107,12 +110,14 @@ public class TourService {
                 firstImages.get(tour.getTourId())));
     }
 
+    @Cacheable(cacheNames = "tours")
     public TourResponse getTour(Long tourId) {
         Tour tour = tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
         return TourMapper.toDetail(tour, upcomingDepartures(tourId));
     }
 
+    @Cacheable(cacheNames = "tours")
     public List<TourDepartureResponse> getDepartures(Long tourId) {
         tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
@@ -131,6 +136,7 @@ public class TourService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourResponse create(TourRequest request) {
         Tour tour = new Tour();
         apply(tour, request);
@@ -140,6 +146,7 @@ public class TourService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourResponse update(Long id, TourRequest request) {
         Tour tour = find(id);
         apply(tour, request);
@@ -149,6 +156,7 @@ public class TourService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id) {
         Tour tour = find(id);
         if (departureRepository.existsByTourTourId(id)) {

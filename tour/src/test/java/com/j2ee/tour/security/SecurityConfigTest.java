@@ -7,12 +7,15 @@ import com.j2ee.tour.controller.AdminController;
 import com.j2ee.tour.controller.AuthController;
 import com.j2ee.tour.controller.BookingController;
 import com.j2ee.tour.controller.InvoiceController;
+import com.j2ee.tour.controller.MockPaymentController;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
+import com.j2ee.tour.dto.response.PaymentResponse;
 import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AuthService;
 import com.j2ee.tour.service.BookingService;
 import com.j2ee.tour.service.InvoiceService;
+import com.j2ee.tour.service.PaymentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -26,6 +29,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {AuthController.class, AdminController.class,
-        BookingController.class, InvoiceController.class})
+        BookingController.class, InvoiceController.class, MockPaymentController.class})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -65,6 +70,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private InvoiceService invoiceService;
+
+    @MockitoBean
+    private PaymentService paymentService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -176,6 +184,28 @@ class SecurityConfigTest {
                         .contentType("application/json")
                         .content("{}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void userCanPayOwnBookingWithMockCard() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        LocalDateTime now = LocalDateTime.of(2026, 11, 12, 10, 0);
+        when(paymentService.payMock(anyLong(), any(AuthPrincipal.class)))
+                .thenReturn(new PaymentResponse(9L, 1L, new BigDecimal("1000.00"), "CARD",
+                        "MOCK-9", "SUCCESS", now, now));
+
+        mockMvc.perform(post("/api/bookings/1/payments/mock")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.paymentMethod").value("CARD"));
+    }
+
+    @Test
+    void anonymousCannotUseMockPayment() throws Exception {
+        mockMvc.perform(post("/api/bookings/1/payments/mock"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

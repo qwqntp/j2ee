@@ -453,6 +453,48 @@ class BookingServiceTest {
     }
 
     @Test
+    void confirmMovesPaidBookingToConfirmed() {
+        booking.setBookingStatus("PAID");
+
+        var response = bookingService.confirm(30L, principal(10L, "ROLE_USER"));
+
+        assertEquals("CONFIRMED", response.status());
+        assertEquals("CONFIRMED", booking.getBookingStatus());
+    }
+
+    @Test
+    void confirmRejectsPendingBooking() {
+        ApiException exception = assertThrows(ApiException.class, () ->
+                bookingService.confirm(30L, principal(10L, "ROLE_USER")));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+        assertEquals("Only paid bookings can be confirmed", exception.getMessage());
+        assertEquals("PENDING", booking.getBookingStatus());
+    }
+
+    @Test
+    void completeMovesConfirmedBookingToCompleted() {
+        booking.setBookingStatus("CONFIRMED");
+
+        var response = bookingService.complete(30L, principal(10L, "ROLE_USER"));
+
+        assertEquals("COMPLETED", response.status());
+        assertEquals("COMPLETED", booking.getBookingStatus());
+    }
+
+    @Test
+    void completeRejectsPaidBooking() {
+        booking.setBookingStatus("PAID");
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                bookingService.complete(30L, principal(10L, "ROLE_USER")));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+        assertEquals("Only confirmed bookings can be completed", exception.getMessage());
+        assertEquals("PAID", booking.getBookingStatus());
+    }
+
+    @Test
     void listScopesToCurrentUserAndDefaultsToNewestFirst() {
         when(bookingRepository.findByAccountAccountId(eq(10L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));

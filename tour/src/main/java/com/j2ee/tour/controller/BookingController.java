@@ -7,6 +7,7 @@ import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.BookingResponse;
 import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.BookingService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -66,6 +67,24 @@ public class BookingController {
             @Valid @RequestBody BookingUpdateRequest request,
             @AuthenticationPrincipal AuthPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.success(bookingService.update(id, request, principal)));
+    }
+
+    @PostMapping("/{id}/confirm")
+    @Operation(summary = "Confirm a PAID booking",
+            description = "Moves a booking from PAID to CONFIRMED. Owner or admin.")
+    public ResponseEntity<ApiResponse<BookingResponse>> confirm(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.confirm(id, principal)));
+    }
+
+    @PostMapping("/{id}/complete")
+    @Operation(summary = "Mark a CONFIRMED booking completed",
+            description = "Moves a booking from CONFIRMED to COMPLETED after the trip. Owner or admin.")
+    public ResponseEntity<ApiResponse<BookingResponse>> complete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.complete(id, principal)));
     }
 
     @PostMapping("/{id}/cancel")

@@ -2,7 +2,9 @@ import type {
   Account,
   AuthSession,
   Booking,
+  Invoice,
   PageData,
+  Payment,
   TourDetail,
   TourSummary,
 } from "./types";
@@ -130,9 +132,18 @@ export function getMe(token: string): Promise<Account> {
   return apiRequest<Account>("/api/auth/me", { token });
 }
 
+export type TravelerInput = {
+  fullName: string;
+  phone?: string;
+  email?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  idDocument?: string;
+};
+
 export function createBooking(
   token: string,
-  input: { departureId: number; guestCount: number; note?: string },
+  input: { departureId: number; guestCount: number; note?: string; travelers?: TravelerInput[] },
 ): Promise<Booking> {
   return apiRequest<Booking>("/api/bookings", {
     method: "POST",
@@ -151,4 +162,20 @@ export function listBookings(token: string, page = 0, size = 10): Promise<PageDa
 
 export function cancelBooking(token: string, id: number): Promise<Booking> {
   return apiRequest<Booking>(`/api/bookings/${id}/cancel`, { method: "POST", token });
+}
+
+export function payBooking(token: string, id: number): Promise<Payment> {
+  return apiRequest<Payment>(`/api/bookings/${id}/payments/mock`, { method: "POST", token });
+}
+
+export function confirmBooking(token: string, id: number): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}/confirm`, { method: "POST", token });
+}
+
+export function completeBooking(token: string, id: number): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}/complete`, { method: "POST", token });
+}
+
+export function listMyInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
+  return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, { token });
 }
