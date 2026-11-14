@@ -234,6 +234,30 @@ class BookingFlowIntegrationTests {
     }
 
     @Test
+    void paidBookingInvoiceMatchesPromotionDiscountAndTotal() {
+        Promotion promotion = makePromotion("INVOICE10");
+        var booking = bookingService.create(new CreateBookingRequest(
+                        departure.getDepartureId(), 2, "note", null, "INVOICE10"),
+                principal);
+
+        paymentService.handleCallback(booking.id(),
+                callback(booking.id(), "txn-invoice-promo", "900.00", "CARD", true), principal);
+
+        var paid = bookingService.get(booking.id(), principal);
+        var invoice = invoiceService.getByBooking(booking.id());
+
+        assertEquals("PAID", paid.status());
+        assertEquals("PAID", invoice.status());
+        assertEquals(paid.discountAmount(), invoice.discountAmount());
+        assertEquals(paid.totalAmount(), invoice.totalAmount());
+        assertEquals(new BigDecimal("100.00"), invoice.discountAmount());
+        assertEquals(new BigDecimal("900.00"), invoice.totalAmount());
+        assertEquals(BigDecimal.ZERO, invoice.taxAmount());
+        assertEquals(BigDecimal.ZERO, invoice.serviceFee());
+        assertEquals(List.of(promotion.getPromotionId()), invoice.promotionIds());
+    }
+
+    @Test
     void paidBookingInvoiceIsVisibleOnlyToOwner() {
         var booking = bookingService.create(
                 new CreateBookingRequest(departure.getDepartureId(), 1, "note"), principal);

@@ -56,3 +56,5 @@ Spring Boot 4.1.1 REST API for tour booking (Java 21, Maven wrapper). Package-by
 
 ## Scoped rules
 - Testing → see `src/test/AGENTS.md`
+## Rule 
+never push or commit without permission
