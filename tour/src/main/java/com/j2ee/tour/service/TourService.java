@@ -3,6 +3,7 @@ package com.j2ee.tour.service;
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.TourRequest;
+import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
@@ -27,7 +28,6 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,21 +82,36 @@ public class TourService {
         this.overlapValidator = overlapValidator;
     }
 
-    @Cacheable(cacheNames = "tours")
-    public PageResponse<TourSummaryResponse> listTours(int page, int size, String keyword) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "tourId"));
-        String search = sanitizeKeyword(keyword);
+    /**
+     * Filtered/sorted variants are deliberately not cached: filter combinations are
+     * client-controlled and unbounded, so only the plain catalogue query uses Redis.
+     */
+    @Cacheable(cacheNames = "tours", condition = "#criteria.isUnfiltered()")
+    public PageResponse<TourSummaryResponse> listTours(int page, int size, TourSearchCriteria criteria) {
+        TourSearchCriteria normalized = normalize(criteria);
+        validate(normalized);
 
-        Page<Tour> tours = search == null
-                ? tourRepository.findByTourStatus(PUBLIC_TOUR_STATUS, pageable)
-                : tourRepository.findByTourStatusAndTourNameContainingIgnoreCase(
-                        PUBLIC_TOUR_STATUS, search, pageable);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Long> idPage = tourRepository.searchTourIds(normalized, now(), pageable);
+        return toSummaryPage(idPage);
+    }
 
-        if (tours.isEmpty()) {
-            return PageResponse.from(tours, tour -> TourMapper.toSummary(tour, null, null));
+    private PageResponse<TourSummaryResponse> toSummaryPage(Page<Long> idPage) {
+        List<Long> tourIds = idPage.getContent();
+        if (tourIds.isEmpty()) {
+            return new PageResponse<>(List.of(), idPage.getNumber(), idPage.getSize(),
+                    idPage.getTotalElements(), idPage.getTotalPages(), idPage.isLast(),
+                    idPage.hasNext(), idPage.hasPrevious());
         }
 
-        List<Long> tourIds = tours.getContent().stream().map(Tour::getTourId).toList();
+        Map<Long, Tour> toursById = tourRepository.findAllById(tourIds).stream()
+                .collect(Collectors.toMap(Tour::getTourId, Function.identity()));
+        // findAllById does not preserve order; the sorted id page is the source of truth.
+        List<Tour> tours = tourIds.stream()
+                .map(toursById::get)
+                .filter(Objects::nonNull)
+                .toList();
+
         Map<Long, TourStatsProjection> stats = departureRepository
                 .findStatsByTourIds(tourIds, now())
                 .stream()
@@ -108,10 +124,47 @@ public class TourService {
                         TourImageRepository.TourImageProjection::getImageUrl,
                         (first, second) -> first));
 
-        return PageResponse.from(tours, tour -> TourMapper.toSummary(
-                tour,
-                stats.get(tour.getTourId()),
-                firstImages.get(tour.getTourId())));
+        List<TourSummaryResponse> content = tours.stream()
+                .map(tour -> TourMapper.toSummary(
+                        tour,
+                        stats.get(tour.getTourId()),
+                        firstImages.get(tour.getTourId())))
+                .toList();
+
+        return new PageResponse<>(content, idPage.getNumber(), idPage.getSize(),
+                idPage.getTotalElements(), idPage.getTotalPages(), idPage.isLast(),
+                idPage.hasNext(), idPage.hasPrevious());
+    }
+
+    private TourSearchCriteria normalize(TourSearchCriteria criteria) {
+        return new TourSearchCriteria(
+                sanitizeKeyword(criteria.keyword()),
+                criteria.destinationId(),
+                criteria.minPrice(),
+                criteria.maxPrice(),
+                criteria.startFrom(),
+                criteria.startTo(),
+                criteria.minDays(),
+                criteria.maxDays(),
+                criteria.sort());
+    }
+
+    private void validate(TourSearchCriteria criteria) {
+        if (criteria.minPrice() != null && criteria.maxPrice() != null
+                && criteria.minPrice().compareTo(criteria.maxPrice()) > 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "minPrice must be less than or equal to maxPrice");
+        }
+        if (criteria.startFrom() != null && criteria.startTo() != null
+                && criteria.startFrom().isAfter(criteria.startTo())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "startFrom must be on or before startTo");
+        }
+        if (criteria.minDays() != null && criteria.maxDays() != null
+                && criteria.minDays() > criteria.maxDays()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "minDays must be less than or equal to maxDays");
+        }
     }
 
     @Cacheable(cacheNames = "tours")

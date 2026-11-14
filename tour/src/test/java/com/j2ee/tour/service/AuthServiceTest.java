@@ -1,6 +1,7 @@
 package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
+import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
 import com.j2ee.tour.dto.request.ResetPasswordRequest;
@@ -267,6 +268,108 @@ class AuthServiceTest {
         when(accountRepository.findById(1L)).thenReturn(Optional.of(account()));
 
         assertThat(authService.me(1L).email()).isEqualTo("user01@example.com");
+    }
+
+    @Test
+    void changePasswordRejectsWrongCurrentPasswordWithBadRequest() {
+        Account account = account();
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("wrong-password", account.getPassword())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(1L,
+                new ChangePasswordRequest("wrong-password", "new-password")))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("Current password is incorrect")
+                .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
+                        .isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void changePasswordRejectsNewPasswordMatchingTheCurrentHash() {
+        Account account = account();
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("same-password", account.getPassword())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(1L,
+                new ChangePasswordRequest("same-password", "same-password")))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("New password must be different from the current password");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void changePasswordRejectsNewPasswordOver72Utf8Bytes() {
+        Account account = account();
+        String newPassword = "€".repeat(25);
+        assertThat(newPassword.getBytes(StandardCharsets.UTF_8)).hasSize(75);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("old-password", account.getPassword())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(1L,
+                new ChangePasswordRequest("old-password", newPassword)))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("Password must be at most 72 bytes");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void changePasswordAcceptsExactly72Utf8Bytes() {
+        Account account = account();
+        String newPassword = "a".repeat(72);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("old-password", account.getPassword())).thenReturn(true);
+        when(passwordEncoder.matches(newPassword, account.getPassword())).thenReturn(false);
+        when(passwordEncoder.encode(newPassword)).thenReturn("new-hash");
+        when(refreshTokenService.issue(account)).thenReturn("refresh-2");
+        when(jwtService.issue(1L, "user01", "ROLE_USER")).thenReturn("access-2");
+
+        AuthService.AuthResult result = authService.changePassword(
+                1L, new ChangePasswordRequest("old-password", newPassword));
+
+        assertThat(result.refreshToken()).isEqualTo("refresh-2");
+        assertThat(account.getPassword()).isEqualTo("new-hash");
+    }
+
+    @Test
+    void changePasswordRevokesAllRefreshTokensAndReturnsNewPair() {
+        Account account = account();
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(passwordEncoder.matches("old-password", account.getPassword())).thenReturn(true);
+        when(passwordEncoder.matches("new-password", account.getPassword())).thenReturn(false);
+        when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
+        when(refreshTokenService.issue(account)).thenReturn("refresh-2");
+        when(jwtService.issue(1L, "user01", "ROLE_USER")).thenReturn("access-2");
+
+        AuthService.AuthResult result = authService.changePassword(
+                1L, new ChangePasswordRequest("old-password", "new-password"));
+
+        assertThat(account.getPassword()).isEqualTo("new-hash");
+        assertThat(account.getAccountUpdatedAt()).isEqualTo(LocalDateTime.now(CLOCK));
+        assertThat(result.accessToken()).isEqualTo("access-2");
+        assertThat(result.refreshToken()).isEqualTo("refresh-2");
+        verify(accountRepository).save(account);
+        verify(refreshTokenService).revokeAllForAccount(1L);
+        verify(refreshTokenService).issue(account);
+    }
+
+    @Test
+    void changePasswordRejectsUnknownAccount() {
+        when(accountRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.changePassword(99L,
+                new ChangePasswordRequest("old-password", "new-password")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
+                        .isEqualTo(HttpStatus.UNAUTHORIZED));
+
+        verifyNoInteractions(refreshTokenService);
     }
 
     private AuthToken authToken(Account account) {

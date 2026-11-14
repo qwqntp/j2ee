@@ -3,6 +3,7 @@ package com.j2ee.tour.controller;
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.GlobalExceptionHandler;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
@@ -23,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -61,7 +63,9 @@ class TourControllerTest {
                 1);
         PageResponse<TourSummaryResponse> page = new PageResponse<>(
                 List.of(summary), 0, 12, 1, 1, true);
-        when(tourService.listTours(0, 12, null)).thenReturn(page);
+        when(tourService.listTours(org.mockito.ArgumentMatchers.eq(0),
+                org.mockito.ArgumentMatchers.eq(12),
+                any(TourSearchCriteria.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/tours"))
                 .andExpect(status().isOk())
@@ -69,6 +73,60 @@ class TourControllerTest {
                 .andExpect(jsonPath("$.data.content[0].name").value("Da Nang - Hoi An"))
                 .andExpect(jsonPath("$.data.content[0].priceFrom").value(4500000))
                 .andExpect(jsonPath("$.data.content[0].seatsAvailable").value(28));
+    }
+
+    @Test
+    void mapsFiltersAndSortToCriteria() throws Exception {
+        when(tourService.listTours(org.mockito.ArgumentMatchers.eq(0),
+                org.mockito.ArgumentMatchers.eq(12),
+                org.mockito.ArgumentMatchers.argThat(criteria ->
+                        criteria.destinationId().equals(5L)
+                                && criteria.minPrice().compareTo(new BigDecimal("100")) == 0
+                                && criteria.maxPrice().compareTo(new BigDecimal("900")) == 0
+                                && criteria.startFrom().equals(java.time.LocalDate.of(2026, 12, 1))
+                                && criteria.startTo().equals(java.time.LocalDate.of(2026, 12, 31))
+                                && criteria.minDays() == 2
+                                && criteria.maxDays() == 7
+                                && criteria.sort() == TourSearchCriteria.Sort.PRICE_ASC)))
+                .thenReturn(new PageResponse<>(List.of(), 0, 12, 0, 0, true));
+
+        mockMvc.perform(get("/api/tours")
+                        .param("destinationId", "5")
+                        .param("minPrice", "100")
+                        .param("maxPrice", "900")
+                        .param("startFrom", "2026-12-01")
+                        .param("startTo", "2026-12-31")
+                        .param("minDays", "2")
+                        .param("maxDays", "7")
+                        .param("sort", "priceAsc"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void invalidSortReturnsBadRequestWithAllowedValues() throws Exception {
+        mockMvc.perform(get("/api/tours").param("sort", "cheapest"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(
+                        "sort must be one of: newest, priceAsc, priceDesc, dateAsc"));
+    }
+
+    @Test
+    void negativePriceReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/tours").param("minPrice", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void zeroMinDaysReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/tours").param("minDays", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void malformedDateReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/tours").param("startFrom", "not-a-date"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
