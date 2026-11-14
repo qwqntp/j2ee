@@ -122,6 +122,7 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | Method | Path | Auth | Success |
 |---|---|---|---|
 | `GET` | `/api/tours` | Public | `200` |
+| `GET` | `/api/tours/destinations` | Public | `200` |
 | `GET` | `/api/tours/{id}` | Public | `200` |
 | `GET` | `/api/tours/{id}/departures` | Public | `200` |
 | `POST` | `/api/auth/register` | Public | `201` |
@@ -140,6 +141,9 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | `POST` | `/api/auth/forgot-password` | Public | `200` |
 | `POST` | `/api/auth/reset-password` | Public | `200` |
 | `POST` | `/api/auth/verify-email` | Public | `200` |
+| `POST` | `/api/auth/change-password` | Bearer | `200` |
+| `GET` | `/api/profile` | Bearer | `200` |
+| `PUT` | `/api/profile` | Bearer | `200` |
 | `POST` | `/api/bookings` | Bearer | `201` |
 | `GET` | `/api/bookings` | Bearer | `200` |
 | `GET` | `/api/bookings/{id}` | Bearer | `200` |
@@ -210,6 +214,21 @@ Example verification request:
 ```json
 { "token": "raw-token-from-email" }
 ```
+
+#### Profile and change password
+
+- `GET /api/profile` returns the authenticated account plus its customer row:
+  `{ customerId, username, email, emailVerified, name, phone, address, dateOfBirth }`. Customer fields
+  are `null` when the account has no customer row yet.
+- `PUT /api/profile` accepts `{ name, email, phone, address, dateOfBirth }`. `name` is required and
+  non-blank; the other fields are optional. A blank email keeps the current one. Changing the email
+  updates `accounts.account_email`, resets `emailVerified` to `0` and sends a new verification link.
+  Unknown fields are ignored.
+- `POST /api/auth/change-password` accepts `{ currentPassword, newPassword }`. The new password follows
+  the register rules (8–100 characters, at most 72 UTF-8 bytes). A wrong current password returns `400`
+  `Current password is incorrect` without revoking anything. On success every refresh token is revoked
+  and a new access/refresh pair is returned through the normal body/cookie contract; existing access
+  tokens remain valid until they expire (at most 15 minutes).
 
 #### Invoices
 
@@ -305,6 +324,26 @@ Public list response includes pagination, `averageRating` rounded to 2 decimals,
 }
 ```
 
+### GET /api/tours/destinations
+
+Public. Returns every tourist destination as a minimal `{ id, name }` option, sorted by name. It is
+intended for the catalogue destination filter. Unlike `/api/tourist-destinations`, it needs no token
+and returns only the two fields.
+
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    { "id": 2, "name": "Cat Ba Island" },
+    { "id": 1, "name": "Lan Ha Bay" }
+  ],
+  "timestamp": "2026-11-14T09:00:00Z"
+}
+```
+
+The literal `/destinations` segment is matched before `/{id}`, so it is never parsed as a tour id.
+
 ### GET /api/tours
 
 Public tour catalogue. Only tours with `status = OPEN` are returned.
@@ -316,8 +355,20 @@ Query parameters:
 | `page` | integer | `0` | `>= 0` |
 | `size` | integer | `12` | `1..50` |
 | `keyword` | string | none | max 100 characters; `%` and `_` are stripped; case-insensitive name search |
+| `destinationId` | integer | none | only tours linked to this tourist destination |
+| `minPrice` | decimal | none | `>= 0`; must be `<= maxPrice` when both are present |
+| `maxPrice` | decimal | none | `>= 0` |
+| `startFrom` | date (`YYYY-MM-DD`) | none | must be on or before `startTo` |
+| `startTo` | date (`YYYY-MM-DD`) | none | |
+| `minDays` | integer | none | `>= 1`; must be `<= maxDays` when both are present |
+| `maxDays` | integer | none | `>= 1` |
+| `sort` | string | none | `newest`, `priceAsc`, `priceDesc` or `dateAsc`; invalid values return `400` |
 
-Results are sorted by tour id ascending.
+One upcoming `OPEN`/`FULL` departure must satisfy every supplied price and date predicate.
+Aggregate sorts (`priceAsc`, `priceDesc`, `dateAsc`) use the same departure definition as the card
+stats, with `NULLS LAST` and tour id ascending as the tie-breaker. Without `sort`, results are ordered
+by tour id ascending. Invariant violations return `400` with the specific message (for example
+`minPrice must be less than or equal to maxPrice`).
 
 ```json
 {

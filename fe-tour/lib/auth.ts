@@ -11,7 +11,7 @@ import {
 import { clearSession, getStoredSession, saveSession, useSession } from "./session";
 import type { Account, AuthSession } from "./types";
 
-export { clearSession, getStoredSession, useSession };
+export { clearSession, getStoredSession, saveSession, useSession };
 
 export async function signIn(input: {
   username: string;

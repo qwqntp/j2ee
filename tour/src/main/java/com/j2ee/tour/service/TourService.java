@@ -5,6 +5,7 @@ import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.TourRequest;
 import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
+import com.j2ee.tour.dto.response.TourDestinationOptionResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
 import com.j2ee.tour.mapper.TourMapper;
@@ -161,6 +162,16 @@ public class TourService {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "minDays must be less than or equal to maxDays");
         }
+    }
+
+    /**
+     * Options for the public catalogue filter. Not cached: destination rows are edited by
+     * the admin CRUD path, which does not evict the tour cache.
+     */
+    public List<TourDestinationOptionResponse> listDestinations() {
+        return destinationRepository.findAllByOrderByDestinationNameAsc().stream()
+                .map(TourDestinationOptionResponse::from)
+                .toList();
     }
 
     @Cacheable(cacheNames = "tours")

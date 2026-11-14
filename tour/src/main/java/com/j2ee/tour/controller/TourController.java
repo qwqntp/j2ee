@@ -4,6 +4,7 @@ import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
+import com.j2ee.tour.dto.response.TourDestinationOptionResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
 import com.j2ee.tour.service.TourService;
@@ -62,6 +63,14 @@ public class TourController {
                 keyword, destinationId, minPrice, maxPrice, startFrom, startTo,
                 minDays, maxDays, TourSearchCriteria.parseSort(sort));
         return ApiResponse.success(tourService.listTours(page, size, criteria));
+    }
+
+    @GetMapping("/destinations")
+    @Operation(summary = "List tourist destinations",
+            description = "Public. Returns every tourist destination as {id, name}, sorted by name. "
+                    + "Used by the catalogue destination filter.")
+    public ApiResponse<List<TourDestinationOptionResponse>> destinations() {
+        return ApiResponse.success(tourService.listDestinations());
     }
 
     @GetMapping("/{id}")

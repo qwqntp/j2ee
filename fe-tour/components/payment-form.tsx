@@ -3,11 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ApiError, createBooking, payBooking } from "@/lib/api";
+import { ApiError, createBooking } from "@/lib/api";
 import { clearSession, ensureSession } from "@/lib/auth";
+import {
+  buildBookingRequest,
+  resizeTravelers,
+  validateTravelerDrafts,
+  type TravelerDraft,
+} from "@/lib/booking-form";
+import { publishFlash } from "@/lib/flash";
 import { formatDateRange, formatDuration, formatPrice } from "@/lib/format";
-import type { Booking, Payment, TourDeparture } from "@/lib/types";
-import { IconArrowRight, IconCheck, IconShield, IconUsers } from "./icons";
+import type { TourDeparture } from "@/lib/types";
+import { IconArrowRight, IconShield, IconUsers } from "./icons";
 import { TourImage } from "./tour-image";
 
 type Props = {
@@ -20,114 +27,104 @@ type Props = {
 
 export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackImage }: Props) {
   const router = useRouter();
-  const maxGuests = Math.max(1, Math.min(departure.seatsAvailable, 20));
-  const [guests, setGuests] = useState(Math.min(2, maxGuests));
-  const [travelerNames, setTravelerNames] = useState<string[]>(() =>
-    Array.from({ length: Math.min(2, maxGuests) }, () => ""),
+  const maxGuests = Math.max(1, departure.seatsAvailable);
+  const initialGuests = Math.min(2, maxGuests);
+  const [guests, setGuests] = useState(initialGuests);
+  const [travelers, setTravelers] = useState<TravelerDraft[]>(() =>
+    resizeTravelers([], initialGuests),
   );
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [payment, setPayment] = useState<Payment | null>(null);
+  const [note, setNote] = useState("");
+  const [promotionCode, setPromotionCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [paying, setPaying] = useState(false);
-  const [method, setMethod] = useState<"online" | "office">("online");
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const total = Math.round(departure.price * guests);
-  const loginHref = `/login?next=${encodeURIComponent(
-    `/payment?tourId=${tourId}&departureId=${departure.id}`,
-  )}`;
-  const registerHref = `/register?next=${encodeURIComponent(
-    `/payment?tourId=${tourId}&departureId=${departure.id}`,
-  )}`;
+
+  const returnTo = `/payment?tourId=${tourId}&departureId=${departure.id}`;
+  const loginHref = `/login?next=${encodeURIComponent(returnTo)}`;
+  const registerHref = `/register?next=${encodeURIComponent(returnTo)}`;
+  const estimate = departure.price * guests;
 
   useEffect(() => {
     let active = true;
+
     ensureSession().then((session) => {
-      if (active) setSignedIn(session !== null);
+      if (!active) return;
+      if (session) {
+        setSignedIn(true);
+      } else {
+        setSignedIn(false);
+        router.replace(loginHref);
+      }
     });
+
     return () => {
       active = false;
     };
-  }, []);
+  }, [loginHref, router]);
 
   function changeGuests(next: number) {
     const clamped = Math.max(1, Math.min(maxGuests, next));
     setGuests(clamped);
-    setTravelerNames((current) =>
-      Array.from({ length: clamped }, (_, index) => current[index] ?? ""),
+    setTravelers((current) => resizeTravelers(current, clamped));
+  }
+
+  function updateTraveler<K extends keyof TravelerDraft>(
+    index: number,
+    field: K,
+    value: TravelerDraft[K],
+  ) {
+    setTravelers((current) =>
+      current.map((traveler, position) =>
+        position === index ? { ...traveler, [field]: value } : traveler,
+      ),
     );
-  }
-
-  async function payForBooking(bookingId: number, token: string) {
-    setPaying(true);
-    setPaymentError(null);
-    try {
-      const result = await payBooking(token, bookingId);
-      setPayment(result);
-      setBooking((current) =>
-        current && current.id === bookingId && result.status === "SUCCESS"
-          ? { ...current, status: "PAID" }
-          : current,
-      );
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        clearSession();
-        router.push(loginHref);
-        return;
-      }
-      setPaymentError(
-        err instanceof ApiError ? err.message : "Could not complete the demo payment. Try again.",
-      );
-    } finally {
-      setPaying(false);
-    }
-  }
-
-  async function handlePayNow() {
-    if (!booking || paying) return;
-    const session = await ensureSession();
-    if (!session) {
-      router.push(loginHref);
-      return;
-    }
-    await payForBooking(booking.id, session.accessToken);
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
+
     setError(null);
+    setConflict(null);
+
+    const validation = validateTravelerDrafts(travelers);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    if (promotionCode.trim().length > 64) {
+      setError("Promotion code must be at most 64 characters.");
+      return;
+    }
+
     setPending(true);
-
-    const data = new FormData(event.currentTarget);
-    const contact = ["name", "email", "phone"]
-      .map((key) => String(data.get(key) ?? "").trim())
-      .filter(Boolean)
-      .join(" | ");
-    const notes = String(data.get("notes") ?? "").trim();
-    const note = [contact, notes].filter(Boolean).join(" — ");
-
     try {
       const session = await ensureSession();
       if (!session) {
-        router.push(loginHref);
+        router.replace(loginHref);
         return;
       }
 
-      const created = await createBooking(session.accessToken, {
-        departureId: departure.id,
-        guestCount: guests,
-        note: note || undefined,
-        travelers: travelerNames.map((fullName) => ({ fullName: fullName.trim() })),
-      });
-      setBooking(created);
-      if (method === "online") {
-        await payForBooking(created.id, session.accessToken);
-      }
+      const created = await createBooking(
+        session.accessToken,
+        buildBookingRequest(departure.id, guests, note, travelers, promotionCode),
+      );
+
+      publishFlash("Seats reserved. Your booking is pending.");
+      router.push(`/account/bookings/${created.id}`);
+      router.refresh();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         clearSession();
-        router.push(loginHref);
+        router.replace(loginHref);
+        return;
+      }
+      if (err instanceof ApiError && err.status === 409) {
+        setConflict(
+          err.message ||
+            "This departure is no longer open for booking. Choose another date.",
+        );
         return;
       }
       setError(
@@ -138,103 +135,50 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
     }
   }
 
-  const paid = booking?.status === "PAID" || payment?.status === "SUCCESS";
-
-  if (booking) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="mx-auto max-w-2xl rounded-[4px] border border-line bg-white p-8 text-center sm:p-12"
-      >
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-[3px] bg-sage/25 text-forest">
-          <IconCheck className="h-7 w-7" />
-        </span>
-        <p className="eyebrow mt-6 text-terracotta">
-          {paying ? "Processing payment" : paid ? "Payment received" : "Seats reserved"}
-        </p>
-        <h2 className="mt-3 font-display text-3xl tracking-tight sm:text-4xl">
-          Your booking is {booking.bookingCode}.
-        </h2>
-        <p className="mt-3 leading-7 text-muted">
-          {booking.guestCount} {booking.guestCount === 1 ? "traveler" : "travelers"} on{" "}
-          {formatDateRange(departure.startDate, departure.endDate)}. Status: {booking.status}.{" "}
-          {paying
-            ? "Processing the demo card payment now."
-            : paid
-              ? "Paid in full. We have recorded your payment."
-              : method === "online"
-                ? "Your seats are held, but the demo payment did not complete. Try again below."
-                : "Your seats are held. Pay at the office to complete the booking."}
-        </p>
-        <dl className="mx-auto mt-6 max-w-sm space-y-2 text-left text-sm">
-          <div className="flex justify-between gap-4 border-b border-line pb-2">
-            <dt className="text-muted">Booking code</dt>
-            <dd className="font-semibold">{booking.bookingCode}</dd>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-line pb-2">
-            <dt className="text-muted">Total</dt>
-            <dd className="font-semibold text-forest">{formatPrice(booking.totalAmount)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted">Payment</dt>
-            <dd className="font-semibold">{paid ? "Paid (demo card)" : "Pending"}</dd>
-          </div>
-        </dl>
-        {paymentError ? (
-          <p role="alert" className="mt-4 text-sm text-terracotta">
-            {paymentError}
-          </p>
-        ) : null}
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          {!paid && !paying ? (
-            <button type="button" onClick={handlePayNow} className="btn-primary">
-              Pay {formatPrice(booking.totalAmount)} now
-              <IconArrowRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <Link href={`/my-trips/${booking.id}`} className="btn-primary">
-              View booking
-            </Link>
-          )}
-          <Link href={`/tours/${tourId}`} className="btn-secondary">
-            Back to the journey
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (signedIn === false) {
+  if (signedIn !== true) {
     return (
       <div className="mx-auto max-w-2xl rounded-[4px] border border-line bg-white p-8 text-center sm:p-12">
         <p className="eyebrow text-terracotta">Sign in required</p>
         <h2 className="mt-3 font-display text-3xl tracking-tight sm:text-4xl">
-          Sign in to reserve these seats.
+          Taking you to sign in.
         </h2>
         <p className="mt-3 leading-7 text-muted">
-          Bookings are tied to your account so you can find them again. Choose the dates after
-          signing in and we will hold the seats.
+          Bookings are tied to your account so you can find them again. You will come straight
+          back to these seats.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link href={loginHref} className="btn-primary">
-            Sign in
-            <IconArrowRight className="h-4 w-4" />
-          </Link>
-          <Link href={registerHref} className="btn-secondary">
-            Create an account
-          </Link>
-        </div>
+        {signedIn === false ? (
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href={loginHref} className="btn-primary">
+              Sign in
+              <IconArrowRight className="h-4 w-4" />
+            </Link>
+            <Link href={registerHref} className="btn-secondary">
+              Create an account
+            </Link>
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-muted">Checking your session…</p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="grid gap-10 lg:grid-cols-[1.35fr_0.65fr] lg:items-start">
-      <form
-        onSubmit={onSubmit}
-        className="space-y-6"
-      >
+      <form onSubmit={onSubmit} className="space-y-6">
+        {conflict ? (
+          <div
+            role="alert"
+            className="rounded-[4px] border border-terracotta/40 bg-terracotta/10 p-5"
+          >
+            <p className="font-medium text-terracotta">These seats could not be reserved.</p>
+            <p className="mt-1 text-sm leading-6 text-muted">{conflict}</p>
+            <Link href={`/tours/${tourId}#departures`} className="btn-secondary mt-4">
+              Choose another date
+            </Link>
+          </div>
+        ) : null}
+
         <section className="rounded-[4px] border border-line bg-white p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
             <div>
@@ -247,193 +191,218 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
             </span>
           </div>
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <label htmlFor="contact-name" className="label">
-                Full name
-              </label>
-              <input
-                id="contact-name"
-                name="name"
-                autoComplete="name"
-                required
-                className="field"
-                placeholder="Your name"
-              />
-            </div>
-            <div>
-              <label htmlFor="contact-email" className="label">
-                Email
-              </label>
-              <input
-                id="contact-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="field"
-                placeholder="you@example.com"
-              />
-            </div>
-            <div>
-              <label htmlFor="contact-phone" className="label">
-                Phone
-              </label>
-              <input
-                id="contact-phone"
-                name="phone"
-                type="tel"
-                autoComplete="tel"
-                required
-                className="field"
-                placeholder="+84 ..."
-              />
-            </div>
-            <div>
-              <span className="label">Travelers</span>
-              <div className="mt-2 flex min-h-12 items-center justify-between rounded-[3px] border border-line bg-white px-2">
-                <button
-                  type="button"
-                  onClick={() => changeGuests(guests - 1)}
-                  disabled={guests <= 1}
-                  aria-label="Remove a traveler"
-                  className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
-                >
-                  −
-                </button>
-                <span aria-live="polite" className="text-sm font-semibold">
-                  {guests}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => changeGuests(guests + 1)}
-                  disabled={guests >= maxGuests}
-                  aria-label="Add a traveler"
-                  className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
-                >
-                  +
-                </button>
-              </div>
-              <p className="mt-1.5 text-xs text-muted">
-                This departure allows up to {maxGuests} on this date.
+              <p className="text-sm font-medium">Seats on this departure</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                This date allows up to {maxGuests} travelers in one booking.
               </p>
+            </div>
+            <div className="flex min-h-12 items-center gap-4 rounded-[3px] border border-line bg-white px-2">
+              <button
+                type="button"
+                onClick={() => changeGuests(guests - 1)}
+                disabled={guests <= 1}
+                aria-label="Remove a traveler"
+                className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
+              >
+                −
+              </button>
+              <span aria-live="polite" className="text-sm font-semibold">
+                {guests}
+              </span>
+              <button
+                type="button"
+                onClick={() => changeGuests(guests + 1)}
+                disabled={guests >= maxGuests}
+                aria-label="Add a traveler"
+                className="grid h-9 w-9 place-items-center rounded-[2px] border border-line text-lg text-forest transition-colors hover:bg-sage/20 disabled:cursor-not-allowed disabled:border-line/60 disabled:text-muted/35"
+              >
+                +
+              </button>
             </div>
           </div>
 
-          <fieldset className="mt-5">
-            <legend className="label">
-              Traveler names{" "}
-              <span className="font-normal text-muted">(as they appear on IDs)</span>
-            </legend>
-            <div className="mt-2 grid gap-4 sm:grid-cols-2">
-              {travelerNames.map((name, index) => (
-                <div key={index}>
-                  <label htmlFor={`traveler-${index}`} className="label">
-                    Traveler {index + 1}
-                  </label>
-                  <input
-                    id={`traveler-${index}`}
-                    type="text"
-                    autoComplete={index === 0 ? "name" : "off"}
-                    required
-                    value={name}
-                    onChange={(event) =>
-                      setTravelerNames((current) =>
-                        current.map((value, position) =>
-                          position === index ? event.target.value : value,
-                        ),
-                      )
-                    }
-                    className="field"
-                    placeholder="Full name"
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-muted">
-              Names can be changed later by contacting us. One name per seat.
-            </p>
-          </fieldset>
+          <div className="mt-6 space-y-5">
+            {travelers.map((traveler, index) => (
+              <fieldset
+                key={index}
+                className="rounded-[3px] border border-line bg-ivory/50 p-4 sm:p-5"
+              >
+                <legend className="px-1 text-sm font-semibold">
+                  Traveler {index + 1}
+                  {index === 0 ? (
+                    <span className="ml-2 text-xs font-normal text-muted">Lead traveler</span>
+                  ) : null}
+                </legend>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label htmlFor={`traveler-${index}-name`} className="label">
+                      Full name <span className="font-normal text-muted">(required)</span>
+                    </label>
+                    <input
+                      id={`traveler-${index}-name`}
+                      name={`traveler-${index}-name`}
+                      type="text"
+                      required
+                      maxLength={255}
+                      autoComplete={index === 0 ? "name" : "off"}
+                      value={traveler.fullName}
+                      onChange={(event) =>
+                        updateTraveler(index, "fullName", event.target.value)
+                      }
+                      className="field"
+                      placeholder="As it appears on the ID document"
+                    />
+                  </div>
 
-          <div className="mt-5">
-            <label htmlFor="notes" className="label">
-              Anything we should know?{" "}
-              <span className="font-normal text-muted">(optional)</span>
-            </label>
-            <textarea
-              id="notes"
-              name="notes"
-              rows={3}
-              className="field resize-y"
-              placeholder="Dietary needs, arrival time, a celebration…"
-            />
+                  <div>
+                    <label htmlFor={`traveler-${index}-phone`} className="label">
+                      Phone <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id={`traveler-${index}-phone`}
+                      type="tel"
+                      maxLength={20}
+                      autoComplete={index === 0 ? "tel" : "off"}
+                      value={traveler.phone}
+                      onChange={(event) => updateTraveler(index, "phone", event.target.value)}
+                      className="field"
+                      placeholder="+84 ..."
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor={`traveler-${index}-email`} className="label">
+                      Email <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id={`traveler-${index}-email`}
+                      type="email"
+                      maxLength={255}
+                      autoComplete={index === 0 ? "email" : "off"}
+                      value={traveler.email}
+                      onChange={(event) => updateTraveler(index, "email", event.target.value)}
+                      className="field"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor={`traveler-${index}-birth`} className="label">
+                      Date of birth <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id={`traveler-${index}-birth`}
+                      type="date"
+                      value={traveler.dateOfBirth}
+                      onChange={(event) =>
+                        updateTraveler(index, "dateOfBirth", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor={`traveler-${index}-gender`} className="label">
+                      Gender <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <select
+                      id={`traveler-${index}-gender`}
+                      value={traveler.gender}
+                      onChange={(event) =>
+                        updateTraveler(
+                          index,
+                          "gender",
+                          event.target.value as TravelerDraft["gender"],
+                        )
+                      }
+                      className="field"
+                    >
+                      <option value="">Prefer not to say</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label htmlFor={`traveler-${index}-document`} className="label">
+                      ID document <span className="font-normal text-muted">(optional)</span>
+                    </label>
+                    <input
+                      id={`traveler-${index}-document`}
+                      type="text"
+                      maxLength={64}
+                      value={traveler.idDocument}
+                      onChange={(event) =>
+                        updateTraveler(index, "idDocument", event.target.value)
+                      }
+                      className="field"
+                      placeholder="Passport or national ID number"
+                    />
+                  </div>
+                </div>
+              </fieldset>
+            ))}
           </div>
         </section>
 
         <section className="rounded-[4px] border border-line bg-white p-6 sm:p-8">
           <p className="eyebrow text-terracotta">Step 02</p>
-          <h2 className="mt-2 font-display text-2xl tracking-tight">
-            How would you like to pay?
-          </h2>
+          <h2 className="mt-2 font-display text-2xl tracking-tight">Promotion and notes</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Online payment is a demo card: no real card details are collected and no money moves.
-            You can also hold the seats now and pay at the office later.
+            A promotion code is optional. The server checks it and calculates the discount and
+            final total when the booking is created.
           </p>
-          <div className="mt-6 space-y-3">
-            <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-line bg-ivory/60 p-4 transition has-[:checked]:border-forest has-[:checked]:bg-sage/15">
+
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <div>
+              <label htmlFor="promotion-code" className="label">
+                Promotion code <span className="font-normal text-muted">(optional)</span>
+              </label>
               <input
-                type="radio"
-                name="payment"
-                value="online"
-                checked={method === "online"}
-                onChange={() => setMethod("online")}
-                className="mt-1 accent-forest"
+                id="promotion-code"
+                type="text"
+                maxLength={64}
+                value={promotionCode}
+                onChange={(event) => setPromotionCode(event.target.value)}
+                className="field uppercase"
+                placeholder="SPRING10"
+                autoComplete="off"
               />
-              <span>
-                <span className="block text-sm font-semibold">Pay online now (demo card)</span>
-                <span className="mt-0.5 block text-sm text-muted">
-                  Reserve and mark the booking paid immediately. No real charge is made.
-                </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-line bg-ivory/60 p-4 transition has-[:checked]:border-forest has-[:checked]:bg-sage/15">
-              <input
-                type="radio"
-                name="payment"
-                value="office"
-                checked={method === "office"}
-                onChange={() => setMethod("office")}
-                className="mt-1 accent-forest"
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="booking-note" className="label">
+                Anything we should know? <span className="font-normal text-muted">(optional)</span>
+              </label>
+              <textarea
+                id="booking-note"
+                rows={3}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="field resize-y"
+                placeholder="Dietary needs, arrival time, a celebration…"
               />
-              <span>
-                <span className="block text-sm font-semibold">Pay at the office</span>
-                <span className="mt-0.5 block text-sm text-muted">
-                  Hold the seats now, then complete payment from My trips or in person.
-                </span>
-              </span>
-            </label>
+            </div>
           </div>
         </section>
 
         <div className="flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="flex items-center gap-2 text-xs text-muted">
-            <IconShield className="h-4 w-4 text-forest" />
+          <div className="text-xs leading-5 text-muted">
             {error ? (
-              <span role="alert" className="text-terracotta">{error}</span>
-            ) : method === "online" ? (
-              "Demo card payment. No real charge."
+              <p role="alert" className="text-terracotta">
+                {error}
+              </p>
             ) : (
-              "Seats held now. Pay later from My trips."
+              <p className="flex items-center gap-2">
+                <IconShield className="h-4 w-4 shrink-0 text-forest" />
+                Your booking is created as pending. No payment is taken here.
+              </p>
             )}
-          </p>
+          </div>
           <button type="submit" disabled={pending} className="btn-primary">
-            {pending
-              ? method === "online"
-                ? "Reserving & paying…"
-                : "Reserving…"
-              : method === "online"
-                ? "Reserve & pay"
-                : "Reserve these seats"}
+            {pending ? "Reserving seats…" : "Reserve seats"}
             <IconArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -478,11 +447,13 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
               </div>
             </dl>
             <div className="mt-5 flex items-end justify-between border-t border-line pt-4">
-              <span className="text-sm font-medium">Total</span>
-              <span className="text-xl font-semibold text-forest">{formatPrice(total)}</span>
+              <span className="text-sm font-medium">Estimated subtotal</span>
+              <span className="text-xl font-semibold text-forest">{formatPrice(estimate)}</span>
             </div>
             <p className="mt-3 text-xs leading-5 text-muted">
-              Total follows the live departure price. Seats are checked again when you reserve.
+              This is an estimate before any promotion. The server confirms the subtotal,
+              discount and total when you reserve; you will see the final amounts on your
+              booking.
             </p>
           </div>
         </div>

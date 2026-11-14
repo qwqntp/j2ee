@@ -1,12 +1,36 @@
 import { cacheLife, cacheTag } from "next/cache";
-import { getFeaturedTours, getTour, getTours } from "./api";
-import type { PageData, TourDetail, TourSummary } from "./types";
+import { getFeaturedTours, getTour, getTourDestinations, getTours } from "./api";
+import {
+  EMPTY_TOUR_FILTERS,
+  hasActiveTourFilters,
+  type TourFilters,
+} from "./tour-filters";
+import type { PageData, TourDestinationOption, TourDetail, TourSummary } from "./types";
 
-export async function loadTours(page: number, keyword: string): Promise<PageData<TourSummary>> {
+// Filtered combinations are client-controlled and unbounded, so they deliberately
+// bypass the cache. The plain catalogue (page 0, no filters) stays cached.
+export async function loadTours(
+  filters: TourFilters,
+  page: number,
+): Promise<PageData<TourSummary>> {
+  if (hasActiveTourFilters(filters)) {
+    return getTours(filters, page);
+  }
+  return loadCataloguePage(page);
+}
+
+async function loadCataloguePage(page: number): Promise<PageData<TourSummary>> {
   "use cache";
   cacheLife("minutes");
   cacheTag("tours");
-  return getTours(page, keyword);
+  return getTours(EMPTY_TOUR_FILTERS, page);
+}
+
+export async function loadTourDestinations(): Promise<TourDestinationOption[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("tours");
+  return getTourDestinations();
 }
 
 export async function loadFeaturedTours(): Promise<TourSummary[]> {

@@ -103,6 +103,32 @@ class TourControllerTest {
     }
 
     @Test
+    void destinationsReturnsIdAndNameList() throws Exception {
+        when(tourService.listDestinations()).thenReturn(List.of(
+                new com.j2ee.tour.dto.response.TourDestinationOptionResponse(2L, "Cat Ba Island"),
+                new com.j2ee.tour.dto.response.TourDestinationOptionResponse(1L, "Lan Ha Bay")));
+
+        mockMvc.perform(get("/api/tours/destinations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].id").value(2))
+                .andExpect(jsonPath("$.data[0].name").value("Cat Ba Island"))
+                .andExpect(jsonPath("$.data[1].name").value("Lan Ha Bay"));
+    }
+
+    @Test
+    void destinationsPathDoesNotResolveAsTourId() throws Exception {
+        when(tourService.listDestinations()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/tours/destinations"))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.verify(tourService).listDestinations();
+        org.mockito.Mockito.verify(tourService, org.mockito.Mockito.never()).getTour(any());
+    }
+
+    @Test
     void invalidSortReturnsBadRequestWithAllowedValues() throws Exception {
         mockMvc.perform(get("/api/tours").param("sort", "cheapest"))
                 .andExpect(status().isBadRequest())

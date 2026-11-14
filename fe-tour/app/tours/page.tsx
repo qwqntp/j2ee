@@ -3,32 +3,27 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { EmptyState } from "@/components/empty-state";
-import { IconSearch } from "@/components/icons";
 import { Pagination } from "@/components/pagination";
 import { TourGridSkeleton } from "@/components/skeleton";
 import { TourCard } from "@/components/tour-card";
-import { loadTours } from "@/lib/tours";
+import { TourFiltersForm } from "@/components/tour-filters";
+import { ApiError } from "@/lib/api";
+import {
+  buildTourHref,
+  hasActiveTourFilters,
+  parseTourPage,
+  readTourFilters,
+  type TourSearchParams,
+} from "@/lib/tour-filters";
+import { loadTourDestinations, loadTours } from "@/lib/tours";
 
 export const metadata: Metadata = {
   title: "Journeys",
   description:
-    "Small-group journeys across Vietnam — bays, lantern towns, mountain valleys and slow coasts.",
+    "Small-group journeys across Vietnam — filter by destination, price, dates and duration, then pick the departure that fits.",
 };
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-type Props = { searchParams: SearchParams };
-
-function first(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
-}
-
-function pageHref(page: number, keyword: string): string {
-  const query = new URLSearchParams();
-  if (page > 0) query.set("page", String(page));
-  if (keyword) query.set("keyword", keyword);
-  const search = query.toString();
-  return search ? `/tours?${search}` : "/tours";
-}
+type Props = { searchParams: Promise<TourSearchParams> };
 
 export default function ToursPage({ searchParams }: Props) {
   return (
@@ -42,8 +37,8 @@ export default function ToursPage({ searchParams }: Props) {
                 Journeys
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
-                A small collection of routes we know well. Search by place or mood, then pick a date
-                that leaves a little room to wander.
+                A small collection of routes we know well. Search by place or mood, narrow the
+                dates and budget, then pick a departure that leaves a little room to wander.
               </p>
             </div>
             <p className="max-w-sm text-sm leading-6 text-muted lg:justify-self-end">
@@ -63,58 +58,66 @@ export default function ToursPage({ searchParams }: Props) {
   );
 }
 
-async function TourResults({ searchParams }: { searchParams: SearchParams }) {
+async function TourResults({ searchParams }: { searchParams: Promise<TourSearchParams> }) {
   const params = await searchParams;
-  const keyword = first(params.keyword).trim().slice(0, 100);
-  const parsedPage = Number.parseInt(first(params.page), 10);
-  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 0;
+  const filters = readTourFilters(params);
+  const page = parseTourPage(params);
+  const active = hasActiveTourFilters(filters);
 
   await connection();
 
-  const result = await loadTours(page, keyword);
+  const destinations = await loadTourDestinations();
+
+  let result: Awaited<ReturnType<typeof loadTours>> | null = null;
+  let backendError: string | null = null;
+
+  try {
+    result = await loadTours(filters, page);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 400) {
+      backendError = error.message;
+    } else {
+      throw error;
+    }
+  }
+
+  if (!result) {
+    return (
+      <>
+        <TourFiltersForm filters={filters} destinations={destinations} />
+        <div
+          role="alert"
+          className="mt-8 rounded-[4px] border border-terracotta/40 bg-terracotta/10 p-5"
+        >
+          <p className="font-medium text-terracotta">These filters could not be applied.</p>
+          <p className="mt-1 text-sm leading-6 text-muted">{backendError}</p>
+          <Link href="/tours" className="btn-secondary mt-4">
+            Clear filters
+          </Link>
+        </div>
+      </>
+    );
+  }
 
   const outOfRange = result.content.length === 0 && result.totalElements > 0;
   const countLabel =
     result.totalElements === 1 ? "1 journey" : `${result.totalElements} journeys`;
+  const keyword = filters.keyword;
 
   return (
     <>
-      <div className="flex flex-col gap-5 border-b border-line pb-6 md:flex-row md:items-end md:justify-between">
-        <form
-          action="/tours"
-          method="get"
-          role="search"
-          className="flex w-full max-w-xl flex-col gap-2 sm:flex-row"
-        >
-          <div className="relative flex-1">
-            <label htmlFor="keyword" className="sr-only">
-              Search journeys
-            </label>
-            <IconSearch className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <input
-              id="keyword"
-              name="keyword"
-              type="search"
-              maxLength={100}
-              defaultValue={keyword}
-              placeholder="Search a place or journey"
-              className="min-h-12 w-full rounded-[3px] border border-line bg-white py-3 pl-11 pr-4 text-sm text-charcoal outline-none transition placeholder:text-muted/60 focus:border-forest focus:ring-1 focus:ring-forest/20"
-            />
-          </div>
-          <button type="submit" className="btn-primary shrink-0">
-            Search
-          </button>
-          {keyword ? (
-            <Link href="/tours" className="btn-secondary shrink-0">
-              Clear
-            </Link>
-          ) : null}
-        </form>
+      <TourFiltersForm filters={filters} destinations={destinations} />
 
+      <div className="mt-10 flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <p className="text-sm text-muted" aria-live="polite">
           {countLabel}
-          {keyword ? ` for “${keyword}”` : ""}
+          {active ? " match your filters" : ""}
         </p>
+        {active ? (
+          <Link href="/tours" className="text-sm font-medium text-forest hover:underline">
+            View the full collection
+          </Link>
+        ) : null}
       </div>
 
       {result.content.length === 0 ? (
@@ -124,15 +127,17 @@ async function TourResults({ searchParams }: { searchParams: SearchParams }) {
             description={
               outOfRange
                 ? "That page is past the end of the collection. Head back to the first page to keep browsing."
-                : keyword
-                  ? `Nothing matched “${keyword}”. Try a broader search, or browse the full collection.`
+                : active
+                  ? keyword
+                    ? `Nothing matched these filters, including “${keyword}”. Try a broader search or remove a filter.`
+                    : "Nothing matched these filters. Try widening the dates, price or duration."
                   : "There are no published journeys just yet. Check back soon, or write to us and we will help you plan."
             }
             action={
               outOfRange
-                ? { href: pageHref(0, keyword), label: "First page" }
-                : keyword
-                  ? { href: "/tours", label: "Clear search" }
+                ? { href: buildTourHref(filters, 0), label: "First page" }
+                : active
+                  ? { href: "/tours", label: "Clear filters" }
                   : undefined
             }
           />
@@ -150,7 +155,7 @@ async function TourResults({ searchParams }: { searchParams: SearchParams }) {
         totalPages={result.totalPages}
         hasPrevious={result.hasPrevious}
         hasNext={result.hasNext}
-        hrefFor={(target) => pageHref(target, keyword)}
+        hrefFor={(target) => buildTourHref(filters, target)}
       />
     </>
   );

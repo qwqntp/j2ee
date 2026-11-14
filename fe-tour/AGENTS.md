@@ -23,8 +23,8 @@ Next.js 16 App Router UI (React 19, TypeScript, Tailwind CSS 4) for the tour boo
 - `next.config.ts` enables experimental `cacheComponents`, `partialPrefetching`, and `agentFeedback`. Do not remove or rename these without verifying the Next 16 build.
 - No Next.js proxy. The browser calls the backend directly and relies on backend CORS (`APP_CORS_ALLOWED_ORIGINS`). `lib/api.ts` sets `credentials: "include"` so the refresh cookie is sent.
 - Auth tokens live in `localStorage` (`lib/auth.ts`); the refresh token is an HttpOnly cookie scoped to `/api/auth`. Access tokens last 15 minutes; `ensureSession()` checks the stored token with `/api/auth/me`, then falls back to `/api/auth/refresh`.
-- Booking create has no contact email/phone fields (name/email/phone are appended to `booking_note`), so the checkout collects each traveler's full name per seat in a `travelers` array; the backend persists them and enforces `travelers.length == guestCount`. Trip detail renders the manifest. Checkout shows a sign-in gate until `ensureSession()` returns a session.
-- Checkout defaults to “Pay online now (demo card)”, which creates the booking then calls `POST /api/bookings/{id}/payments/mock`; “Pay at the office” leaves it `PENDING`. Pending bookings also show a pay-now action on `/my-trips/[id]`; PAID bookings can be confirmed there, CONFIRMED ones completed — both through `POST /api/bookings/{id}/confirm|complete`. No real card data is collected; demo payment requires `PAYMENT_MOCK_ENABLED=true` on the backend.
+- Checkout (`/payment`) requires a session (`ensureSession()`, redirect to `/login?next=…`) and collects one `travelers` row per seat plus an optional promotion code; the backend enforces `travelers.length == guestCount` and returns the authoritative subtotal/discount/total. Bookings are created as `PENDING`; the end-user UI does not call the mock-payment endpoint. On success it navigates to `/account/bookings/{id}`.
+- Order detail (`/account/bookings/[id]`, alias `/my-trips/[id]`) shows travelers, promotion, status and totals, and offers cancel only for `PENDING` via `POST /api/bookings/{id}/cancel`. PAID bookings can be confirmed and CONFIRMED ones completed through `POST /api/bookings/{id}/confirm|complete`.
 - Vitest is configured (`npm test`, `lib/*.test.ts`). Verify changes with `npm run lint`, `npx tsc --noEmit`, `npm test`, and `npm run build`.
 - Use npm; `package-lock.json` is the only lockfile.
 - Pages and components should call the backend, not query PostgreSQL directly.
@@ -33,14 +33,17 @@ Next.js 16 App Router UI (React 19, TypeScript, Tailwind CSS 4) for the tour boo
 - There is no demo/sample data. If the backend is unreachable, pages throw to `app/error.tsx`.
 
 ## Where things live
-- Routes and pages: `app/` (`/`, `/tours`, `/tours/[id]`, `/login`, `/register`, `/payment`, `/my-trips`, `/my-trips/[id]`, `/invoices/[bookingId]`)
+- Routes and pages: `app/` (`/`, `/tours`, `/tours/[id]`, `/login`, `/register`, `/payment`, `/account/bookings`, `/account/bookings/[id]`, `/account/profile`, `/verify-email`, `/my-trips`, `/my-trips/[id]`, `/invoices/[bookingId]`)
 - Root layout and fonts: `app/layout.tsx`
 - Global styles / Tailwind entry: `app/globals.css`
 - API client and types: `lib/api.ts`, `lib/types.ts`
 - Session/auth helpers: `lib/auth.ts`; forms in `components/auth-form.tsx`
 - Cached tour reads: `lib/tours.ts` (`use cache`, `cacheLife`, `cacheTag`)
-- Checkout: `app/payment/page.tsx`, `components/payment-form.tsx` (captures per-seat traveler names, calls `POST /api/bookings`, then demo payment when online is chosen)
-- Booking detail and lifecycle actions: `components/trip-detail.tsx`, `components/trip-card.tsx`
+- Checkout: `app/payment/page.tsx`, `components/payment-form.tsx` (captures a traveler manifest per seat and a promotion code, calls `POST /api/bookings`, leaves the booking `PENDING`)
+- Order list/detail and lifecycle actions: `components/account-bookings.tsx`, `components/trip-detail.tsx`, `components/trip-card.tsx`
+- Profile and password: `components/account-profile.tsx`, `lib/profile.ts`
+- Email verification landing: `components/verify-email.tsx`, `app/verify-email/page.tsx`
+- Catalogue filters: `components/tour-filters.tsx`, `lib/tour-filters.ts`
 - Invoice (printable): `app/invoices/[bookingId]/page.tsx`, `components/invoice-view.tsx` (reads `GET /api/invoices/me`)
 - Shared components: `components/`
 - Static assets: `public/`

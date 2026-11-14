@@ -35,6 +35,11 @@ export type TourDeparture = {
   createdAt: string;
 };
 
+export type TourDestinationOption = {
+  id: number;
+  name: string;
+};
+
 export type TourDetail = {
   id: number;
   name: string;
@@ -62,6 +67,17 @@ export type Account = {
   roleName: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type Profile = {
+  customerId: number | null;
+  username: string;
+  email: string | null;
+  emailVerified: number | null;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+  dateOfBirth: string | null;
 };
 
 export type AuthSession = {

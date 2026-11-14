@@ -108,3 +108,15 @@ export function TripDetailSkeleton() {
     </div>
   );
 }
+
+export function ProfileSkeleton() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading your profile…</span>
+      <div aria-hidden="true" className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="h-[34rem] animate-pulse rounded-[4px] bg-sage/20" />
+        <div className="h-80 animate-pulse rounded-[4px] bg-sage/20" />
+      </div>
+    </div>
+  );
+}

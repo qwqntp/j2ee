@@ -9,7 +9,6 @@ import {
   completeBooking,
   confirmBooking,
   getBooking,
-  payBooking,
 } from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
 import {
@@ -28,7 +27,13 @@ import { IconArrowRight, IconCalendar, IconClock, IconMapPin, IconUsers } from "
 import { TripDetailSkeleton } from "./skeleton";
 import { TourImage } from "./tour-image";
 
-export function TripDetail({ bookingId }: { bookingId: number }) {
+export function TripDetail({
+  bookingId,
+  basePath = "/my-trips",
+}: {
+  bookingId: number;
+  basePath?: string;
+}) {
   const router = useRouter();
   const session = useSession();
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -39,12 +44,11 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
+  const [cancelConflict, setCancelConflict] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
-  const loginHref = `/login?next=${encodeURIComponent(`/my-trips/${bookingId}`)}`;
+  const loginHref = `/login?next=${encodeURIComponent(`${basePath}/${bookingId}`)}`;
 
   useEffect(() => {
     let active = true;
@@ -107,36 +111,6 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
     setReloadKey((key) => key + 1);
   }
 
-  async function handlePay() {
-    if (!booking || paying) return;
-    setPaying(true);
-    setPayError(null);
-
-    try {
-      const current = await ensureSession();
-      if (!current) {
-        router.replace(loginHref);
-        return;
-      }
-      const result = await payBooking(current.accessToken, booking.id);
-      if (result.status === "SUCCESS") {
-        setBooking({ ...booking, status: "PAID" });
-        publishFlash("Payment received. Your booking is secured.");
-      }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        clearSession();
-        router.replace(loginHref);
-        return;
-      }
-      setPayError(
-        err instanceof ApiError ? err.message : "Could not complete the demo payment. Try again.",
-      );
-    } finally {
-      setPaying(false);
-    }
-  }
-
   async function handleLifecycle(action: "confirm" | "complete") {
     if (!booking || advancing) return;
     setAdvancing(true);
@@ -178,6 +152,7 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
     if (!booking || cancelling) return;
     setCancelling(true);
     setCancelError(null);
+    setCancelConflict(null);
 
     try {
       const current = await ensureSession();
@@ -195,6 +170,14 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
         router.replace(loginHref);
         return;
       }
+      if (err instanceof ApiError && err.status === 409) {
+        setConfirming(false);
+        setCancelConflict(
+          err.message || "This booking can no longer be cancelled.",
+        );
+        setReloadKey((key) => key + 1);
+        return;
+      }
       setCancelError(
         err instanceof ApiError ? err.message : "Could not cancel this booking. Try again.",
       );
@@ -207,6 +190,8 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
     return <TripDetailSkeleton />;
   }
 
+  const backLabel = basePath === "/account/bookings" ? "My orders" : "My trips";
+
   if (!booking) {
     return (
       <section className="shell py-16">
@@ -217,7 +202,7 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
             "The booking may have been removed, or the link may be incomplete. Your other trips are still here."
           }
           action={
-            missing ? { href: "/my-trips", label: "Back to my trips" } : undefined
+            missing ? { href: basePath, label: `Back to ${backLabel.toLowerCase()}` } : undefined
           }
         />
         {!missing ? (
@@ -243,8 +228,8 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
           <nav aria-label="Breadcrumb" className="text-xs text-muted">
             <ol className="flex flex-wrap items-center gap-2">
               <li>
-                <Link href="/my-trips" className="transition-colors hover:text-forest">
-                  My trips
+                <Link href={basePath} className="transition-colors hover:text-forest">
+                  {backLabel}
                 </Link>
               </li>
               <li aria-hidden="true">/</li>
@@ -370,15 +355,30 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
             {booking.travelers.length ? (
               <ul className="mt-5 divide-y divide-line border-t border-line">
                 {booking.travelers.map((traveler) => (
-                  <li
-                    key={traveler.id}
-                    className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
-                  >
-                    <span className="font-medium">{traveler.name}</span>
-                    <span className="text-muted">
-                      {[traveler.phone, traveler.email].filter(Boolean).join(" · ") ||
-                        "No contact details"}
-                    </span>
+                  <li key={traveler.id} className="py-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{traveler.name}</span>
+                      <span className="text-muted">
+                        {[traveler.phone, traveler.email].filter(Boolean).join(" · ") ||
+                          "No contact details"}
+                      </span>
+                    </div>
+                    {traveler.dateOfBirth || traveler.gender || traveler.idDocument ? (
+                      <p className="mt-1 text-xs text-muted">
+                        {[
+                          traveler.gender
+                            ? traveler.gender.charAt(0) +
+                              traveler.gender.slice(1).toLowerCase()
+                            : null,
+                          traveler.dateOfBirth
+                            ? `Born ${formatDate(traveler.dateOfBirth)}`
+                            : null,
+                          traveler.idDocument ? `ID ${traveler.idDocument}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -440,29 +440,28 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
             </p>
           </section>
 
+          {cancelConflict ? (
+            <div
+              role="alert"
+              className="rounded-[4px] border border-terracotta/40 bg-terracotta/10 p-5"
+            >
+              <p className="font-medium text-terracotta">
+                This booking can no longer be cancelled.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted">{cancelConflict}</p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                The latest booking status is shown on this page.
+              </p>
+            </div>
+          ) : null}
+
           {booking.status === "PENDING" ? (
             <section className="rounded-[4px] border border-terracotta/30 bg-white p-6">
               <p className="eyebrow text-terracotta">Payment pending</p>
               <p className="mt-2 text-sm leading-6 text-muted">
-                Complete payment to secure your seats. This is a demo card payment; no real charge
-                is made.
+                Your seats are held. Payment is arranged separately, so this booking stays
+                pending until payment is recorded.
               </p>
-              {payError ? (
-                <p role="alert" className="mt-3 text-sm text-terracotta">
-                  {payError}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={handlePay}
-                disabled={paying}
-                className="btn-primary mt-4 w-full"
-              >
-                {paying
-                  ? "Processing…"
-                  : `Pay ${formatPrice(booking.totalAmount)} now`}
-                <IconArrowRight className="h-4 w-4" />
-              </button>
             </section>
           ) : booking.status === "PAID" ? (
             <section className="rounded-[4px] border border-forest/30 bg-white p-6">
@@ -611,8 +610,8 @@ export function TripDetail({ bookingId }: { bookingId: number }) {
             </section>
           )}
 
-          <Link href="/my-trips" className="btn-secondary w-full">
-            Back to my trips
+          <Link href={basePath} className="btn-secondary w-full">
+            Back to {backLabel.toLowerCase()}
           </Link>
         </aside>
       </section>

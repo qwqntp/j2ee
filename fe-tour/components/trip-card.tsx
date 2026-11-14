@@ -6,10 +6,17 @@ import type { Booking } from "@/lib/types";
 import { IconArrowRight, IconCalendar, IconMapPin, IconUsers } from "./icons";
 import { TourImage } from "./tour-image";
 
-export function TripCard({ booking }: { booking: Booking }) {
+export function TripCard({
+  booking,
+  basePath = "/my-trips",
+}: {
+  booking: Booking;
+  basePath?: string;
+}) {
   const tour = booking.tour;
   const tourName = tour?.tourName ?? `Booking ${booking.bookingCode}`;
   const fallback = tourFallbackImage(tourName);
+  const detailHref = `${basePath}/${booking.id}`;
   const seatNote =
     booking.status === "CANCELLED"
       ? "Seats released"
@@ -21,7 +28,7 @@ export function TripCard({ booking }: { booking: Booking }) {
     <article className="overflow-hidden rounded-[4px] border border-line bg-white transition-colors hover:border-forest/40">
       <div className="grid sm:grid-cols-[15rem_1fr]">
         <Link
-          href={`/my-trips/${booking.id}`}
+          href={detailHref}
           aria-label={`View ${tourName}`}
           className="group relative block aspect-[4/3] overflow-hidden bg-sage/20 sm:aspect-auto sm:min-h-full"
         >
@@ -45,7 +52,7 @@ export function TripCard({ booking }: { booking: Booking }) {
                 {booking.bookingCode}
               </p>
               <h3 className="mt-2 font-display text-2xl leading-tight tracking-tight">
-                <Link href={`/my-trips/${booking.id}`} className="transition-colors hover:text-forest">
+                <Link href={detailHref} className="transition-colors hover:text-forest">
                   {tourName}
                 </Link>
               </h3>
@@ -83,7 +90,7 @@ export function TripCard({ booking }: { booking: Booking }) {
               {seatNote} · Booked {formatDate(booking.createdAt)}
             </p>
             <Link
-              href={`/my-trips/${booking.id}`}
+              href={detailHref}
               className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest transition-colors hover:text-forest-deep hover:underline"
             >
               {booking.status === "PENDING" ? "Complete payment" : "View trip"}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ensureSession, getStoredSession, signOut, useSession } from "@/lib/auth";
-import { IconArrowRight, IconChevronRight, IconCompass, IconMenu } from "./icons";
+import { IconArrowRight, IconChevronRight, IconCompass, IconMenu, IconUsers } from "./icons";
 
 const links = [
   { href: "/tours", label: "Journeys" },
@@ -88,12 +88,21 @@ export function SiteHeader() {
                   <p className="truncate text-sm text-muted">{account.email}</p>
                 ) : null}
                 <Link
-                  href="/my-trips"
+                  href="/account/bookings"
                   onClick={() => accountMenu.current?.removeAttribute("open")}
                   className="mt-4 flex min-h-11 items-center gap-2 rounded-[2px] border-t border-line px-3 pt-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
                 >
                   <IconCompass className="h-4 w-4 text-forest" />
-                  My trips
+                  My orders
+                  <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                </Link>
+                <Link
+                  href="/account/profile"
+                  onClick={() => accountMenu.current?.removeAttribute("open")}
+                  className="flex min-h-11 items-center gap-2 rounded-[2px] px-3 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                >
+                  <IconUsers className="h-4 w-4 text-forest" />
+                  Profile
                   <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                 </Link>
                 <div className="border-t border-line pt-2">
@@ -168,11 +177,19 @@ export function SiteHeader() {
                       </div>
                     </div>
                     <Link
-                      href="/my-trips"
+                      href="/account/bookings"
                       className="flex min-h-11 items-center gap-2 rounded-[2px] px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
                     >
                       <IconCompass className="h-4 w-4 text-forest" />
-                      My trips
+                      My orders
+                      <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                    </Link>
+                    <Link
+                      href="/account/profile"
+                      className="flex min-h-11 items-center gap-2 rounded-[2px] px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                    >
+                      <IconUsers className="h-4 w-4 text-forest" />
+                      Profile
                       <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                     </Link>
                     <button
