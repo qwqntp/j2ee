@@ -13,6 +13,8 @@ import com.j2ee.tour.repository.TourGuideRepository;
 import com.j2ee.tour.repository.TourRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,6 +36,7 @@ class TourDepartureCancelCascadeTest {
     private PaymentRepository paymentRepository;
     private RefundService refundService;
     private EmailService emailService;
+    private AfterCommitMailDispatcher mailDispatcher;
     private TourDepartureService departureService;
 
     private TourDeparture departure;
@@ -47,8 +50,10 @@ class TourDepartureCancelCascadeTest {
         paymentRepository = mock(PaymentRepository.class);
         refundService = mock(RefundService.class);
         emailService = mock(EmailService.class);
+        mailDispatcher = new AfterCommitMailDispatcher();
         departureService = new TourDepartureService(departureRepository, tourRepository,
                 bookingRepository, paymentRepository, refundService, emailService,
+                mailDispatcher,
                 new GuideOverlapValidator(departureRepository, mock(TourGuideRepository.class)));
 
         tour = new Tour();
@@ -104,6 +109,32 @@ class TourDepartureCancelCascadeTest {
         verify(refundService).requestRemaining(11L, "Departure cancelled");
         verify(emailService).sendBookingCancellation("buyer@example.com", "BK-1");
         verify(paymentRepository, never()).findByBookingBookingId(2L);
+    }
+
+    @Test
+    void cascadeDefersCancellationEmailsUntilCommit() {
+        Account account = new Account();
+        account.setAccountEmail("buyer@example.com");
+
+        Booking paid = new Booking();
+        paid.setBookingId(1L);
+        paid.setBookingCode("BK-1");
+        paid.setBookingStatus("PAID");
+        paid.setAccount(account);
+
+        when(bookingRepository.findByDepartureDepartureId(5L)).thenReturn(List.of(paid));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            departureService.update(5L, cancelledRequest());
+
+            verify(emailService, never()).sendBookingCancellation(any(), any());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendBookingCancellation("buyer@example.com", "BK-1");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

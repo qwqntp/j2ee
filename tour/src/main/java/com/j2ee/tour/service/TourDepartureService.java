@@ -33,6 +33,7 @@ public class TourDepartureService {
     private final PaymentRepository paymentRepository;
     private final RefundService refundService;
     private final EmailService emailService;
+    private final AfterCommitMailDispatcher mailDispatcher;
     private final GuideOverlapValidator overlapValidator;
 
     public TourDepartureService(TourDepartureRepository departureRepository,
@@ -41,6 +42,7 @@ public class TourDepartureService {
                                 PaymentRepository paymentRepository,
                                 RefundService refundService,
                                 EmailService emailService,
+                                AfterCommitMailDispatcher mailDispatcher,
                                 GuideOverlapValidator overlapValidator) {
         this.departureRepository = departureRepository;
         this.tourRepository = tourRepository;
@@ -48,6 +50,7 @@ public class TourDepartureService {
         this.paymentRepository = paymentRepository;
         this.refundService = refundService;
         this.emailService = emailService;
+        this.mailDispatcher = mailDispatcher;
         this.overlapValidator = overlapValidator;
     }
 
@@ -107,9 +110,10 @@ public class TourDepartureService {
             }
             if (booking.getAccount() != null
                     && booking.getAccount().getAccountEmail() != null) {
-                emailService.sendBookingCancellation(
-                        booking.getAccount().getAccountEmail(),
-                        booking.getBookingCode());
+                String to = booking.getAccount().getAccountEmail();
+                String code = booking.getBookingCode();
+                mailDispatcher.dispatch(() ->
+                        emailService.sendBookingCancellation(to, code));
             }
         }
         departure.setDepartureBookedSlots(0);

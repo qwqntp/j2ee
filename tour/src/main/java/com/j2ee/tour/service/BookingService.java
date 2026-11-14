@@ -53,6 +53,7 @@ public class BookingService {
     private final InvoiceService invoiceService;
     private final TravelerRepository travelerRepository;
     private final EmailService emailService;
+    private final AfterCommitMailDispatcher mailDispatcher;
     private final Clock clock;
 
     public BookingService(BookingRepository bookingRepository,
@@ -64,6 +65,7 @@ public class BookingService {
                           InvoiceService invoiceService,
                           TravelerRepository travelerRepository,
                           EmailService emailService,
+                          AfterCommitMailDispatcher mailDispatcher,
                           Clock clock) {
         this.bookingRepository = bookingRepository;
         this.departureRepository = departureRepository;
@@ -74,6 +76,7 @@ public class BookingService {
         this.invoiceService = invoiceService;
         this.travelerRepository = travelerRepository;
         this.emailService = emailService;
+        this.mailDispatcher = mailDispatcher;
         this.clock = clock;
     }
 
@@ -334,20 +337,24 @@ public class BookingService {
     }
 
     private void sendBookingConfirmation(Booking booking) {
-        if (booking.getAccount() != null) {
-            emailService.sendBookingConfirmation(
-                    booking.getAccount().getAccountEmail(),
-                    booking.getBookingCode(),
-                    booking.getBookingTotalAmount());
+        if (booking.getAccount() == null) {
+            return;
         }
+        String to = booking.getAccount().getAccountEmail();
+        String code = booking.getBookingCode();
+        BigDecimal total = booking.getBookingTotalAmount();
+        mailDispatcher.dispatch(() ->
+                emailService.sendBookingConfirmation(to, code, total));
     }
 
     private void sendBookingCancellation(Booking booking) {
-        if (booking.getAccount() != null) {
-            emailService.sendBookingCancellation(
-                    booking.getAccount().getAccountEmail(),
-                    booking.getBookingCode());
+        if (booking.getAccount() == null) {
+            return;
         }
+        String to = booking.getAccount().getAccountEmail();
+        String code = booking.getBookingCode();
+        mailDispatcher.dispatch(() ->
+                emailService.sendBookingCancellation(to, code));
     }
 
     private Traveler toTraveler(Booking booking, BookingTravelerRequest request) {

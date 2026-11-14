@@ -40,6 +40,7 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final AuthTokenService authTokenService;
     private final EmailService emailService;
+    private final AfterCommitMailDispatcher mailDispatcher;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final Clock clock;
@@ -75,7 +76,8 @@ public class AuthService {
         accountRepository.save(account);
 
         String verificationToken = authTokenService.issue(account, AuthTokenService.EMAIL_VERIFICATION);
-        emailService.sendEmailVerification(account.getAccountEmail(), verificationToken);
+        mailDispatcher.dispatch(() ->
+                emailService.sendEmailVerification(account.getAccountEmail(), verificationToken));
         return issue(account, refreshTokenService.issue(account));
     }
 
@@ -113,7 +115,8 @@ public class AuthService {
         accountRepository.findByAccountEmailIgnoreCase(email.trim())
                 .ifPresent(account -> {
                     String token = authTokenService.issue(account, AuthTokenService.PASSWORD_RESET);
-                    emailService.sendPasswordReset(account.getAccountEmail(), token);
+                    mailDispatcher.dispatch(() ->
+                            emailService.sendPasswordReset(account.getAccountEmail(), token));
                 });
     }
 

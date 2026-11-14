@@ -24,6 +24,7 @@ public class ProfileService {
     private final CustomerRepository customerRepository;
     private final AuthTokenService authTokenService;
     private final EmailService emailService;
+    private final AfterCommitMailDispatcher mailDispatcher;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -74,7 +75,8 @@ public class ProfileService {
 
         if (emailChanged) {
             String token = authTokenService.issue(account, AuthTokenService.EMAIL_VERIFICATION);
-            emailService.sendEmailVerification(account.getAccountEmail(), token);
+            mailDispatcher.dispatch(() ->
+                    emailService.sendEmailVerification(account.getAccountEmail(), token));
         }
 
         return toResponse(account, customer);

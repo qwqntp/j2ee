@@ -27,6 +27,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -46,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +63,7 @@ class BookingServiceTest {
     private InvoiceService invoiceService;
     private TravelerRepository travelerRepository;
     private EmailService emailService;
+    private AfterCommitMailDispatcher mailDispatcher;
     private BookingService bookingService;
     private Clock clock;
 
@@ -78,10 +82,11 @@ class BookingServiceTest {
         invoiceService = mock(InvoiceService.class);
         travelerRepository = mock(TravelerRepository.class);
         emailService = mock(EmailService.class);
+        mailDispatcher = new AfterCommitMailDispatcher();
         clock = Clock.fixed(Instant.parse("2026-11-05T03:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
         bookingService = new BookingService(bookingRepository, departureRepository, accountRepository,
                 promotionRepository, paymentRepository, invoiceRepository, invoiceService,
-                travelerRepository, emailService, clock);
+                travelerRepository, emailService, mailDispatcher, clock);
 
         account = new Account();
         account.setAccountId(10L);
@@ -215,6 +220,41 @@ class BookingServiceTest {
     }
 
     @Test
+    void cancellationDefersTheEmailUntilCommit() {
+        booking.setBookingStatus("PENDING");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            bookingService.cancel(30L, principal(10L, "ROLE_USER"));
+
+            verify(emailService, never()).sendBookingCancellation(any(), any());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendBookingCancellation(
+                    "user@example.com", "BK-20261105-0001");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void rolledBackCancellationSendsNoEmail() {
+        booking.setBookingStatus("PENDING");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            bookingService.cancel(30L, principal(10L, "ROLE_USER"));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(
+                            TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            verify(emailService, never()).sendBookingCancellation(any(), any());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     void updateGuestCountRecalculatesSeatsAndTotal() {
         departure.setDepartureBookedSlots(2);
 
@@ -302,6 +342,24 @@ class BookingServiceTest {
 
         verify(emailService).sendBookingConfirmation(
                 "user@example.com", response.bookingCode(), response.totalAmount());
+    }
+
+    @Test
+    void createDefersTheConfirmationEmailUntilCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            var response = bookingService.create(
+                    new CreateBookingRequest(20L, 1, "note"),
+                    principal(10L, "ROLE_USER"));
+
+            verify(emailService, never()).sendBookingConfirmation(any(), any(), any());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendBookingConfirmation(
+                    "user@example.com", response.bookingCode(), response.totalAmount());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

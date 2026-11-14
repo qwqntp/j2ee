@@ -33,7 +33,7 @@ public class EmailService {
 
     @Async
     public void sendPasswordReset(String to, String token) {
-        String link = frontendUrl + "/reset-password?token=" + token;
+        String link = buildLink(frontendUrl, "/reset-password?token=" + token);
         send(to, "Reset your tour password",
                 "Use this link to reset your password:\n"
                         + link
@@ -43,7 +43,7 @@ public class EmailService {
 
     @Async
     public void sendEmailVerification(String to, String token) {
-        String link = frontendUrl + "/verify-email?token=" + token;
+        String link = buildLink(frontendUrl, "/verify-email?token=" + token);
         send(to, "Verify your tour email",
                 "Use this link to verify your email address:\n"
                         + link
@@ -112,5 +112,19 @@ public class EmailService {
         }
         log.warn("No SMTP configured; '{}' was not sent. Dev-only manual link: {}",
                 subject, manualLink);
+    }
+
+    /**
+     * Joins the configured frontend base URL with a route. A trailing slash in
+     * {@code APP_FRONTEND_URL} (one or many) must never produce a {@code //}
+     * path, because the resulting link would not match the frontend route.
+     */
+    static String buildLink(String baseUrl, String path) {
+        String base = baseUrl == null ? "" : baseUrl.trim();
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        String suffix = path.startsWith("/") ? path : "/" + path;
+        return base + suffix;
     }
 }

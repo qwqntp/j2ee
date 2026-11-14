@@ -19,6 +19,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -59,6 +61,8 @@ class AuthServiceTest {
     @Mock
     private EmailService emailService;
 
+    private final AfterCommitMailDispatcher mailDispatcher = new AfterCommitMailDispatcher();
+
     @Mock
     private PasswordEncoder passwordEncoder;
 
@@ -75,6 +79,7 @@ class AuthServiceTest {
                 refreshTokenService,
                 authTokenService,
                 emailService,
+                mailDispatcher,
                 passwordEncoder,
                 jwtService,
                 CLOCK);
@@ -123,6 +128,73 @@ class AuthServiceTest {
         authService.register(new RegisterRequest("new-user", "password123", "new@example.com"));
 
         verify(emailService).sendEmailVerification("new@example.com", "verify-token");
+    }
+
+    @Test
+    void registerDefersTheVerificationEmailUntilCommit() {
+        stubSuccessfulRegistration();
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            authService.register(new RegisterRequest("new-user", "password123", "new@example.com"));
+
+            verifyNoInteractions(emailService);
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendEmailVerification("new@example.com", "verify-token");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void rolledBackRegistrationSendsNoVerificationEmail() {
+        stubSuccessfulRegistration();
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            authService.register(new RegisterRequest("new-user", "password123", "new@example.com"));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(
+                            TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            verifyNoInteractions(emailService);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void forgotPasswordDefersTheResetEmailUntilCommit() {
+        Account account = account();
+        when(accountRepository.findByAccountEmailIgnoreCase("user01@example.com"))
+                .thenReturn(Optional.of(account));
+        when(authTokenService.issue(account, AuthTokenService.PASSWORD_RESET))
+                .thenReturn("reset-token");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            authService.forgotPassword("user01@example.com");
+
+            verifyNoInteractions(emailService);
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendPasswordReset("user01@example.com", "reset-token");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    private void stubSuccessfulRegistration() {
+        AccountRole role = account().getRole();
+        when(accountRepository.existsByUsername("new-user")).thenReturn(false);
+        when(accountRepository.existsByAccountEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(roleRepository.findByRoleName("ROLE_USER")).thenReturn(Optional.of(role));
+        when(passwordEncoder.encode("password123")).thenReturn("hash");
+        when(authTokenService.issue(any(Account.class), eq(AuthTokenService.EMAIL_VERIFICATION)))
+                .thenReturn("verify-token");
+        when(refreshTokenService.issue(any(Account.class))).thenReturn("refresh-1");
+        when(jwtService.issue(any(), eq("new-user"), eq("ROLE_USER"))).thenReturn("access-1");
     }
 
     @Test

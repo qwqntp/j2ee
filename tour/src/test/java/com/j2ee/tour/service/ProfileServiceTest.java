@@ -15,6 +15,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -51,12 +53,14 @@ class ProfileServiceTest {
     @Mock
     private EmailService emailService;
 
+    private final AfterCommitMailDispatcher mailDispatcher = new AfterCommitMailDispatcher();
+
     private ProfileService profileService;
 
     @BeforeEach
     void setUp() {
         profileService = new ProfileService(accountRepository, customerRepository,
-                authTokenService, emailService, CLOCK);
+                authTokenService, emailService, mailDispatcher, CLOCK);
     }
 
     @Test
@@ -145,6 +149,31 @@ class ProfileServiceTest {
         verify(accountRepository).save(account);
         verify(authTokenService).issue(account, AuthTokenService.EMAIL_VERIFICATION);
         verify(emailService).sendEmailVerification("New@Example.com", "verify-token");
+    }
+
+    @Test
+    void changedEmailDefersTheVerificationEmailUntilCommit() {
+        Account account = account();
+        account.setEmailVerified(1);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(customerRepository.findByAccountAccountId(1L)).thenReturn(Optional.of(customer()));
+        when(accountRepository.existsByAccountEmailIgnoreCaseAndAccountIdNot(
+                "New@Example.com", 1L)).thenReturn(false);
+        when(authTokenService.issue(account, AuthTokenService.EMAIL_VERIFICATION))
+                .thenReturn("verify-token");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            profileService.updateProfile(1L, new ProfileRequest(
+                    "Nguyen Van A", " New@Example.com ", null, null, null));
+
+            verifyNoInteractions(emailService);
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(emailService).sendEmailVerification("New@Example.com", "verify-token");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
