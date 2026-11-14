@@ -259,6 +259,17 @@ class PaymentServiceTest {
     }
 
     @Test
+    void createRecordsSuccessfulCashPaymentAndPaysBooking() {
+        var response = paymentService.create(
+                new PaymentCreateRequest(30L, "CASH", null, "SUCCESS"));
+
+        assertEquals("SUCCESS", response.status());
+        assertNotNull(response.paidAt());
+        assertEquals("PAID", booking.getBookingStatus());
+        verify(invoiceService).createForPaidBooking(booking);
+    }
+
+    @Test
     void updateDerivesPaidAtFromServerForSuccessfulPayment() {
         Payment payment = new Payment();
         payment.setPaymentId(50L);

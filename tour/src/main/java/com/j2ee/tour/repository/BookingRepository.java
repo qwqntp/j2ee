@@ -9,12 +9,15 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
     Optional<Booking> findByBookingCode(String bookingCode);
 
     Page<Booking> findByAccountAccountId(Long accountId, Pageable pageable);
+
+    List<Booking> findByDepartureDepartureId(Long departureId);
 
     boolean existsByDepartureDepartureId(Long departureId);
 

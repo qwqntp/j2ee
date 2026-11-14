@@ -98,7 +98,8 @@ class TourCacheTest {
             return new TourService(tourRepository, departureRepository,
                     Clock.fixed(Instant.parse("2026-10-26T00:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh")),
                     accommodationRepository, tourGuideRepository, promotionRepository,
-                    destinationRepository, vehicleRepository, tourImageRepository);
+                    destinationRepository, vehicleRepository, tourImageRepository,
+                    new GuideOverlapValidator(departureRepository, tourGuideRepository));
         }
 
         @Bean

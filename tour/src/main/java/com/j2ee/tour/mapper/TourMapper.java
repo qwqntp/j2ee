@@ -37,6 +37,16 @@ public final class TourMapper {
     }
 
     public static TourResponse toDetail(Tour tour, List<TourDeparture> departures) {
+        return toResponse(tour, departures, firstSegment(tour.getTourDescription()));
+    }
+
+    /** Admin edit view: keeps the full description instead of the first segment. */
+    public static TourResponse toAdminDetail(Tour tour, List<TourDeparture> departures) {
+        return toResponse(tour, departures, tour.getTourDescription());
+    }
+
+    private static TourResponse toResponse(Tour tour, List<TourDeparture> departures,
+                                           String description) {
         Accommodation accommodation = tour.getAccommodation();
         TourGuide guide = tour.getTourGuide();
 
@@ -47,7 +57,7 @@ public final class TourMapper {
         return new TourResponse(
                 tour.getTourId(),
                 tour.getTourName(),
-                firstSegment(tour.getTourDescription()),
+                description,
                 tour.getTourStatus(),
                 accommodation == null ? null : accommodation.getAccommodationName(),
                 accommodation == null ? null : accommodation.getRating(),

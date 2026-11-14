@@ -156,8 +156,9 @@ public class PaymentService {
         payment.setPaymentAmount(booking.getBookingTotalAmount());
         payment.setPaymentMethod(request.paymentMethod());
         payment.setPaymentProviderTxnId(request.providerTxnId());
-        payment.setPaymentStatus("PENDING");
-        payment.setPaymentPaidAt(null);
+        String status = request.status() == null ? "PENDING" : request.status();
+        payment.setPaymentStatus(status);
+        payment.setPaymentPaidAt("SUCCESS".equals(status) ? LocalDateTime.now(clock) : null);
         payment.setPaymentCreatedAt(LocalDateTime.now(clock));
         Payment saved = paymentRepository.save(payment);
         recomputeBookingStatus(booking);

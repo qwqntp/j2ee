@@ -66,7 +66,20 @@ class TourServiceTest {
                 mock(PromotionRepository.class),
                 mock(TouristDestinationRepository.class),
                 mock(TravelVehicleRepository.class),
-                tourImageRepository);
+                tourImageRepository,
+                new GuideOverlapValidator(departureRepository, mock(TourGuideRepository.class)));
+    }
+
+    @Test
+    void adminListKeepsFullDescriptionForEditing() {
+        Tour tour = tour();
+        when(tourRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(tour), PageRequest.of(0, 50), 1));
+
+        PageResponse<TourResponse> page = tourService.list(PageRequest.of(0, 50));
+
+        assertThat(page.content()).hasSize(1);
+        assertThat(page.content().get(0).description()).isEqualTo(tour.getTourDescription());
     }
 
     @Test

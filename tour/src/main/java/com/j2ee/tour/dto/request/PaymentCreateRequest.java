@@ -14,6 +14,12 @@ public record PaymentCreateRequest(
         String paymentMethod,
 
         @Size(max = 128)
-        String providerTxnId
+        String providerTxnId,
+
+        @Pattern(regexp = "PENDING|SUCCESS|FAILED", message = "Payment status must be PENDING, SUCCESS, or FAILED")
+        String status
 ) {
+    public PaymentCreateRequest(Long bookingId, String paymentMethod, String providerTxnId) {
+        this(bookingId, paymentMethod, providerTxnId, null);
+    }
 }

@@ -1,11 +1,15 @@
 import type {
   Account,
+  AdminTour,
   AuthSession,
   Booking,
+  DepartureInput,
   Invoice,
   PageData,
   Payment,
   TourDetail,
+  TourDeparture,
+  TourInput,
   TourSummary,
 } from "./types";
 
@@ -178,4 +182,91 @@ export function completeBooking(token: string, id: number): Promise<Booking> {
 
 export function listMyInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
   return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, { token });
+}
+
+export function listAdminTours(
+  token: string,
+  page = 0,
+  size = 50,
+): Promise<PageData<AdminTour>> {
+  return apiRequest<PageData<AdminTour>>(`/api/admin/tours?page=${page}&size=${size}`, {
+    token,
+  });
+}
+
+export function createAdminTour(token: string, input: TourInput): Promise<AdminTour> {
+  return apiRequest<AdminTour>("/api/admin/tours", { method: "POST", token, body: input });
+}
+
+export function updateAdminTour(
+  token: string,
+  id: number,
+  input: TourInput,
+): Promise<AdminTour> {
+  return apiRequest<AdminTour>(`/api/admin/tours/${id}`, {
+    method: "PUT",
+    token,
+    body: input,
+  });
+}
+
+export function listDepartures(
+  token: string,
+  page = 0,
+  size = 100,
+): Promise<PageData<TourDeparture>> {
+  return apiRequest<PageData<TourDeparture>>(
+    `/api/tour-departures?page=${page}&size=${size}`,
+    { token },
+  );
+}
+
+export function createDeparture(
+  token: string,
+  input: DepartureInput,
+): Promise<TourDeparture> {
+  return apiRequest<TourDeparture>("/api/tour-departures", {
+    method: "POST",
+    token,
+    body: input,
+  });
+}
+
+export function updateDeparture(
+  token: string,
+  id: number,
+  input: DepartureInput,
+): Promise<TourDeparture> {
+  return apiRequest<TourDeparture>(`/api/tour-departures/${id}`, {
+    method: "PUT",
+    token,
+    body: input,
+  });
+}
+
+export function deleteDeparture(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/tour-departures/${id}`, {
+    method: "DELETE",
+    token,
+    allowEmpty: true,
+  });
+}
+
+export function updateBookingStatus(
+  token: string,
+  id: number,
+  status: string,
+): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}`, {
+    method: "PUT",
+    token,
+    body: { status },
+  });
+}
+
+export function createPayment(
+  token: string,
+  input: { bookingId: number; paymentMethod: string; status?: string },
+): Promise<Payment> {
+  return apiRequest<Payment>("/api/payments", { method: "POST", token, body: input });
 }
