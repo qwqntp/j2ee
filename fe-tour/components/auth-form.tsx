@@ -112,7 +112,15 @@ export function AuthForm({ mode }: Props) {
               className="field"
               placeholder="At least 8 characters"
             />
-          </div>
+            </div>
+
+          {!isRegister ? (
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-sm font-medium text-forest hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+          ) : null}
 
           {error ? (
             <p role="alert" className="rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-3 text-sm text-terracotta">

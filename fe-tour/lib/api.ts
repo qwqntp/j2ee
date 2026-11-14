@@ -27,6 +27,7 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -69,9 +70,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const envelope = (await response.json().catch(() => null)) as Envelope<T> | null;
 
     if (!response.ok) {
+      const retryAfter = response.headers.get("Retry-After");
       throw new ApiError(
         response.status,
         envelope?.message || `Request failed (${response.status})`,
+        retryAfter !== null && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null,
       );
     }
 
@@ -231,6 +234,22 @@ export function verifyEmail(token: string): Promise<void> {
   return apiRequest<void>("/api/auth/verify-email", {
     method: "POST",
     body: { token },
+    allowEmpty: true,
+  });
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  await apiRequest<void>("/api/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+    allowEmpty: true,
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await apiRequest<void>("/api/auth/reset-password", {
+    method: "POST",
+    body: { token, newPassword },
     allowEmpty: true,
   });
 }

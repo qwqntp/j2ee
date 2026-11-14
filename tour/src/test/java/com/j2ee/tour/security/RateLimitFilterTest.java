@@ -89,6 +89,81 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void forgotPasswordHasFivePerMinuteLimitAndRetryAfter() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
+        AtomicInteger allowed = new AtomicInteger();
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(authRequest("forgot-password"), response,
+                    (request, servletResponse) -> allowed.incrementAndGet());
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(authRequest("forgot-password"), blocked,
+                (request, servletResponse) -> allowed.incrementAndGet());
+        assertThat(allowed).hasValue(5);
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isEqualTo("30");
+    }
+
+    @Test
+    void resetPasswordHasTenPerMinuteLimitAndRetryAfter() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
+        AtomicInteger allowed = new AtomicInteger();
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(authRequest("reset-password"), response,
+                    (request, servletResponse) -> allowed.incrementAndGet());
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(authRequest("reset-password"), blocked,
+                (request, servletResponse) -> allowed.incrementAndGet());
+        assertThat(allowed).hasValue(10);
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isEqualTo("30");
+    }
+
+    @Test
+    void recoveryBucketsAreIndependentOfEachOtherAndExistingAuthBuckets() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
+        for (int i = 0; i < 10; i++) {
+            filter.doFilter(loginRequest("1.2.3.4"), new MockHttpServletResponse(),
+                    (request, response) -> { });
+        }
+        MockHttpServletResponse registerBlocked = new MockHttpServletResponse();
+        filter.doFilter(authRequest("register"), registerBlocked, (request, response) -> { });
+        assertThat(registerBlocked.getStatus()).isEqualTo(429);
+
+        for (String path : new String[] {"change-password", "forgot-password", "reset-password"}) {
+            MockHttpServletResponse independent = new MockHttpServletResponse();
+            filter.doFilter(authRequest(path), independent, (request, response) -> { });
+            assertThat(independent.getStatus()).as(path).isEqualTo(200);
+        }
+        for (int i = 0; i < 4; i++) {
+            filter.doFilter(authRequest("forgot-password"), new MockHttpServletResponse(),
+                    (request, response) -> { });
+        }
+        MockHttpServletResponse forgotBlocked = new MockHttpServletResponse();
+        filter.doFilter(authRequest("forgot-password"), forgotBlocked, (request, response) -> { });
+        assertThat(forgotBlocked.getStatus()).isEqualTo(429);
+
+        for (String path : new String[] {"change-password", "reset-password"}) {
+            MockHttpServletResponse independent = new MockHttpServletResponse();
+            filter.doFilter(authRequest(path), independent, (request, response) -> { });
+            assertThat(independent.getStatus()).as(path).isEqualTo(200);
+        }
+        MockHttpServletResponse otherIp = new MockHttpServletResponse();
+        MockHttpServletRequest request = authRequest("forgot-password");
+        request.setRemoteAddr("2.3.4.5");
+        filter.doFilter(request, otherIp, (req, response) -> { });
+        assertThat(otherIp.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void doesNotLimitPublicGets() throws Exception {
         RateLimitFilter filter = new RateLimitFilter(
                 new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
@@ -132,6 +207,12 @@ class RateLimitFilterTest {
     private MockHttpServletRequest loginRequest(String remoteAddress) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
         request.setRemoteAddr(remoteAddress);
+        return request;
+    }
+
+    private MockHttpServletRequest authRequest(String action) {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/" + action);
+        request.setRemoteAddr("1.2.3.4");
         return request;
     }
 

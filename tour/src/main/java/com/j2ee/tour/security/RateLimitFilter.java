@@ -37,7 +37,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 ? bucketFor(request.getRequestURI())
                 : null;
         if (bucket != null) {
-            int limit = "refresh".equals(bucket) ? 30 : 10;
+            int limit = "refresh".equals(bucket) ? 30 : "forgot-password".equals(bucket) ? 5 : 10;
             long retryAfter = rateLimiter.acquire(clientIp(request) + "|" + bucket, limit);
             if (retryAfter > 0) {
                 response.setStatus(429);
@@ -57,6 +57,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case "/api/auth/login", "/api/auth/register" -> "credentials";
             case "/api/auth/refresh" -> "refresh";
             case "/api/auth/change-password" -> "change-password";
+            case "/api/auth/forgot-password" -> "forgot-password";
+            case "/api/auth/reset-password" -> "reset-password";
             default -> null;
         };
     }
