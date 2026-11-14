@@ -8,14 +8,19 @@ import com.j2ee.tour.controller.AuthController;
 import com.j2ee.tour.controller.BookingController;
 import com.j2ee.tour.controller.InvoiceController;
 import com.j2ee.tour.controller.MockPaymentController;
+import com.j2ee.tour.controller.ProfileController;
+import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
+import com.j2ee.tour.dto.request.ProfileRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.dto.response.PaymentResponse;
+import com.j2ee.tour.dto.response.ProfileResponse;
 import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AuthService;
 import com.j2ee.tour.service.BookingService;
 import com.j2ee.tour.service.InvoiceService;
 import com.j2ee.tour.service.PaymentService;
+import com.j2ee.tour.service.ProfileService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -24,7 +29,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,16 +42,19 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {AuthController.class, AdminController.class,
-        BookingController.class, InvoiceController.class, MockPaymentController.class})
+        BookingController.class, InvoiceController.class, MockPaymentController.class,
+        ProfileController.class})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -58,6 +68,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private ProfileService profileService;
 
     @MockitoBean
     private AuthCookieService authCookieService;
@@ -242,6 +255,79 @@ class SecurityConfigTest {
                         .header("Authorization", "Bearer user-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isEmpty());
+    }
+
+    @Test
+    void userCanReadOwnProfile() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(profileService.getProfile(1L)).thenReturn(new ProfileResponse(
+                null, "user01", "user01@example.com", 0, null, null, null, null));
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value("user01"))
+                .andExpect(jsonPath("$.data.email").value("user01@example.com"));
+    }
+
+    @Test
+    void profileRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/profile"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void profileUpdateIgnoresUnknownFields() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(profileService.updateProfile(eq(1L), any(ProfileRequest.class)))
+                .thenReturn(new ProfileResponse(7L, "user01", "user01@example.com", 0,
+                        "Nguyen Van A", null, null, null));
+
+        mockMvc.perform(put("/api/profile")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{\"name\":\"Nguyen Van A\",\"accountId\":999}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Nguyen Van A"));
+    }
+
+    @Test
+    void userCanChangePasswordAndReceivesNewRefreshCookie() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(authService.changePassword(eq(1L), any(ChangePasswordRequest.class)))
+                .thenReturn(new AuthService.AuthResult("access-2", "refresh-2", ACCOUNT));
+        when(authCookieService.create("refresh-2")).thenReturn(ResponseCookie
+                .from(AuthCookieService.COOKIE_NAME, "refresh-2")
+                .httpOnly(true).path("/api/auth").build());
+
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{\"currentPassword\":\"old-password\","
+                                + "\"newPassword\":\"new-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("refresh_token=refresh-2")))
+                .andExpect(jsonPath("$.data.accessToken").value("access-2"));
+    }
+
+    @Test
+    void wrongCurrentPasswordReturnsBadRequest() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+        when(authService.changePassword(eq(1L), any(ChangePasswordRequest.class)))
+                .thenThrow(new ApiException(HttpStatus.BAD_REQUEST,
+                        "Current password is incorrect"));
+
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType("application/json")
+                        .content("{\"currentPassword\":\"wrong-password\","
+                                + "\"newPassword\":\"new-password\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Current password is incorrect"));
     }
 
     @Test

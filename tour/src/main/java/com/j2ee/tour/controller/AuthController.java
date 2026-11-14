@@ -2,6 +2,7 @@ package com.j2ee.tour.controller;
 
 import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.OpenApiConfig;
+import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.ForgotPasswordRequest;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
@@ -88,6 +89,18 @@ public class AuthController {
     public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ApiResponse.success("Password reset", null);
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change the current account password",
+            description = "Requires a Bearer access token. Revokes every refresh token, sets a new "
+                    + "refresh cookie, and returns a new access token. Already-issued access tokens stay "
+                    + "valid until their 15-minute expiry. Rate limit: 10 requests per minute per IP.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+    public ResponseEntity<ApiResponse<AuthResponse>> changePassword(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        return withCookie(authService.changePassword(principal.id(), request), HttpStatus.OK);
     }
 
     @PostMapping("/verify-email")

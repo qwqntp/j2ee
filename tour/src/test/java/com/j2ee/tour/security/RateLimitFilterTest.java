@@ -61,6 +61,34 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void changePasswordHasItsOwnBucketWithTenPerMinuteLimit() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
+        AtomicInteger chainCalls = new AtomicInteger();
+
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(changePasswordRequest("1.2.3.4"), response,
+                    (request, servletResponse) -> chainCalls.incrementAndGet());
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+
+        // The credentials bucket is untouched, so login from the same IP still passes.
+        MockHttpServletResponse login = new MockHttpServletResponse();
+        filter.doFilter(loginRequest("1.2.3.4"), login,
+                (request, servletResponse) -> chainCalls.incrementAndGet());
+        assertThat(login.getStatus()).isEqualTo(200);
+
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(changePasswordRequest("1.2.3.4"), blocked,
+                (request, servletResponse) -> chainCalls.incrementAndGet());
+
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isNotBlank();
+        assertThat(chainCalls).hasValue(11);
+    }
+
+    @Test
     void doesNotLimitPublicGets() throws Exception {
         RateLimitFilter filter = new RateLimitFilter(
                 new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
@@ -103,6 +131,13 @@ class RateLimitFilterTest {
 
     private MockHttpServletRequest loginRequest(String remoteAddress) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr(remoteAddress);
+        return request;
+    }
+
+    private MockHttpServletRequest changePasswordRequest(String remoteAddress) {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/auth/change-password");
         request.setRemoteAddr(remoteAddress);
         return request;
     }

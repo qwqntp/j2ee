@@ -2,6 +2,7 @@ package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
@@ -28,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -72,9 +74,11 @@ class TourServiceTest {
     @Test
     void listToursMapsSummaryAndStats() {
         Tour tour = tour();
-        Page<Tour> page = new PageImpl<>(List.of(tour), PageRequest.of(0, 12), 1);
+        Page<Long> idPage = new PageImpl<>(List.of(1L), PageRequest.of(0, 12), 1);
         TourStatsProjection stats = stats();
-        when(tourRepository.findByTourStatus(eq("OPEN"), any(Pageable.class))).thenReturn(page);
+        when(tourRepository.searchTourIds(any(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(idPage);
+        when(tourRepository.findAllById(List.of(1L))).thenReturn(List.of(tour));
         when(departureRepository.findStatsByTourIds(anyCollection(), any(LocalDateTime.class)))
                 .thenReturn(List.of(stats));
         TourImageRepository.TourImageProjection image = mock(TourImageRepository.TourImageProjection.class);
@@ -82,7 +86,7 @@ class TourServiceTest {
         when(image.getImageUrl()).thenReturn("https://img/1.jpg");
         when(tourImageRepository.findImageUrlsByTourIds(anyCollection())).thenReturn(List.of(image));
 
-        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, null);
+        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, criteria(null));
 
         assertThat(result.content()).hasSize(1);
         TourSummaryResponse summary = result.content().getFirst();
@@ -98,32 +102,66 @@ class TourServiceTest {
 
     @Test
     void listToursSanitizesSearchWildcards() {
-        Page<Tour> empty = new PageImpl<>(List.of(), PageRequest.of(0, 12), 0);
-        when(tourRepository.findByTourStatusAndTourNameContainingIgnoreCase(
-                eq("OPEN"), eq("DaNang"), any(Pageable.class))).thenReturn(empty);
+        Page<Long> empty = new PageImpl<>(List.of(), PageRequest.of(0, 12), 0);
+        when(tourRepository.searchTourIds(any(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(empty);
 
-        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, "  Da%Nang_ ");
+        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, criteria("  Da%Nang_ "));
 
         assertThat(result.content()).isEmpty();
-        verify(tourRepository).findByTourStatusAndTourNameContainingIgnoreCase(
-                eq("OPEN"), eq("DaNang"), any(Pageable.class));
+        verify(tourRepository).searchTourIds(
+                eq(new TourSearchCriteria("DaNang", null, null, null, null, null, null, null,
+                        TourSearchCriteria.Sort.DEFAULT)),
+                eq(NOW), any(Pageable.class));
         verify(departureRepository, never()).findStatsByTourIds(anyCollection(), any(LocalDateTime.class));
     }
 
     @Test
     void listToursUsesDefaultsWhenNoUpcomingDeparturesExist() {
-        Page<Tour> page = new PageImpl<>(List.of(tour()), PageRequest.of(0, 12), 1);
-        when(tourRepository.findByTourStatus(eq("OPEN"), any(Pageable.class))).thenReturn(page);
+        Page<Long> idPage = new PageImpl<>(List.of(1L), PageRequest.of(0, 12), 1);
+        when(tourRepository.searchTourIds(any(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(idPage);
+        when(tourRepository.findAllById(List.of(1L))).thenReturn(List.of(tour()));
         when(departureRepository.findStatsByTourIds(anyCollection(), any(LocalDateTime.class)))
                 .thenReturn(List.of());
 
-        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, null);
+        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, criteria(null));
 
         TourSummaryResponse summary = result.content().getFirst();
         assertThat(summary.priceFrom()).isNull();
         assertThat(summary.nextDepartureDate()).isNull();
         assertThat(summary.seatsAvailable()).isZero();
         assertThat(summary.departureCount()).isZero();
+    }
+
+    @Test
+    void listToursRejectsInvertedPriceRange() {
+        assertThatThrownBy(() -> tourService.listTours(0, 12,
+                new TourSearchCriteria(null, null, new BigDecimal("10"),
+                        new BigDecimal("5"), null, null, null, null, TourSearchCriteria.Sort.DEFAULT)))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("minPrice must be less than or equal to maxPrice")
+                .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
+                        .isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void listToursRejectsInvertedDateRange() {
+        assertThatThrownBy(() -> tourService.listTours(0, 12,
+                new TourSearchCriteria(null, null, null, null,
+                        LocalDate.of(2026, 12, 2), LocalDate.of(2026, 12, 1),
+                        null, null, TourSearchCriteria.Sort.DEFAULT)))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("startFrom must be on or before startTo");
+    }
+
+    @Test
+    void listToursRejectsInvertedDurationRange() {
+        assertThatThrownBy(() -> tourService.listTours(0, 12,
+                new TourSearchCriteria(null, null, null, null, null, null,
+                        5, 2, TourSearchCriteria.Sort.DEFAULT)))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("minDays must be less than or equal to maxDays");
     }
 
     @Test
@@ -187,6 +225,11 @@ class TourServiceTest {
                         .isEqualTo(HttpStatus.NOT_FOUND));
     }
 
+    private TourSearchCriteria criteria(String keyword) {
+        return new TourSearchCriteria(keyword, null, null, null, null, null, null, null,
+                TourSearchCriteria.Sort.DEFAULT);
+    }
+
     private Tour tour() {
         Tour tour = new Tour();
         tour.setTourId(1L);
@@ -214,8 +257,7 @@ class TourServiceTest {
         return departure;
     }
 
-    private TourStatsProjection stats() {
-        TourStatsProjection stats = mock(TourStatsProjection.class);
+    private TourStatsProjection stats() {        TourStatsProjection stats = mock(TourStatsProjection.class);
         when(stats.getTourId()).thenReturn(1L);
         when(stats.getPriceFrom()).thenReturn(new BigDecimal("4500000"));
         when(stats.getNextDepartureDate()).thenReturn(LocalDateTime.of(2026, 11, 1, 8, 0));

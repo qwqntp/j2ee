@@ -1,6 +1,7 @@
 package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
+import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
 import com.j2ee.tour.dto.request.ResetPasswordRequest;
@@ -131,9 +132,37 @@ public class AuthService {
         refreshTokenService.revokeAllForAccount(account.getAccountId());
     }
 
+    /**
+     * Wrong current passwords are 400, not 401: the frontend treats 401 as an expired session.
+     * All refresh tokens are revoked and a fresh one is returned; already-issued access tokens
+     * stay valid until their normal 15-minute expiry.
+     */
     @Transactional
-    public void verifyEmail(VerifyEmailRequest request) {
-        AuthToken token = authTokenService.consume(
+    public AuthResult changePassword(Long accountId, ChangePasswordRequest request) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account not found"));
+        if (request.currentPassword().getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES
+                || !passwordEncoder.matches(request.currentPassword(), account.getPassword())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+        }
+        if (request.newPassword().getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Password must be at most 72 bytes");
+        }
+        if (passwordEncoder.matches(request.newPassword(), account.getPassword())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "New password must be different from the current password");
+        }
+
+        account.setPassword(passwordEncoder.encode(request.newPassword()));
+        account.setAccountUpdatedAt(LocalDateTime.now(clock));
+        accountRepository.save(account);
+        refreshTokenService.revokeAllForAccount(accountId);
+        return issue(account, refreshTokenService.issue(account));
+    }
+
+    @Transactional
+    public void verifyEmail(VerifyEmailRequest request) {        AuthToken token = authTokenService.consume(
                 request.token(), AuthTokenService.EMAIL_VERIFICATION);
         Account account = token.getAccount();
         account.setEmailVerified(1);
