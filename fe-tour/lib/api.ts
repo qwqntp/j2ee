@@ -1,13 +1,17 @@
 import type {
   Account,
+  AdminTour,
   AuthSession,
   Booking,
+  DepartureInput,
   Invoice,
   PageData,
   Payment,
   Profile,
   TourDestinationOption,
   TourDetail,
+  TourDeparture,
+  TourInput,
   TourSummary,
 } from "./types";
 import { buildTourApiQuery, type TourFilters } from "./tour-filters";
@@ -194,39 +198,4 @@ export function completeBooking(token: string, id: number): Promise<Booking> {
 
 export function listMyInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
   return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, { token });
-}
-
-export type ProfileInput = {
-  name: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  dateOfBirth?: string;
-};
-
-export function getProfile(token: string): Promise<Profile> {
-  return apiRequest<Profile>("/api/profile", { token });
-}
-
-export function updateProfile(token: string, input: ProfileInput): Promise<Profile> {
-  return apiRequest<Profile>("/api/profile", { method: "PUT", token, body: input });
-}
-
-export function changePassword(
-  token: string,
-  input: { currentPassword: string; newPassword: string },
-): Promise<AuthSession> {
-  return apiRequest<AuthSession>("/api/auth/change-password", {
-    method: "POST",
-    token,
-    body: input,
-  });
-}
-
-export function verifyEmail(token: string): Promise<void> {
-  return apiRequest<void>("/api/auth/verify-email", {
-    method: "POST",
-    body: { token },
-    allowEmpty: true,
-  });
 }

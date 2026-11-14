@@ -129,6 +129,38 @@ export type Invoice = {
   promotionIds: number[];
 };
 
+export type AdminTour = TourDetail & {
+  durationDays: number | null;
+  accommodationId: number | null;
+  tourGuideId: number | null;
+  promotionId: number | null;
+  destinationIds: number[];
+  vehicleIds: number[];
+};
+
+export type TourInput = {
+  name: string;
+  description?: string;
+  durationDays?: number;
+  status: string;
+  imageUrls: string[];
+  accommodationId?: number;
+  tourGuideId?: number;
+  promotionId?: number;
+  destinationIds?: number[];
+  vehicleIds?: number[];
+};
+
+export type DepartureInput = {
+  tourId: number;
+  startDate: string;
+  endDate: string;
+  capacity: number;
+  price: number;
+  meetingPoint?: string;
+  status?: string;
+};
+
 export type Booking = {
   id: number;
   bookingCode: string;

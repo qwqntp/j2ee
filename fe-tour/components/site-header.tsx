@@ -105,6 +105,16 @@ export function SiteHeader() {
                   Profile
                   <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                 </Link>
+                {account.roleName === "ROLE_ADMIN" ? (
+                  <Link
+                    href="/admin"
+                    onClick={() => accountMenu.current?.removeAttribute("open")}
+                    className="flex min-h-11 items-center gap-2 border-t border-line px-3 pt-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                  >
+                    Admin console
+                    <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                  </Link>
+                ) : null}
                 <div className="border-t border-line pt-2">
                   <button
                     type="button"
@@ -192,6 +202,15 @@ export function SiteHeader() {
                       Profile
                       <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                     </Link>
+                    {account.roleName === "ROLE_ADMIN" ? (
+                      <Link
+                        href="/admin"
+                        className="flex min-h-11 items-center gap-2 rounded-[2px] px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
+                      >
+                        Admin console
+                        <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={handleSignOut}

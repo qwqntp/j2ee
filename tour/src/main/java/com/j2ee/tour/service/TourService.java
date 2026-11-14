@@ -11,6 +11,7 @@ import com.j2ee.tour.dto.response.TourSummaryResponse;
 import com.j2ee.tour.mapper.TourMapper;
 import com.j2ee.tour.model.Tour;
 import com.j2ee.tour.model.TourDeparture;
+import com.j2ee.tour.model.TourGuide;
 import com.j2ee.tour.model.TourImage;
 import com.j2ee.tour.model.TouristDestination;
 import com.j2ee.tour.model.TravelVehicle;
@@ -54,6 +55,7 @@ public class TourService {
     private final Clock clock;
     private final AccommodationRepository accommodationRepository;
     private final TourGuideRepository tourGuideRepository;
+    private final GuideOverlapValidator overlapValidator;
     private final PromotionRepository promotionRepository;
     private final TouristDestinationRepository destinationRepository;
     private final TravelVehicleRepository vehicleRepository;
@@ -67,7 +69,8 @@ public class TourService {
                        PromotionRepository promotionRepository,
                        TouristDestinationRepository destinationRepository,
                        TravelVehicleRepository vehicleRepository,
-                       TourImageRepository tourImageRepository) {
+                       TourImageRepository tourImageRepository,
+                       GuideOverlapValidator overlapValidator) {
         this.tourRepository = tourRepository;
         this.departureRepository = departureRepository;
         this.clock = clock;
@@ -77,6 +80,7 @@ public class TourService {
         this.destinationRepository = destinationRepository;
         this.vehicleRepository = vehicleRepository;
         this.tourImageRepository = tourImageRepository;
+        this.overlapValidator = overlapValidator;
     }
 
     /**
@@ -192,7 +196,9 @@ public class TourService {
     }
 
     public PageResponse<TourResponse> list(Pageable pageable) {
-        return PageResponse.from(tourRepository.findAll(pageable), TourResponse::from);
+        return PageResponse.from(tourRepository.findAll(pageable),
+                tour -> TourMapper.toAdminDetail(tour,
+                        tour.getDepartures() == null ? List.of() : tour.getDepartures()));
     }
 
     public TourResponse get(Long id) {
@@ -213,6 +219,7 @@ public class TourService {
     @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourResponse update(Long id, TourRequest request) {
         Tour tour = find(id);
+        assertGuideChangeSafe(tour, request);
         apply(tour, request);
         Tour saved = tourRepository.save(tour);
         syncImages(saved, request.imageUrls());
@@ -232,6 +239,32 @@ public class TourService {
         tour.getVehicles().clear();
         tourRepository.save(tour);
         tourRepository.delete(tour);
+    }
+
+    /**
+     * Assigning/reassigning a guide affects every live departure of the tour.
+     * Validates BEFORE mutating the tour: running it after apply() would let
+     * the dirty-checked guide assignment flush early inside the JPQL query and
+     * surface a raw trigger exception instead of a friendly 409. An unchanged
+     * guide re-submission is a no-op.
+     */
+    private void assertGuideChangeSafe(Tour tour, TourRequest request) {
+        Long candidateId = request.tourGuideId();
+        if (candidateId == null) {
+            return;
+        }
+        TourGuide current = tour.getTourGuide();
+        if (current != null && candidateId.equals(current.getTourGuideId())) {
+            return;
+        }
+        for (TourDeparture departure : departureRepository
+                .findByTourTourIdAndDepartureStatusNot(tour.getTourId(), "CANCELLED")) {
+            overlapValidator.assertGuideAvailable(
+                    candidateId,
+                    departure.getDepartureStartDate(),
+                    departure.getDepartureEndDate(),
+                    departure.getDepartureId());
+        }
     }
 
     private List<TourDeparture> upcomingDepartures(Long tourId) {

@@ -36,6 +36,21 @@ public interface TourDepartureRepository extends JpaRepository<TourDeparture, Lo
 
     boolean existsByTourTourId(Long tourId);
 
+    List<TourDeparture> findByTourTourIdAndDepartureStatusNot(Long tourId, String departureStatus);
+
+    @Query("""
+            select count(d) from TourDeparture d
+            where d.tour.tourGuide.tourGuideId = :guideId
+              and d.departureStatus <> 'CANCELLED'
+              and d.departureStartDate < :end
+              and d.departureEndDate > :start
+              and (:excludeId is null or d.departureId <> :excludeId)
+            """)
+    long countGuideOverlap(@Param("guideId") Long guideId,
+                           @Param("start") LocalDateTime start,
+                           @Param("end") LocalDateTime end,
+                           @Param("excludeId") Long excludeId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select departure from TourDeparture departure where departure.departureId = :id")
     Optional<TourDeparture> findByIdForUpdate(@Param("id") Long id);

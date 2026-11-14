@@ -58,6 +58,34 @@ public class RefundService {
         return RefundResponse.from(refundRepository.save(refund));
     }
 
+    /**
+     * Reserves a refund for whatever is still refundable on a successful payment.
+     * Used by the departure-cancel cascade; a no-op when the payment is not
+     * refundable or already fully reserved.
+     */
+    @Transactional
+    public void requestRemaining(Long paymentId, String reason) {
+        var payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new NoSuchElementException("Payment not found"));
+        if (!"SUCCESS".equals(payment.getPaymentStatus())) {
+            return;
+        }
+        var remaining = payment.getPaymentAmount()
+                .subtract(refundRepository.sumReservedRefunds(paymentId));
+        if (remaining.signum() <= 0) {
+            return;
+        }
+
+        Refund refund = new Refund();
+        refund.setPayment(payment);
+        refund.setBooking(payment.getBooking());
+        refund.setRefundAmount(remaining);
+        refund.setRefundReason(reason);
+        refund.setRefundStatus("REQUESTED");
+        refund.setRefundRequestedAt(LocalDateTime.now());
+        refundRepository.save(refund);
+    }
+
     @Transactional
     public RefundResponse update(Long id, RefundUpdateRequest request) {
         Refund refund = find(id);
