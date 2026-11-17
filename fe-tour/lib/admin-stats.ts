@@ -7,6 +7,10 @@ export type DashboardCard = {
   tone: "forest" | "terracotta" | "charcoal";
 };
 
+export function shouldShowSignIn(stats: AdminStats | null, error: string | null): boolean {
+  return !stats && !error;
+}
+
 export function buildDashboardCards(stats: AdminStats): DashboardCard[] {
   return [
     { label: "Open tours", value: String(stats.openTours), tone: "forest" },

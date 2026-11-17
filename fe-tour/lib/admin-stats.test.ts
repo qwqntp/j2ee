@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { buildDashboardCards } from "./admin-stats";
+import { buildDashboardCards, shouldShowSignIn } from "./admin-stats";
 import type { AdminStats } from "./types";
 
 const stats: AdminStats = {
@@ -22,4 +22,10 @@ it("builds seven dashboard cards with exact labels", () => {
     "Open tours", "Pending bookings", "Revenue (SUCCESS)", "Avg. successful payment",
     "Upcoming departures", "At-risk capacity", "Sold out",
   ]);
+});
+
+it("shows sign-in only when stats are absent without an error", () => {
+  expect(shouldShowSignIn(null, null)).toBe(true);
+  expect(shouldShowSignIn(null, "Service unavailable")).toBe(false);
+  expect(shouldShowSignIn(stats, null)).toBe(false);
 });

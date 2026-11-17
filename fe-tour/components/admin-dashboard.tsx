@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildDashboardCards, type DashboardCard } from "@/lib/admin-stats";
+import { buildDashboardCards, shouldShowSignIn, type DashboardCard } from "@/lib/admin-stats";
 import { ApiError, getAdminStats } from "@/lib/api";
 import { ensureSession } from "@/lib/auth";
 import { statusLabel } from "@/lib/bookings";
@@ -50,16 +50,36 @@ export function AdminDashboard() {
     };
   }, [reloadKey]);
 
+  const errorPanel = error ? (
+    <div
+      role="alert"
+      className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4"
+    >
+      <p className="text-sm text-terracotta">{error}</p>
+      <button
+        type="button"
+        onClick={() => setReloadKey((key) => key + 1)}
+        className="btn-secondary mt-3 min-h-0 px-4 py-2 text-xs"
+      >
+        Retry
+      </button>
+    </div>
+  ) : null;
+
   if (loading && !stats) {
     return <p className="text-sm text-muted">Loading dashboard…</p>;
   }
 
-  if (!stats) {
+  if (shouldShowSignIn(stats, error)) {
     return (
       <div className="rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
         Sign in to view dashboard statistics.
       </div>
     );
+  }
+
+  if (!stats) {
+    return errorPanel;
   }
 
   const cards = buildDashboardCards(stats);
@@ -72,21 +92,7 @@ export function AdminDashboard() {
         <p className="mt-1 text-sm text-muted">Generated {formatDate(stats.generatedAt)}</p>
       </div>
 
-      {error ? (
-        <div
-          role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4"
-        >
-          <p className="text-sm text-terracotta">{error}</p>
-          <button
-            type="button"
-            onClick={() => setReloadKey((key) => key + 1)}
-            className="btn-secondary mt-3 min-h-0 px-4 py-2 text-xs"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
+      {errorPanel}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
