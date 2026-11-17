@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 @Service
 public class AccountService {
@@ -59,13 +61,25 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse update(Long id, AccountUpdateRequest request) {
+    public AccountResponse update(Long id, AccountUpdateRequest request, Long actorAccountId) {
         Account account = find(id);
         accountRepository.findByUsername(request.username())
                 .filter(existing -> !existing.getAccountId().equals(id))
                 .ifPresent(existing -> {
                     throw new IllegalStateException("Username is already in use");
                 });
+        AccountRole requestedRole = resolveRole(request.roleId());
+        boolean targetWasActiveAdmin = Objects.equals(account.getStatus(), 1)
+                && account.getRole() != null
+                && "ROLE_ADMIN".equals(account.getRole().getRoleName());
+        boolean removingAdmin = !"ROLE_ADMIN".equals(requestedRole.getRoleName())
+                || !Objects.equals(request.status(), 1);
+        if (targetWasActiveAdmin && removingAdmin) {
+            List<Account> activeAdmins = accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1);
+            if (activeAdmins.size() <= 1) {
+                throw new IllegalStateException("Cannot remove the last active administrator");
+            }
+        }
         account.setUsername(request.username());
         if (request.password() != null && !request.password().isBlank()) {
             account.setPassword(passwordEncoder.encode(request.password()));
@@ -73,7 +87,7 @@ public class AccountService {
         account.setAccountEmail(request.email());
         account.setEmailVerified(request.emailVerified());
         account.setStatus(request.status());
-        account.setRole(resolveRole(request.roleId()));
+        account.setRole(requestedRole);
         account.setAccountUpdatedAt(LocalDateTime.now());
         return AccountResponse.from(accountRepository.save(account));
     }

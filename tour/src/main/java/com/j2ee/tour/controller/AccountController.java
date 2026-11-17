@@ -5,11 +5,13 @@ import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.AccountCreateRequest;
 import com.j2ee.tour.dto.request.AccountUpdateRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
+import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,8 +49,9 @@ public class AccountController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<AccountResponse>> update(
             @PathVariable Long id,
-            @Valid @RequestBody AccountUpdateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(accountService.update(id, request)));
+            @Valid @RequestBody AccountUpdateRequest request,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(accountService.update(id, request, principal.id())));
     }
 
     @DeleteMapping("/{id}")
