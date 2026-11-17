@@ -1,7 +1,9 @@
 package com.j2ee.tour.controller;
 
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.dto.request.AdminBookingFilter;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.BookingResponse;
@@ -10,6 +12,7 @@ import com.j2ee.tour.service.BookingService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,7 +23,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -34,8 +40,18 @@ public class BookingController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<BookingResponse>>> list(
             Pageable pageable,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String q,
             @AuthenticationPrincipal AuthPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.success(bookingService.list(pageable, principal)));
+        if (pageable.getPageSize() > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "size must be between 1 and 100");
+        }
+        AdminBookingFilter filter = new AdminBookingFilter(status, from, to, q);
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.list(pageable, principal, filter)));
     }
 
     @GetMapping("/{id}")

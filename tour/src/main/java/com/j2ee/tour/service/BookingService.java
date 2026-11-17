@@ -2,6 +2,7 @@ package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.dto.request.AdminBookingFilter;
 import com.j2ee.tour.dto.request.BookingTravelerRequest;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
@@ -13,6 +14,7 @@ import com.j2ee.tour.model.TourDeparture;
 import com.j2ee.tour.model.Traveler;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.BookingRepository;
+import com.j2ee.tour.repository.BookingSpecifications;
 import com.j2ee.tour.repository.InvoiceRepository;
 import com.j2ee.tour.repository.PaymentRepository;
 import com.j2ee.tour.repository.PromotionRepository;
@@ -24,6 +26,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -82,14 +85,29 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public PageResponse<BookingResponse> list(Pageable pageable, AuthPrincipal principal) {
+        return list(pageable, principal, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<BookingResponse> list(Pageable pageable, AuthPrincipal principal,
+                                              AdminBookingFilter filter) {
         Pageable effective = pageable.getSort().isSorted()
                 ? pageable
                 : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "bookingCreatedAt")
                                 .and(Sort.by(Sort.Direction.DESC, "bookingId")));
-        Page<Booking> bookings = isAdmin(principal)
-                ? bookingRepository.findAll(effective)
-                : bookingRepository.findByAccountAccountId(principal.id(), effective);
+        Page<Booking> bookings;
+        if (filter == null) {
+            bookings = isAdmin(principal)
+                    ? bookingRepository.findAll(effective)
+                    : bookingRepository.findByAccountAccountId(principal.id(), effective);
+        } else {
+            Specification<Booking> spec = BookingSpecifications.from(filter);
+            if (!isAdmin(principal)) {
+                spec = spec.and(BookingSpecifications.ownedBy(principal.id()));
+            }
+            bookings = bookingRepository.findAll(spec, effective);
+        }
         return PageResponse.from(bookings, BookingResponse::from);
     }
 

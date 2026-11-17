@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -56,6 +58,18 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public PaymentResponse get(Long id) {
         return PaymentResponse.from(find(id));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> findByBooking(Long bookingId) {
+        return paymentRepository.findByBookingBookingId(bookingId).stream()
+                .sorted(Comparator
+                        .comparing(Payment::getPaymentCreatedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(Payment::getPaymentId,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(PaymentResponse::from)
+                .toList();
     }
 
     @Transactional

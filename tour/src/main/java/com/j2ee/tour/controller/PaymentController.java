@@ -8,11 +8,14 @@ import com.j2ee.tour.service.PaymentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/bookings/{bookingId}/payments")
@@ -21,6 +24,11 @@ public class PaymentController {
 
     public PaymentController(PaymentService paymentService) {
         this.paymentService = paymentService;
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> payments(@PathVariable Long bookingId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.findByBooking(bookingId)));
     }
 
     @PostMapping("/callback")

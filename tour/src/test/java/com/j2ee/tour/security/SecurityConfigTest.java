@@ -352,4 +352,20 @@ class SecurityConfigTest {
         mockMvc.perform(get("/api/tours"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void userCannotReadBookingPaymentHistory() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/bookings/42/payments")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anonymousCannotReadBookingPaymentHistory() throws Exception {
+        mockMvc.perform(get("/api/bookings/42/payments"))
+                .andExpect(status().isUnauthorized());
+    }
 }

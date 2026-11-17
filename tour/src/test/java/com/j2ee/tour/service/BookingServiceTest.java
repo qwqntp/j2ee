@@ -1,6 +1,7 @@
 package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
+import com.j2ee.tour.dto.request.AdminBookingFilter;
 import com.j2ee.tour.dto.request.BookingTravelerRequest;
 import com.j2ee.tour.dto.request.BookingUpdateRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
@@ -13,6 +14,7 @@ import com.j2ee.tour.model.TourImage;
 import com.j2ee.tour.model.Traveler;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.BookingRepository;
+import com.j2ee.tour.repository.BookingSpecifications;
 import com.j2ee.tour.repository.InvoiceRepository;
 import com.j2ee.tour.repository.PaymentRepository;
 import com.j2ee.tour.repository.PromotionRepository;
@@ -22,10 +24,15 @@ import com.j2ee.tour.security.AuthPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -46,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -608,5 +616,86 @@ class BookingServiceTest {
         var response = bookingService.get(30L, principal(10L, "ROLE_USER"));
 
         assertNull(response.tour());
+    }
+
+    @Test
+    void invalidBookingStatusReturnsBadRequest() {
+        ApiException exception = assertThrows(ApiException.class,
+                () -> bookingService.list(PageRequest.of(0, 20), principal(99L, "ROLE_ADMIN"),
+                        new AdminBookingFilter("BOGUS", null, null, null)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("Invalid booking status", exception.getMessage());
+    }
+
+    @Test
+    void reversedDateRangeReturnsBadRequest() {
+        ApiException exception = assertThrows(ApiException.class,
+                () -> bookingService.list(PageRequest.of(0, 20), principal(99L, "ROLE_ADMIN"),
+                        new AdminBookingFilter(null, LocalDate.of(2026, 11, 20),
+                                LocalDate.of(2026, 11, 1), null)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("from must be on or before to", exception.getMessage());
+    }
+
+    @Test
+    void adminListWithFilterUsesSpecification() {
+        stubSpecificationPage();
+
+        var response = bookingService.list(PageRequest.of(0, 20), principal(99L, "ROLE_ADMIN"),
+                new AdminBookingFilter("PENDING", null, null, "hoi an"));
+
+        assertEquals(1, response.content().size());
+        verify(bookingRepository).findAll(anySpecification(), any(Pageable.class));
+        verify(bookingRepository, never()).findByAccountAccountId(anyLong(), any(Pageable.class));
+    }
+
+    @Test
+    void nonAdminListWithFilterStaysAccountScoped() {
+        stubSpecificationPage();
+
+        bookingService.list(PageRequest.of(0, 20), principal(10L, "ROLE_USER"),
+                new AdminBookingFilter(null, null, null, null));
+
+        verify(bookingRepository, never()).findByAccountAccountId(anyLong(), any(Pageable.class));
+        ArgumentCaptor<Specification<Booking>> captor = specificationCaptor();
+        verify(bookingRepository).findAll(captor.capture(), any(Pageable.class));
+        assertOwnerScope(captor.getValue(), 10L);
+    }
+
+    @Test
+    void ownedBySpecificationScopesToAccount() {
+        assertOwnerScope(BookingSpecifications.ownedBy(10L), 10L);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Specification<Booking> anySpecification() {
+        return any(Specification.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private ArgumentCaptor<Specification<Booking>> specificationCaptor() {
+        return ArgumentCaptor.forClass((Class) Specification.class);
+    }
+
+    private void stubSpecificationPage() {
+        when(bookingRepository.findAll(anySpecification(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(booking)));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void assertOwnerScope(Specification<Booking> spec, Long accountId) {
+        Root<Booking> root = mock(Root.class);
+        CriteriaQuery<Booking> query = mock(CriteriaQuery.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        Path accountPath = mock(Path.class);
+        Path accountIdPath = mock(Path.class);
+        when(root.get("account")).thenReturn(accountPath);
+        when(accountPath.get("accountId")).thenReturn(accountIdPath);
+
+        spec.toPredicate(root, query, cb);
+
+        verify(cb).equal(accountIdPath, accountId);
     }
 }
