@@ -85,9 +85,11 @@ const FIELDS: Record<CatalogResource, Field[]> = {
 
 const CONFLICT_MESSAGE = "This record is referenced elsewhere and cannot be deleted.";
 
-function displayError(error: unknown, fallback: string): string {
+function displayError(error: unknown, fallback: string, deletion = false): string {
   if (error instanceof ApiError) {
-    return error.status === 409 ? `${error.message} ${CONFLICT_MESSAGE}` : error.message;
+    return error.status === 409 && deletion
+      ? `${error.message} ${CONFLICT_MESSAGE}`
+      : error.message;
   }
   return fallback;
 }
@@ -298,7 +300,7 @@ export function AdminCatalog() {
       setNotice("Deleted.");
       setReloadKey((key) => key + 1);
     } catch (err) {
-      setError(displayError(err, "Could not delete the record."));
+      setError(displayError(err, "Could not delete the record.", true));
     }
   }
 
@@ -341,7 +343,10 @@ export function AdminCatalog() {
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest">
+        <p
+          role="status"
+          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+        >
           {notice}
         </p>
       ) : null}

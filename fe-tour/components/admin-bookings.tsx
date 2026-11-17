@@ -46,7 +46,7 @@ export function AdminBookings() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payments, setPayments] = useState<Record<number, Payment[]>>({});
   const [paymentsLoadingId, setPaymentsLoadingId] = useState<number | null>(null);
-  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [paymentsError, setPaymentsError] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,19 +114,38 @@ export function AdminBookings() {
   async function loadPayments(bookingId: number) {
     if (payments[bookingId]) return;
     setPaymentsLoadingId(bookingId);
-    setPaymentsError(null);
+    setPaymentsError((current) => {
+      const next = { ...current };
+      delete next[bookingId];
+      return next;
+    });
     try {
       const session = await ensureSession();
       if (!session) return;
       const result = await listBookingPayments(session.accessToken, bookingId);
       setPayments((current) => ({ ...current, [bookingId]: result }));
     } catch (err) {
-      setPaymentsError(
-        err instanceof ApiError ? err.message : "Could not load payments. Try again.",
-      );
+      setPaymentsError((current) => ({
+        ...current,
+        [bookingId]:
+          err instanceof ApiError ? err.message : "Could not load payments. Try again.",
+      }));
     } finally {
       setPaymentsLoadingId(null);
     }
+  }
+
+  function invalidatePayments(bookingId: number) {
+    setPayments((current) => {
+      const next = { ...current };
+      delete next[bookingId];
+      return next;
+    });
+    setPaymentsError((current) => {
+      const next = { ...current };
+      delete next[bookingId];
+      return next;
+    });
   }
 
   async function run(
@@ -141,6 +160,7 @@ export function AdminBookings() {
       const session = await ensureSession();
       if (!session) return;
       await action(session.accessToken);
+      invalidatePayments(booking.id);
       setNotice(message);
       setReloadKey((key) => key + 1);
     } catch (err) {
@@ -286,13 +306,11 @@ export function AdminBookings() {
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest">
+        <p
+          role="status"
+          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+        >
           {notice}
-        </p>
-      ) : null}
-      {paymentsError ? (
-        <p role="alert" className="mt-4 text-sm text-terracotta">
-          {paymentsError}
         </p>
       ) : null}
 
@@ -498,6 +516,11 @@ export function AdminBookings() {
                                 {paymentsLoadingId === booking.id ? "Loading…" : "Load payments"}
                               </button>
                             </div>
+                            {paymentsError[booking.id] ? (
+                              <p role="alert" className="mt-2 text-sm text-terracotta">
+                                {paymentsError[booking.id]}
+                              </p>
+                            ) : null}
                             {payments[booking.id] ? (
                               payments[booking.id].length === 0 ? (
                                 <p className="mt-2 text-sm text-muted">No payments recorded.</p>

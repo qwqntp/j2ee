@@ -55,6 +55,8 @@ export function AdminAccounts() {
     password: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [totalElements, setTotalElements] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -70,6 +72,7 @@ export function AdminAccounts() {
         ]);
         if (!active) return;
         setAccounts(page.content);
+        setTotalElements(page.totalElements);
         setRoles(roleList);
         setError(null);
       } catch (err) {
@@ -87,6 +90,7 @@ export function AdminAccounts() {
   }, [reloadKey]);
 
   const visibleAccounts = useMemo(() => filterAccounts(accounts, filter), [accounts, filter]);
+  const accountCount = totalElements ?? accounts.length;
   const roleNames = useMemo(
     () => new Map(roles.map((role) => [role.id, role.roleName])),
     [roles],
@@ -138,12 +142,17 @@ export function AdminAccounts() {
 
   async function confirmChanges(account: AdminAccount) {
     const draft = getDraft(account);
+    const roleId = Number(draft.roleId);
+    if (!draft.roleId || !Number.isFinite(roleId) || roleId < 1) {
+      setError("Select a valid role before applying changes.");
+      return;
+    }
     const input: AccountUpdateInput = {
       username: account.username,
       email: account.email,
       emailVerified: Number(draft.emailVerified),
       status: Number(draft.status),
-      roleId: Number(draft.roleId),
+      roleId,
     };
     const saved = await runUpdate(account, input, `Account "${account.username}" updated.`);
     if (saved) {
@@ -173,6 +182,7 @@ export function AdminAccounts() {
     );
     if (saved) {
       setCopied(false);
+      setCopyError(null);
       setPasswordBanner({ username: account.username, password });
     }
   }
@@ -219,7 +229,7 @@ export function AdminAccounts() {
         <div>
           <p className="eyebrow text-forest">Access control</p>
           <h2 className="mt-2 font-display text-3xl tracking-tight">
-            {accounts.length === 1 ? "1 account" : `${accounts.length} accounts`}
+            {accountCount === 1 ? "1 account" : `${accountCount} accounts`}
           </h2>
         </div>
       </div>
@@ -233,7 +243,10 @@ export function AdminAccounts() {
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest">
+        <p
+          role="status"
+          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+        >
           {notice}
         </p>
       ) : null}
@@ -254,7 +267,15 @@ export function AdminAccounts() {
             <button
               type="button"
               onClick={() => {
-                void navigator.clipboard.writeText(passwordBanner.password).then(() => setCopied(true));
+                setCopyError(null);
+                if (!navigator.clipboard?.writeText) {
+                  setCopyError("Clipboard unavailable. Copy the password manually.");
+                  return;
+                }
+                void navigator.clipboard
+                  .writeText(passwordBanner.password)
+                  .then(() => setCopied(true))
+                  .catch(() => setCopyError("Could not copy. Copy the password manually."));
               }}
               className="btn-secondary min-h-0 px-3 py-1.5 text-xs"
             >
@@ -265,12 +286,18 @@ export function AdminAccounts() {
               onClick={() => {
                 setPasswordBanner(null);
                 setCopied(false);
+                setCopyError(null);
               }}
               className="btn-secondary min-h-0 px-3 py-1.5 text-xs"
             >
               Dismiss
             </button>
           </div>
+          {copyError ? (
+            <p role="alert" className="mt-2 text-xs text-terracotta">
+              {copyError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -417,7 +444,7 @@ export function AdminAccounts() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={!dirty || busy || confirming}
+                            disabled={!dirty || busy || confirming || !draft.roleId}
                             onClick={() => {
                               setError(null);
                               setNotice(null);

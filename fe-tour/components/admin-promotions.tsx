@@ -253,7 +253,10 @@ export function AdminPromotions() {
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest">
+        <p
+          role="status"
+          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+        >
           {notice}
         </p>
       ) : null}

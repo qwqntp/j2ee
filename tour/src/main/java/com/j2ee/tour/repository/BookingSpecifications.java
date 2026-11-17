@@ -18,8 +18,18 @@ import java.util.Set;
 public final class BookingSpecifications {
     private static final Set<String> ALLOWED_STATUSES = Set.of(
             "PENDING", "PAID", "CONFIRMED", "COMPLETED", "CANCELLED");
+    private static final char LIKE_ESCAPE = '\\';
 
     private BookingSpecifications() {
+    }
+
+    /** Builds a LIKE pattern where user input is matched literally. */
+    public static String likePattern(String rawQuery) {
+        String escaped = rawQuery.trim().toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+        return "%" + escaped + "%";
     }
 
     /**
@@ -40,7 +50,7 @@ public final class BookingSpecifications {
 
         String pattern = filter.query() == null || filter.query().isBlank()
                 ? null
-                : "%" + filter.query().trim().toLowerCase(Locale.ROOT) + "%";
+                : likePattern(filter.query());
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -60,10 +70,10 @@ public final class BookingSpecifications {
                 Join<Object, Object> departure = root.join("departure", JoinType.LEFT);
                 Join<Object, Object> tour = departure.join("tour", JoinType.LEFT);
                 predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("bookingCode")), pattern),
-                        cb.like(cb.lower(account.get("username")), pattern),
-                        cb.like(cb.lower(account.get("accountEmail")), pattern),
-                        cb.like(cb.lower(tour.get("tourName")), pattern)));
+                        cb.like(cb.lower(root.get("bookingCode")), pattern, LIKE_ESCAPE),
+                        cb.like(cb.lower(account.get("username")), pattern, LIKE_ESCAPE),
+                        cb.like(cb.lower(account.get("accountEmail")), pattern, LIKE_ESCAPE),
+                        cb.like(cb.lower(tour.get("tourName")), pattern, LIKE_ESCAPE)));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };

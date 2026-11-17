@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -60,6 +61,27 @@ class AccountServiceTest {
                 .hasMessage("Cannot remove the last active administrator");
 
         verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    void demotingAnAdminWhenTwoActiveAdminsExistSucceeds() {
+        Account admin = account(ADMIN_ID, "admin", role(1L, "ROLE_ADMIN"));
+        Account otherAdmin = account(3L, "admin2", role(1L, "ROLE_ADMIN"));
+        AccountRole userRole = role(2L, "ROLE_USER");
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(accountRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        when(accountRoleRepository.findById(2L)).thenReturn(Optional.of(userRole));
+        when(accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1))
+                .thenReturn(List.of(admin, otherAdmin));
+        when(accountRepository.save(any(Account.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = accountService.update(ADMIN_ID,
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 2L), ACTOR_ID);
+
+        assertThat(response.roleId()).isEqualTo(2L);
+        assertThat(response.roleName()).isEqualTo("ROLE_USER");
+        verify(accountRepository).save(admin);
     }
 
     @Test

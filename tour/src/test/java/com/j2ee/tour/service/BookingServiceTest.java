@@ -640,6 +640,12 @@ class BookingServiceTest {
     }
 
     @Test
+    void adminSearchPatternEscapesLikeWildcards() {
+        assertEquals("%50\\%\\_off%", BookingSpecifications.likePattern("50%_off"));
+        assertEquals("%a\\\\b%", BookingSpecifications.likePattern("a\\b"));
+    }
+
+    @Test
     void adminListWithFilterUsesSpecification() {
         stubSpecificationPage();
 

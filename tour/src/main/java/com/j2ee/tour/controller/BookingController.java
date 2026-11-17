@@ -45,7 +45,8 @@ public class BookingController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) String q,
             @AuthenticationPrincipal AuthPrincipal principal) {
-        if (pageable.getPageSize() > 100) {
+        int size = pageable.getPageSize();
+        if (size < 1 || size > 100) {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "size must be between 1 and 100");
         }
