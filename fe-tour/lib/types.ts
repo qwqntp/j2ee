@@ -186,3 +186,26 @@ export type Booking = {
   }>;
   promotion: BookingPromotion | null;
 };
+
+export type AdminStats = {
+  generatedAt: string;
+  totalTours: number;
+  openTours: number;
+  bookingsByStatus: Record<"PENDING" | "PAID" | "CONFIRMED" | "COMPLETED" | "CANCELLED", number>;
+  successfulRevenue: number;
+  successfulPayments: number;
+  averageSuccessfulPayment: number;
+  upcomingDepartures: number;
+  lowCapacityDepartures: number;
+  soldOutDepartures: number;
+  topTours: Array<{ tourId: number; tourName: string; bookingCount: number; revenue: number }>;
+  capacityRisks: Array<{
+    departureId: number;
+    tourId: number;
+    tourName: string;
+    startDate: string;
+    capacity: number;
+    remainingSeats: number;
+    status: string;
+  }>;
+};

@@ -1,5 +1,6 @@
 import type {
   Account,
+  AdminStats,
   AdminTour,
   AuthSession,
   Booking,
@@ -252,6 +253,10 @@ export async function resetPassword(token: string, newPassword: string): Promise
     body: { token, newPassword },
     allowEmpty: true,
   });
+}
+
+export function getAdminStats(token: string): Promise<AdminStats> {
+  return apiRequest<AdminStats>("/api/admin/stats", { token });
 }
 
 export function listAdminTours(

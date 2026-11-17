@@ -1,5 +1,8 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { AdminDashboard } from "@/components/admin-dashboard";
+
+export const metadata: Metadata = { title: "Admin dashboard" };
 
 export default function AdminPage() {
-  redirect("/admin/bookings");
+  return <AdminDashboard />;
 }

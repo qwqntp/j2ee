@@ -11,6 +11,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Admin console
           </h1>
           <nav aria-label="Admin" className="mt-6 flex flex-wrap gap-6 text-sm font-medium">
+            <Link href="/admin" className="text-forest underline-offset-4 hover:underline">
+              Dashboard
+            </Link>
             <Link href="/admin/bookings" className="text-forest underline-offset-4 hover:underline">
               Bookings &amp; payments
             </Link>
