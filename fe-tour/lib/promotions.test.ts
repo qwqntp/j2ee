@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { promotionLifecycle } from "./promotions";
+import type { Promotion } from "./types";
+import { filterPromotions, promotionLifecycle } from "./promotions";
 
 describe("promotionLifecycle", () => {
   it("classifies lifecycle deterministically", () => {
@@ -44,5 +45,33 @@ describe("promotionLifecycle", () => {
         now,
       ),
     ).toBe("Scheduled");
+  });
+});
+
+describe("filterPromotions", () => {
+  it("filters promotions by lifecycle and case-insensitive code/name", () => {
+    const rows = [
+      {
+        id: 1,
+        name: "Winter Sale",
+        code: "WIN2026",
+        active: true,
+        startDate: "2026-11-01",
+        endDate: "2026-12-01",
+        usedCount: 3,
+      },
+      {
+        id: 2,
+        name: "Expired Deal",
+        code: "OLD",
+        active: true,
+        startDate: "2026-10-01",
+        endDate: "2026-10-31",
+        usedCount: 0,
+      },
+    ] as Promotion[];
+    expect(
+      filterPromotions(rows, { lifecycle: "Active", query: "win" }, new Date("2026-11-17T00:00:00")),
+    ).toHaveLength(1);
   });
 });

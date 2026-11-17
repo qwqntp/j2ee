@@ -20,6 +20,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/accounts" className="text-forest underline-offset-4 hover:underline">
               Accounts
             </Link>
+            <Link href="/admin/promotions" className="text-forest underline-offset-4 hover:underline">
+              Promotions
+            </Link>
             <Link href="/admin/tours" className="text-forest underline-offset-4 hover:underline">
               Tours &amp; departures
             </Link>

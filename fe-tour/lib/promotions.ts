@@ -21,3 +21,25 @@ export function promotionLifecycle(
   if (dateOnly(promotion.endDate) < today) return "Expired";
   return "Active";
 }
+
+export type PromotionFilter = {
+  lifecycle: "All" | PromotionLifecycle;
+  query: string;
+};
+
+export function filterPromotions(
+  rows: Promotion[],
+  filter: PromotionFilter,
+  now: Date = new Date(),
+): Promotion[] {
+  const query = filter.query.trim().toLowerCase();
+  return rows.filter((promotion) => {
+    if (filter.lifecycle !== "All" && promotionLifecycle(promotion, now) !== filter.lifecycle) {
+      return false;
+    }
+    if (!query) return true;
+    return [promotion.name, promotion.code ?? "", promotion.description ?? ""].some((value) =>
+      value.toLowerCase().includes(query),
+    );
+  });
+}
