@@ -117,6 +117,43 @@ class AccountServiceTest {
         verify(accountRepository).save(user);
     }
 
+    @Test
+    void deletingTheOnlyActiveAdminIsRejected() {
+        Account admin = account(ADMIN_ID, "admin", role(1L, "ROLE_ADMIN"));
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1)).thenReturn(List.of(admin));
+
+        assertThatThrownBy(() -> accountService.delete(ADMIN_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Cannot remove the last active administrator");
+
+        verify(accountRepository, never()).delete(any(Account.class));
+    }
+
+    @Test
+    void deletingAnAdminWhenTwoActiveAdminsExistSucceeds() {
+        Account admin = account(ADMIN_ID, "admin", role(1L, "ROLE_ADMIN"));
+        Account otherAdmin = account(3L, "admin2", role(1L, "ROLE_ADMIN"));
+        when(accountRepository.findById(ADMIN_ID)).thenReturn(Optional.of(admin));
+        when(accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1))
+                .thenReturn(List.of(admin, otherAdmin));
+
+        accountService.delete(ADMIN_ID);
+
+        verify(accountRepository).delete(admin);
+    }
+
+    @Test
+    void deletingANonAdminDoesNotRequireActiveAdminCount() {
+        Account user = account(USER_ID, "user", role(2L, "ROLE_USER"));
+        when(accountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+
+        accountService.delete(USER_ID);
+
+        verify(accountRepository, never()).findActiveAdminsForUpdate("ROLE_ADMIN", 1);
+        verify(accountRepository).delete(user);
+    }
+
     private AccountRole role(Long id, String name) {
         AccountRole role = new AccountRole();
         role.setAccountRoleId(id);

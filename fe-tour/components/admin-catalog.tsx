@@ -418,6 +418,11 @@ export function AdminCatalog() {
                     }
                   />
                 )}
+                {field.fromTours ? (
+                  <p className="mt-1 text-xs text-muted">
+                    Dropdown shows the first 100 tours.
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

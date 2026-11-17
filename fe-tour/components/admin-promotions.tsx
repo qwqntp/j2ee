@@ -238,6 +238,9 @@ export function AdminPromotions() {
           <h2 className="mt-2 font-display text-3xl tracking-tight">
             {promotions.length === 1 ? "1 promotion" : `${promotions.length} promotions`}
           </h2>
+          <p className="mt-1 text-xs text-muted">
+            Showing the first 100 promotions. Search and filters apply to the loaded page only.
+          </p>
         </div>
         <button type="button" onClick={startCreate} className="btn-primary">
           New promotion

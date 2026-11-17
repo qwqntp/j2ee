@@ -17,6 +17,8 @@ import { ensureSession } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import type { AccountRoleResponse, AccountUpdateInput, AdminAccount } from "@/lib/types";
 
+const PAGE_SIZE = 100;
+
 type Draft = { roleId: string; status: string; emailVerified: string };
 
 function draftFrom(account: AdminAccount): Draft {
@@ -37,6 +39,9 @@ function generateTemporaryPassword(): string {
 export function AdminAccounts() {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [roles, setRoles] = useState<AccountRoleResponse[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -66,13 +71,15 @@ export function AdminAccounts() {
       try {
         const session = await ensureSession();
         if (!active || !session) return;
-        const [page, roleList] = await Promise.all([
-          listAdminAccounts(session.accessToken, 0, 100),
+        const [result, roleList] = await Promise.all([
+          listAdminAccounts(session.accessToken, page, PAGE_SIZE),
           listAccountRoles(session.accessToken),
         ]);
         if (!active) return;
-        setAccounts(page.content);
-        setTotalElements(page.totalElements);
+        setAccounts(result.content);
+        setTotalElements(result.totalElements);
+        setTotalPages(result.totalPages);
+        setHasNext(result.hasNext);
         setRoles(roleList);
         setError(null);
       } catch (err) {
@@ -87,7 +94,7 @@ export function AdminAccounts() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [page, reloadKey]);
 
   const visibleAccounts = useMemo(() => filterAccounts(accounts, filter), [accounts, filter]);
   const accountCount = totalElements ?? accounts.length;
@@ -167,12 +174,17 @@ export function AdminAccounts() {
 
   async function setTemporaryPassword(account: AdminAccount) {
     const password = generateTemporaryPassword();
+    const roleId = account.roleId ?? roles.find((role) => role.roleName === account.roleName)?.id;
+    if (roleId == null || account.status == null) {
+      setError("Account role or status is unavailable. Reload the page and try again.");
+      return;
+    }
     const input: AccountUpdateInput = {
       username: account.username,
       email: account.email,
       emailVerified: account.emailVerified ?? 0,
-      status: account.status ?? 0,
-      roleId: account.roleId ?? 0,
+      status: account.status,
+      roleId,
       password,
     };
     const saved = await runUpdate(
@@ -231,6 +243,10 @@ export function AdminAccounts() {
           <h2 className="mt-2 font-display text-3xl tracking-tight">
             {accountCount === 1 ? "1 account" : `${accountCount} accounts`}
           </h2>
+          <p className="mt-1 text-xs text-muted">
+            Page {page + 1} of {totalPages} · showing {accounts.length} of {accountCount}.
+            Search and filters apply to the current page only.
+          </p>
         </div>
       </div>
 
@@ -356,7 +372,7 @@ export function AdminAccounts() {
 
       {visibleAccounts.length === 0 ? (
         <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
-          No accounts match the current filters.
+          No accounts on this page match the current filters.
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
@@ -473,6 +489,28 @@ export function AdminAccounts() {
           </table>
         </div>
       )}
+
+      <div className="mt-6 flex items-center justify-between gap-4">
+        <button
+          type="button"
+          disabled={page === 0 || loading}
+          onClick={() => setPage((current) => Math.max(0, current - 1))}
+          className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <p className="text-center text-sm text-muted" aria-live="polite">
+          {loading ? "Loading page…" : `Page ${page + 1} of ${totalPages}`}
+        </p>
+        <button
+          type="button"
+          disabled={!hasNext || loading}
+          onClick={() => setPage((current) => current + 1)}
+          className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }

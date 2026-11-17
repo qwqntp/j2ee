@@ -69,16 +69,10 @@ public class AccountService {
                     throw new IllegalStateException("Username is already in use");
                 });
         AccountRole requestedRole = resolveRole(request.roleId());
-        boolean targetWasActiveAdmin = Objects.equals(account.getStatus(), 1)
-                && account.getRole() != null
-                && "ROLE_ADMIN".equals(account.getRole().getRoleName());
         boolean removingAdmin = !"ROLE_ADMIN".equals(requestedRole.getRoleName())
                 || !Objects.equals(request.status(), 1);
-        if (targetWasActiveAdmin && removingAdmin) {
-            List<Account> activeAdmins = accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1);
-            if (activeAdmins.size() <= 1) {
-                throw new IllegalStateException("Cannot remove the last active administrator");
-            }
+        if (removingAdmin) {
+            assertNotLastActiveAdmin(account);
         }
         account.setUsername(request.username());
         if (request.password() != null && !request.password().isBlank()) {
@@ -94,7 +88,22 @@ public class AccountService {
 
     @Transactional
     public void delete(Long id) {
-        accountRepository.delete(find(id));
+        Account account = find(id);
+        assertNotLastActiveAdmin(account);
+        accountRepository.delete(account);
+    }
+
+    private void assertNotLastActiveAdmin(Account account) {
+        boolean activeAdmin = Objects.equals(account.getStatus(), 1)
+                && account.getRole() != null
+                && "ROLE_ADMIN".equals(account.getRole().getRoleName());
+        if (!activeAdmin) {
+            return;
+        }
+        List<Account> activeAdmins = accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1);
+        if (activeAdmins.size() <= 1) {
+            throw new IllegalStateException("Cannot remove the last active administrator");
+        }
     }
 
     private AccountRole resolveRole(Long roleId) {

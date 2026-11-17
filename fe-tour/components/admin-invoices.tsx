@@ -57,6 +57,9 @@ export function AdminInvoices() {
     <div>
       <p className="eyebrow text-forest">Billing</p>
       <h2 className="mt-2 font-display text-3xl tracking-tight">Invoices</h2>
+      <p className="mt-1 text-xs text-muted">
+        100 invoices per page. Status and search filters apply to the current page only.
+      </p>
 
       <form
         aria-label="Filter invoices"

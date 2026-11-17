@@ -253,7 +253,7 @@ export function AdminBookings() {
               id="booking-q"
               type="search"
               maxLength={100}
-              placeholder="Code, tour, traveler"
+              placeholder="Code, account, tour"
               className="field"
               value={form.q}
               onChange={(event) =>
