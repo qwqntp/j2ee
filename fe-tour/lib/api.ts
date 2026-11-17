@@ -243,6 +243,14 @@ export function listMyInvoices(token: string, page = 0, size = 100): Promise<Pag
   return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, { token });
 }
 
+export function listInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
+  return apiRequest<PageData<Invoice>>(`/api/invoices?page=${page}&size=${size}`, { token });
+}
+
+export function getInvoiceByBooking(token: string, bookingId: number): Promise<Invoice> {
+  return apiRequest<Invoice>(`/api/invoices/by-booking/${bookingId}`, { token });
+}
+
 export type ProfileInput = {
   name: string;
   email?: string;

@@ -3,21 +3,32 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ApiError, getBooking, listMyInvoices } from "@/lib/api";
+import { ApiError, getBooking, getInvoiceByBooking, listMyInvoices } from "@/lib/api";
 import { clearSession, ensureSession } from "@/lib/auth";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
 import type { Booking, Invoice } from "@/lib/types";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight } from "./icons";
 
-export function InvoiceView({ bookingId }: { bookingId: number }) {
+const ADMIN_HOME = "/admin";
+
+type Props = {
+  bookingId: number;
+  mode?: "mine" | "admin";
+  backHref?: string;
+};
+
+export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   const router = useRouter();
+  const isAdmin = mode === "admin";
   const [booking, setBooking] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loginHref = `/login?next=${encodeURIComponent(`/invoices/${bookingId}`)}`;
+  const backHrefValue = isAdmin ? (backHref ?? "/admin/invoices") : `/my-trips/${bookingId}`;
+  const backLabel = isAdmin ? "Back to invoices" : "Back to trip details";
 
   useEffect(() => {
     let active = true;
@@ -25,29 +36,31 @@ export function InvoiceView({ bookingId }: { bookingId: number }) {
     async function load() {
       const current = await ensureSession();
       if (!current) {
-        router.replace(loginHref);
+        router.replace(isAdmin ? ADMIN_HOME : loginHref);
         return;
       }
 
       try {
-        const [bookingResult, invoicesResult] = await Promise.all([
+        const [bookingResult, invoiceResult] = await Promise.all([
           getBooking(current.accessToken, bookingId),
-          listMyInvoices(current.accessToken, 0, 100),
+          isAdmin
+            ? getInvoiceByBooking(current.accessToken, bookingId)
+            : listMyInvoices(current.accessToken, 0, 100).then(
+                (page) => page.content.find((item) => item.bookingId === bookingId) ?? null,
+              ),
         ]);
         if (!active) return;
         setBooking(bookingResult);
-        setInvoice(
-          invoicesResult.content.find((item) => item.bookingId === bookingId) ?? null,
-        );
+        setInvoice(invoiceResult);
         setLoading(false);
       } catch (err) {
         if (!active) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
-          router.replace(loginHref);
+          router.replace(isAdmin ? ADMIN_HOME : loginHref);
           return;
         }
-        if (err instanceof ApiError && err.status === 404) {
+        if (!isAdmin && err instanceof ApiError && err.status === 404) {
           setMissing(true);
           setLoading(false);
           return;
@@ -61,7 +74,7 @@ export function InvoiceView({ bookingId }: { bookingId: number }) {
     return () => {
       active = false;
     };
-  }, [bookingId, loginHref, router]);
+  }, [bookingId, loginHref, router, isAdmin]);
 
   if (loading) {
     return (
@@ -81,7 +94,7 @@ export function InvoiceView({ bookingId }: { bookingId: number }) {
               ? "We could not find an invoice for this booking yet. Invoices are created once payment is received."
               : (error ?? "Please try again.")
           }
-          action={{ label: "Back to trip details", href: `/my-trips/${bookingId}` }}
+          action={{ label: backLabel, href: backHrefValue }}
         />
       </div>
     );
@@ -97,8 +110,8 @@ export function InvoiceView({ bookingId }: { bookingId: number }) {
     <div className="shell py-10 sm:py-14">
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <Link href={`/my-trips/${bookingId}`} className="btn-secondary">
-            Back to trip details
+          <Link href={backHrefValue} className="btn-secondary">
+            {backLabel}
           </Link>
           <button type="button" onClick={() => window.print()} className="btn-primary">
             Print invoice
@@ -110,7 +123,9 @@ export function InvoiceView({ bookingId }: { bookingId: number }) {
           <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line pb-6">
             <div>
               <p className="eyebrow text-terracotta">Hành Trình</p>
-              <h1 className="mt-2 font-display text-3xl tracking-tight">Invoice</h1>
+              <h1 className="mt-2 font-display text-3xl tracking-tight">
+                {isAdmin ? "Admin invoice" : "Invoice"}
+              </h1>
               <p className="mt-1 text-sm text-muted">
                 Invoice #{invoice?.id ?? "pending"} · Booking {booking.bookingCode}
               </p>
