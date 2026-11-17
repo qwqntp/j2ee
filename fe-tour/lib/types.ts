@@ -251,3 +251,90 @@ export type AdminStats = {
     status: string;
   }>;
 };
+
+export type CatalogResource = "destinations" | "accommodations" | "vehicles" | "guides" | "images";
+
+export type DestinationRow = {
+  id: number;
+  name: string;
+  location: string | null;
+  description: string | null;
+  entryFee: number | null;
+};
+
+export type AccommodationRow = {
+  id: number;
+  name: string;
+  location: string;
+  rating: number | null;
+  pricePerNight: number | null;
+  type: "HOTEL" | "RESORT" | "HOMESTAY" | null;
+};
+
+export type VehicleRow = {
+  id: number;
+  type: string;
+  capacity: number;
+  rentalPricePerDay: number | null;
+};
+
+export type GuideRow = {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  experienceYears: number;
+};
+
+export type ImageRow = {
+  id: number;
+  imageUrl: string;
+  tourId: number | null;
+};
+
+export type CatalogRow = DestinationRow | AccommodationRow | VehicleRow | GuideRow | ImageRow;
+
+export type DestinationInput = {
+  name: string;
+  location?: string;
+  description?: string;
+  entryFee?: number;
+};
+
+export type AccommodationInput = {
+  name: string;
+  location: string;
+  rating?: number;
+  pricePerNight?: number;
+  type?: "HOTEL" | "RESORT" | "HOMESTAY";
+};
+
+export type VehicleInput = {
+  type: string;
+  capacity: number;
+  rentalPricePerDay: number;
+};
+
+export type GuideInput = {
+  name: string;
+  email?: string;
+  phone?: string;
+  experienceYears: number;
+};
+
+export type ImageInput = {
+  imageUrl: string;
+  tourId: number;
+};
+
+export type CatalogInputByResource = {
+  destinations: DestinationInput;
+  accommodations: AccommodationInput;
+  vehicles: VehicleInput;
+  guides: GuideInput;
+  images: ImageInput;
+};
+
+export type CatalogInput = CatalogInputByResource[CatalogResource];
+
+export type CatalogInputFor<R extends CatalogResource> = CatalogInputByResource[R];

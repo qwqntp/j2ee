@@ -2,12 +2,20 @@ import type {
   Account,
   AccountRoleResponse,
   AccountUpdateInput,
+  AccommodationInput,
+  AccommodationRow,
   AdminAccount,
   AdminStats,
   AdminTour,
   AuthSession,
   Booking,
   DepartureInput,
+  DestinationInput,
+  DestinationRow,
+  GuideInput,
+  GuideRow,
+  ImageInput,
+  ImageRow,
   Invoice,
   PageData,
   Payment,
@@ -19,6 +27,8 @@ import type {
   TourDeparture,
   TourInput,
   TourSummary,
+  VehicleInput,
+  VehicleRow,
 } from "./types";
 import { buildBookingListQuery, type BookingListFilters } from "./booking-list";
 import { buildTourApiQuery, type TourFilters } from "./tour-filters";
@@ -423,4 +433,112 @@ export function createPayment(
   input: { bookingId: number; paymentMethod: string; status?: string },
 ): Promise<Payment> {
   return apiRequest<Payment>("/api/payments", { method: "POST", token, body: input });
+}
+
+export function listDestination(token: string): Promise<PageData<DestinationRow>> {
+  return apiRequest<PageData<DestinationRow>>("/api/tourist-destinations?page=0&size=100", { token });
+}
+
+export function createDestination(token: string, input: DestinationInput): Promise<DestinationRow> {
+  return apiRequest<DestinationRow>("/api/tourist-destinations", { method: "POST", token, body: input });
+}
+
+export function updateDestination(
+  token: string,
+  id: number,
+  input: DestinationInput,
+): Promise<DestinationRow> {
+  return apiRequest<DestinationRow>(`/api/tourist-destinations/${id}`, {
+    method: "PUT", token, body: input,
+  });
+}
+
+export function deleteDestination(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/tourist-destinations/${id}`, {
+    method: "DELETE", token, allowEmpty: true,
+  });
+}
+
+export function listAccommodation(token: string): Promise<PageData<AccommodationRow>> {
+  return apiRequest<PageData<AccommodationRow>>("/api/accommodations?page=0&size=100", { token });
+}
+
+export function createAccommodation(token: string, input: AccommodationInput): Promise<AccommodationRow> {
+  return apiRequest<AccommodationRow>("/api/accommodations", { method: "POST", token, body: input });
+}
+
+export function updateAccommodation(
+  token: string,
+  id: number,
+  input: AccommodationInput,
+): Promise<AccommodationRow> {
+  return apiRequest<AccommodationRow>(`/api/accommodations/${id}`, {
+    method: "PUT", token, body: input,
+  });
+}
+
+export function deleteAccommodation(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/accommodations/${id}`, {
+    method: "DELETE", token, allowEmpty: true,
+  });
+}
+
+export function listVehicle(token: string): Promise<PageData<VehicleRow>> {
+  return apiRequest<PageData<VehicleRow>>("/api/travel-vehicles?page=0&size=100", { token });
+}
+
+export function createVehicle(token: string, input: VehicleInput): Promise<VehicleRow> {
+  return apiRequest<VehicleRow>("/api/travel-vehicles", { method: "POST", token, body: input });
+}
+
+export function updateVehicle(token: string, id: number, input: VehicleInput): Promise<VehicleRow> {
+  return apiRequest<VehicleRow>(`/api/travel-vehicles/${id}`, {
+    method: "PUT", token, body: input,
+  });
+}
+
+export function deleteVehicle(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/travel-vehicles/${id}`, {
+    method: "DELETE", token, allowEmpty: true,
+  });
+}
+
+export function listGuide(token: string): Promise<PageData<GuideRow>> {
+  return apiRequest<PageData<GuideRow>>("/api/tour-guides?page=0&size=100", { token });
+}
+
+export function createGuide(token: string, input: GuideInput): Promise<GuideRow> {
+  return apiRequest<GuideRow>("/api/tour-guides", { method: "POST", token, body: input });
+}
+
+export function updateGuide(token: string, id: number, input: GuideInput): Promise<GuideRow> {
+  return apiRequest<GuideRow>(`/api/tour-guides/${id}`, {
+    method: "PUT", token, body: input,
+  });
+}
+
+export function deleteGuide(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/tour-guides/${id}`, {
+    method: "DELETE", token, allowEmpty: true,
+  });
+}
+
+export function listImage(token: string): Promise<PageData<ImageRow>> {
+  return apiRequest<PageData<ImageRow>>("/api/tour-images?page=0&size=100", { token });
+}
+
+export function createImage(token: string, input: ImageInput): Promise<ImageRow> {
+  return apiRequest<ImageRow>("/api/tour-images", { method: "POST", token, body: input });
+}
+
+export function updateImage(token: string, id: number, input: ImageInput): Promise<ImageRow> {
+  return apiRequest<ImageRow>(`/api/tour-images/${id}`, {
+    method: "PUT", token, body: input,
+  });
+}
+
+export function deleteImage(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/tour-images/${id}`, {
+    method: "DELETE", token, allowEmpty: true,
+  });
 }
