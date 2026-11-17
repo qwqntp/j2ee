@@ -28,7 +28,6 @@ class AccountServiceTest {
 
     private static final Long ADMIN_ID = 1L;
     private static final Long USER_ID = 2L;
-    private static final Long ACTOR_ID = 9L;
 
     @Mock
     private AccountRepository accountRepository;
@@ -56,7 +55,7 @@ class AccountServiceTest {
         when(accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1)).thenReturn(List.of(admin));
 
         assertThatThrownBy(() -> accountService.update(ADMIN_ID,
-                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 2L), ACTOR_ID))
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 2L)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot remove the last active administrator");
 
@@ -77,7 +76,7 @@ class AccountServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = accountService.update(ADMIN_ID,
-                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 2L), ACTOR_ID);
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 2L));
 
         assertThat(response.roleId()).isEqualTo(2L);
         assertThat(response.roleName()).isEqualTo("ROLE_USER");
@@ -94,7 +93,7 @@ class AccountServiceTest {
         when(accountRepository.findActiveAdminsForUpdate("ROLE_ADMIN", 1)).thenReturn(List.of(admin));
 
         assertThatThrownBy(() -> accountService.update(ADMIN_ID,
-                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 0, 1L), ACTOR_ID))
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 0, 1L)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot remove the last active administrator");
 
@@ -111,7 +110,7 @@ class AccountServiceTest {
         when(accountRepository.save(user)).thenReturn(user);
 
         accountService.update(USER_ID,
-                new AccountUpdateRequest("user", null, "user@example.com", 1, 1, 2L), ACTOR_ID);
+                new AccountUpdateRequest("user", null, "user@example.com", 1, 1, 2L));
 
         verify(accountRepository, never()).findActiveAdminsForUpdate("ROLE_ADMIN", 1);
         verify(accountRepository).save(user);

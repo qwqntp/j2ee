@@ -207,6 +207,7 @@ This section is the source of truth for partial delivery. The six top-level feat
 
 - P1 item 1: recent bookings panel; failed payments panel; low-selling tours and capacity-utilization percentage; stats date-range filter; SQL-fixture/DB verification.
 - P1 item 2: none deferred by this plan after email-verification editing is included.
+- P1 item 2: no two-transaction PostgreSQL concurrency test for the final-admin `PESSIMISTIC_WRITE` lock; existing tests and disposable-DB smoke verify API/query execution, not lock contention.
 - P1 item 3: none deferred.
 - P2 item 7: dedicated tour/departure selector; exact-account dropdown (the keyword search covers username/email/tour); traveler phone search; sort control; distinct payment-status filter.
 - P2 item 11: search by booking code (`InvoiceResponse` carries `bookingId`, not booking code); date-range filter; PDF download beyond browser print; invoice void/reissue.

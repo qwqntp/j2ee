@@ -61,7 +61,7 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse update(Long id, AccountUpdateRequest request, Long actorAccountId) {
+    public AccountResponse update(Long id, AccountUpdateRequest request) {
         Account account = find(id);
         accountRepository.findByUsername(request.username())
                 .filter(existing -> !existing.getAccountId().equals(id))

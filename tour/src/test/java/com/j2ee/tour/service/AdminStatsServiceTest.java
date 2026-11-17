@@ -107,7 +107,8 @@ class AdminStatsServiceTest {
 
         AdminStatsResponse stats = service.stats();
 
-        assertThat(stats.generatedAt()).isNotNull();
+        assertThat(stats.generatedAt())
+                .isEqualTo(LocalDateTime.of(2026, 11, 17, 7, 0));
         assertThat(stats.totalTours()).isEqualTo(4L);
         assertThat(stats.openTours()).isEqualTo(1L);
         assertThat(stats.bookingsByStatus()).containsEntry("PENDING", 2L)

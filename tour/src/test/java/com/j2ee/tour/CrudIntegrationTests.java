@@ -184,7 +184,7 @@ class CrudIntegrationTests {
         AccountRole role = accountRoleRepository.save(makeRole("USER2"));
         var created = accountService.create(new AccountCreateRequest("accuser", "password123", "a@x.com", 1, 1, role.getAccountRoleId()));
         assertEquals("accuser", accountService.get(created.id()).username());
-        accountService.update(created.id(), new AccountUpdateRequest("accuser2", null, "b@x.com", 0, 1, role.getAccountRoleId()), created.id());
+        accountService.update(created.id(), new AccountUpdateRequest("accuser2", null, "b@x.com", 0, 1, role.getAccountRoleId()));
         assertEquals("accuser2", accountService.get(created.id()).username());
         accountService.delete(created.id());
         assertThrows(Exception.class, () -> accountService.get(created.id()));

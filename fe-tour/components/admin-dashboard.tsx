@@ -140,7 +140,7 @@ export function AdminDashboard() {
                 <tr>
                   <th className="px-4 py-3 font-semibold">Tour</th>
                   <th className="px-4 py-3 font-semibold">Bookings</th>
-                  <th className="px-4 py-3 font-semibold">Revenue</th>
+                  <th className="px-4 py-3 font-semibold">Booking value</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">

@@ -13,9 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +36,7 @@ public class AdminStatsService {
     private final Clock clock;
 
     public AdminStatsResponse stats() {
-        LocalDateTime now = LocalDateTime.ofInstant(Instant.now(clock), ZoneId.systemDefault());
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime from = now;
         LocalDateTime to = now.plusDays(WINDOW_DAYS);
 
