@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogInput, catalogResourceFromPath } from "./admin-catalog";
+import { catalogInput, catalogResourceFromPath, catalogTabs } from "./admin-catalog";
 
 describe("catalogInput", () => {
   it("converts numeric catalog fields to API numbers", () => {
@@ -30,6 +30,20 @@ describe("catalogInput", () => {
     expect(catalogInput("images", { imageUrl: " https://x/y.jpg ", tourId: " 7 " })).toEqual({
       imageUrl: "https://x/y.jpg", tourId: 7,
     });
+  });
+});
+
+describe("catalogTabs", () => {
+  it("returns only supported resources in tab order", () => {
+    expect(catalogTabs().map((tab) => tab.resource)).toEqual([
+      "destinations", "accommodations", "vehicles", "guides", "images",
+    ]);
+  });
+
+  it("labels each tab for display", () => {
+    expect(catalogTabs().map((tab) => tab.label)).toEqual([
+      "Destinations", "Accommodations", "Travel vehicles", "Tour guides", "Tour images",
+    ]);
   });
 });
 

@@ -15,6 +15,21 @@ export type {
   VehicleRow,
 } from "./types";
 
+export type CatalogTab = {
+  resource: CatalogResource;
+  label: string;
+};
+
+export function catalogTabs(): CatalogTab[] {
+  return [
+    { resource: "destinations", label: "Destinations" },
+    { resource: "accommodations", label: "Accommodations" },
+    { resource: "vehicles", label: "Travel vehicles" },
+    { resource: "guides", label: "Tour guides" },
+    { resource: "images", label: "Tour images" },
+  ];
+}
+
 const RESOURCE_PATHS: Record<CatalogResource, string> = {
   destinations: "/api/tourist-destinations",
   accommodations: "/api/accommodations",
