@@ -20,6 +20,7 @@ import type {
   TourInput,
   TourSummary,
 } from "./types";
+import { buildBookingListQuery, type BookingListFilters } from "./booking-list";
 import { buildTourApiQuery, type TourFilters } from "./tour-filters";
 
 type Envelope<T> = {
@@ -208,8 +209,18 @@ export function getBooking(token: string, id: number): Promise<Booking> {
   return apiRequest<Booking>(`/api/bookings/${id}`, { token });
 }
 
-export function listBookings(token: string, page = 0, size = 10): Promise<PageData<Booking>> {
-  return apiRequest<PageData<Booking>>(`/api/bookings?page=${page}&size=${size}`, { token });
+export function listBookings(
+  token: string,
+  page = 0,
+  size = 10,
+  filters: BookingListFilters = {},
+): Promise<PageData<Booking>> {
+  const query = buildBookingListQuery({ page, size, ...filters });
+  return apiRequest<PageData<Booking>>(`/api/bookings?${query}`, { token });
+}
+
+export function listBookingPayments(token: string, bookingId: number): Promise<Payment[]> {
+  return apiRequest<Payment[]>(`/api/bookings/${bookingId}/payments`, { token });
 }
 
 export function cancelBooking(token: string, id: number): Promise<Booking> {
