@@ -69,6 +69,32 @@ export type Account = {
   updatedAt: string | null;
 };
 
+export type AdminAccount = {
+  id: number;
+  username: string;
+  email: string | null;
+  emailVerified: number | null;
+  status: number | null;
+  roleId: number | null;
+  roleName: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AccountRoleResponse = {
+  id: number;
+  roleName: string;
+};
+
+export type AccountUpdateInput = {
+  username: string;
+  password?: string;
+  email: string | null;
+  emailVerified: number;
+  status: number;
+  roleId: number;
+};
+
 export type Profile = {
   customerId: number | null;
   username: string;

@@ -1,5 +1,8 @@
 import type {
   Account,
+  AccountRoleResponse,
+  AccountUpdateInput,
+  AdminAccount,
   AdminStats,
   AdminTour,
   AuthSession,
@@ -148,6 +151,29 @@ export function logout(token?: string): Promise<void> {
 
 export function getMe(token: string): Promise<Account> {
   return apiRequest<Account>("/api/auth/me", { token });
+}
+
+export function listAdminAccounts(
+  token: string,
+  page = 0,
+  size = 100,
+): Promise<PageData<AdminAccount>> {
+  return apiRequest<PageData<AdminAccount>>(`/api/accounts?page=${page}&size=${size}`, { token });
+}
+
+export function listAccountRoles(token: string): Promise<AccountRoleResponse[]> {
+  return apiRequest<PageData<AccountRoleResponse>>(
+    "/api/account-roles?page=0&size=100",
+    { token },
+  ).then((page) => page.content);
+}
+
+export function updateAdminAccount(
+  token: string,
+  id: number,
+  input: AccountUpdateInput,
+): Promise<AdminAccount> {
+  return apiRequest<AdminAccount>(`/api/accounts/${id}`, { method: "PUT", token, body: input });
 }
 
 export type TravelerInput = {
