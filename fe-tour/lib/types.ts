@@ -128,6 +128,22 @@ export type BookingPromotion = {
   discountPercentage: number;
 };
 
+export type Promotion = {
+  id: number;
+  name: string;
+  discountPercentage: number;
+  startDate: string;
+  endDate: string;
+  description: string | null;
+  code: string | null;
+  active: boolean | null;
+  usageLimit: number | null;
+  usedCount: number;
+  minOrderAmount: number | null;
+};
+
+export type PromotionInput = Omit<Promotion, "id" | "usedCount">;
+
 export type Payment = {
   id: number;
   bookingId: number;

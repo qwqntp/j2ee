@@ -12,6 +12,8 @@ import type {
   PageData,
   Payment,
   Profile,
+  Promotion,
+  PromotionInput,
   TourDestinationOption,
   TourDetail,
   TourDeparture,
@@ -347,6 +349,38 @@ export function updateDeparture(
 
 export function deleteDeparture(token: string, id: number): Promise<void> {
   return apiRequest<void>(`/api/tour-departures/${id}`, {
+    method: "DELETE",
+    token,
+    allowEmpty: true,
+  });
+}
+
+export function listPromotions(
+  token: string,
+  page = 0,
+  size = 100,
+): Promise<PageData<Promotion>> {
+  return apiRequest<PageData<Promotion>>(`/api/promotions?page=${page}&size=${size}`, { token });
+}
+
+export function createPromotion(token: string, input: PromotionInput): Promise<Promotion> {
+  return apiRequest<Promotion>("/api/promotions", { method: "POST", token, body: input });
+}
+
+export function updatePromotion(
+  token: string,
+  id: number,
+  input: PromotionInput,
+): Promise<Promotion> {
+  return apiRequest<Promotion>(`/api/promotions/${id}`, {
+    method: "PUT",
+    token,
+    body: input,
+  });
+}
+
+export function deletePromotion(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/promotions/${id}`, {
     method: "DELETE",
     token,
     allowEmpty: true,
