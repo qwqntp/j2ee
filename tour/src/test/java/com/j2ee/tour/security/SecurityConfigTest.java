@@ -16,6 +16,7 @@ import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.dto.response.PaymentResponse;
 import com.j2ee.tour.dto.response.ProfileResponse;
 import com.j2ee.tour.service.AdminService;
+import com.j2ee.tour.service.AdminStatsService;
 import com.j2ee.tour.service.AuthService;
 import com.j2ee.tour.service.BookingService;
 import com.j2ee.tour.service.InvoiceService;
@@ -79,6 +80,9 @@ class SecurityConfigTest {
     private AdminService adminService;
 
     @MockitoBean
+    private AdminStatsService adminStatsService;
+
+    @MockitoBean
     private BookingService bookingService;
 
     @MockitoBean
@@ -139,6 +143,16 @@ class SecurityConfigTest {
                 .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
 
         mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void userCannotReadAdminStats() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/admin/stats").header("Authorization", "Bearer user-token"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Access denied"));
     }

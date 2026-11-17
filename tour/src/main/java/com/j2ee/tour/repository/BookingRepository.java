@@ -21,6 +21,15 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     boolean existsByDepartureDepartureId(Long departureId);
 
+    long countByBookingStatus(String status);
+
+    @Query("select b.departure.tour.tourId, b.departure.tour.tourName, count(b), "
+            + "coalesce(sum(b.bookingTotalAmount), 0) from Booking b "
+            + "where b.bookingStatus <> 'CANCELLED' "
+            + "group by b.departure.tour.tourId, b.departure.tour.tourName "
+            + "order by count(b) desc")
+    List<Object[]> findTopToursByBookingCount(Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select booking from Booking booking where booking.bookingId = :id")
     Optional<Booking> findByIdForUpdate(@Param("id") Long id);

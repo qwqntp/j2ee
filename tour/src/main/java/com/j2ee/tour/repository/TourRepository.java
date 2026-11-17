@@ -11,4 +11,6 @@ public interface TourRepository extends JpaRepository<Tour, Long>, TourSearchRep
     Page<Tour> findByTourStatus(String tourStatus, org.springframework.data.domain.Pageable pageable);
 
     Optional<Tour> findByTourIdAndTourStatus(Long tourId, String tourStatus);
+
+    long countByTourStatus(String tourStatus);
 }

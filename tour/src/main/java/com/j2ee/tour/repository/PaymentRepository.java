@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +20,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByBookingBookingId(Long bookingId);
 
     boolean existsByBookingBookingId(Long bookingId);
+
+    long countByPaymentStatus(String status);
+
+    @Query("select coalesce(sum(payment.paymentAmount), 0) from Payment payment "
+            + "where payment.paymentStatus = :status")
+    BigDecimal sumByPaymentStatus(@Param("status") String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select payment from Payment payment where payment.paymentId = :id")

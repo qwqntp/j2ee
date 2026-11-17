@@ -54,4 +54,33 @@ public interface TourDepartureRepository extends JpaRepository<TourDeparture, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select departure from TourDeparture departure where departure.departureId = :id")
     Optional<TourDeparture> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("select count(d) from TourDeparture d "
+            + "where d.departureStartDate >= :from and d.departureStartDate < :to "
+            + "and d.departureStatus in ('OPEN','FULL')")
+    long countUpcomingOpen(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("select count(d) from TourDeparture d "
+            + "where d.departureStartDate >= :from and d.departureStartDate < :to "
+            + "and d.departureCapacity - d.departureBookedSlots <= :remaining "
+            + "and d.departureStatus in ('OPEN','FULL')")
+    long countUpcomingCapacityAtMost(@Param("remaining") int remaining,
+                                     @Param("from") LocalDateTime from,
+                                     @Param("to") LocalDateTime to);
+
+    @Query("select count(d) from TourDeparture d "
+            + "where d.departureStartDate >= :from and d.departureStartDate < :to "
+            + "and d.departureCapacity - d.departureBookedSlots <= 0 "
+            + "and d.departureStatus in ('OPEN','FULL')")
+    long countUpcomingSoldOut(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("select d.departureId, d.tour.tourId, d.tour.tourName, d.departureStartDate, "
+            + "d.departureCapacity, d.departureCapacity - d.departureBookedSlots, d.departureStatus "
+            + "from TourDeparture d "
+            + "where d.departureStartDate >= :from and d.departureStartDate < :to "
+            + "and d.departureCapacity - d.departureBookedSlots <= :remaining "
+            + "and d.departureStatus in ('OPEN','FULL') order by d.departureStartDate")
+    List<Object[]> findCapacityRisks(@Param("from") LocalDateTime from,
+                                     @Param("remaining") int remaining,
+                                     @Param("to") LocalDateTime to);
 }

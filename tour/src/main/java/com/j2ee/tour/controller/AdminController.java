@@ -4,7 +4,9 @@ import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.OpenApiConfig;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.response.AccountResponse;
+import com.j2ee.tour.dto.response.AdminStatsResponse;
 import com.j2ee.tour.service.AdminService;
+import com.j2ee.tour.service.AdminStatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final AdminService adminService;
+
+    private final AdminStatsService adminStatsService;
+
+    @GetMapping("/stats")
+    @Operation(summary = "Admin dashboard summary")
+    public ApiResponse<AdminStatsResponse> stats() {
+        return ApiResponse.success(adminStatsService.stats());
+    }
 
     @GetMapping("/accounts")
     @Operation(summary = "List accounts",
