@@ -9,6 +9,8 @@ import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
 import type { Booking, Invoice } from "@/lib/types";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight } from "./icons";
+import { useOptionalAdminAccess } from "./admin-gate";
+import { AdminLoading, AdminPageHeading } from "./admin/admin-ui";
 
 const ADMIN_HOME = "/admin";
 
@@ -21,6 +23,7 @@ type Props = {
 export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   const router = useRouter();
   const isAdmin = mode === "admin";
+  const adminGetSession = useOptionalAdminAccess()?.getSession;
   const [booking, setBooking] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +37,7 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
     let active = true;
 
     async function load() {
-      const current = await ensureSession();
+      const current = isAdmin ? await adminGetSession?.() : await ensureSession();
       if (!current) {
         router.replace(isAdmin ? ADMIN_HOME : loginHref);
         return;
@@ -74,9 +77,10 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
     return () => {
       active = false;
     };
-  }, [bookingId, loginHref, router, isAdmin]);
+  }, [bookingId, loginHref, router, isAdmin, adminGetSession]);
 
   if (loading) {
+    if (isAdmin) return <AdminLoading>Loading invoice…</AdminLoading>;
     return (
       <div className="shell py-16">
         <p className="text-sm text-muted">Loading your invoice…</p>
@@ -85,6 +89,17 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   }
 
   if (missing || error) {
+    if (isAdmin) {
+      return (
+        <>
+          <AdminPageHeading title="Invoice details" />
+          <div className="admin-notice mt-5" role="alert">
+            <p>{error ?? "We could not find an invoice for this booking."}</p>
+            <Link href={backHrefValue} className="btn-secondary mt-3">{backLabel}</Link>
+          </div>
+        </>
+      );
+    }
     return (
       <div className="shell py-16">
         <EmptyState
@@ -107,7 +122,12 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   const tour = booking.tour;
 
   return (
-    <div className="shell py-10 sm:py-14">
+    <div className={isAdmin ? "min-w-0" : "shell py-10 sm:py-14"}>
+      {isAdmin && (
+        <div className="mb-5 print:hidden">
+          <AdminPageHeading title="Invoice details" description={`Booking ${booking.bookingCode}`} />
+        </div>
+      )}
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <Link href={backHrefValue} className="btn-secondary">
@@ -119,18 +139,20 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
           </button>
         </div>
 
-        <div className="rounded-[4px] border border-line bg-white p-6 shadow-panel sm:p-10 print:border-0 print:bg-white print:p-0 print:shadow-none">
+        <div className={`${isAdmin ? "admin-panel admin-invoice p-4 sm:p-7" : "rounded-[4px] border border-line p-6 shadow-panel sm:p-10"} bg-white print:border-0 print:bg-white print:p-0 print:shadow-none`}>
           <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line pb-6">
             <div>
               <p className="eyebrow text-terracotta">Hành Trình</p>
-              <h1 className="mt-2 font-display text-3xl tracking-tight">
-                {isAdmin ? "Admin invoice" : "Invoice"}
-              </h1>
+              {isAdmin ? (
+                <h2 className="mt-2 text-xl font-semibold tracking-tight">Invoice</h2>
+              ) : (
+                <h1 className="mt-2 font-display text-3xl tracking-tight">Invoice</h1>
+              )}
               <p className="mt-1 text-sm text-muted">
                 Invoice #{invoice?.id ?? "pending"} · Booking {booking.bookingCode}
               </p>
             </div>
-            <div className="text-right text-sm">
+            <div className={isAdmin ? "min-w-0 break-words text-sm sm:text-right" : "text-right text-sm"}>
               <p className="font-semibold">{invoice?.customerName ?? "Guest"}</p>
               {invoice?.customerEmail ? <p className="text-muted">{invoice.customerEmail}</p> : null}
               {invoice?.customerPhone ? <p className="text-muted">{invoice.customerPhone}</p> : null}

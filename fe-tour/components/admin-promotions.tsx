@@ -8,7 +8,8 @@ import {
   listPromotions,
   updatePromotion,
 } from "@/lib/api";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { formatPrice } from "@/lib/format";
 import {
   filterPromotions,
@@ -93,6 +94,7 @@ function inputWithActive(promotion: Promotion, active: boolean): PromotionInput 
 }
 
 export function AdminPromotions() {
+  const { getSession } = useAdminAccess();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export function AdminPromotions() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const page = await listPromotions(session.accessToken, 0, 100);
         if (!active) return;
@@ -131,7 +133,7 @@ export function AdminPromotions() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, getSession]);
 
   const visiblePromotions = useMemo(
     () => filterPromotions(promotions, filter),
@@ -159,7 +161,7 @@ export function AdminPromotions() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       const input = inputFromForm(form);
       if (editingId === null) {
@@ -183,7 +185,7 @@ export function AdminPromotions() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await updatePromotion(
         session.accessToken,
@@ -212,7 +214,7 @@ export function AdminPromotions() {
   async function removePromotion(promotion: Promotion) {
     setBusyDeleteId(promotion.id);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await deletePromotion(session.accessToken, promotion.id);
       setNotice("Promotion deleted.");
@@ -227,30 +229,20 @@ export function AdminPromotions() {
   }
 
   if (loading && promotions.length === 0) {
-    return <p className="text-sm text-muted">Loading promotions…</p>;
+    return <AdminLoading>Loading promotions…</AdminLoading>;
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow text-forest">Discounts</p>
-          <h2 className="mt-2 font-display text-3xl tracking-tight">
-            {promotions.length === 1 ? "1 promotion" : `${promotions.length} promotions`}
-          </h2>
-          <p className="mt-1 text-xs text-muted">
-            Showing the first 100 promotions. Search and filters apply to the loaded page only.
-          </p>
-        </div>
-        <button type="button" onClick={startCreate} className="btn-primary">
-          New promotion
-        </button>
-      </div>
+      <AdminPageHeading title="Promotions"
+        description={`${promotions.length} loaded. Search and filters apply to the first 100 promotions.`}
+        action={<button type="button" onClick={startCreate} className="btn-primary">New promotion</button>}
+      />
 
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
@@ -258,7 +250,7 @@ export function AdminPromotions() {
       {notice ? (
         <p
           role="status"
-          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+          className="admin-success mt-5"
         >
           {notice}
         </p>
@@ -267,11 +259,11 @@ export function AdminPromotions() {
       {form ? (
         <form
           onSubmit={savePromotion}
-          className="mt-6 rounded-[4px] border border-line bg-white p-5 sm:p-6"
+          className="admin-panel mt-5 p-4 sm:p-5"
         >
-          <h3 className="font-display text-2xl tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tight">
             {editingId === null ? "New promotion" : "Edit promotion"}
-          </h3>
+          </h2>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label htmlFor="promotion-name" className="label">
@@ -410,7 +402,7 @@ export function AdminPromotions() {
         </form>
       ) : null}
 
-      <div className="mt-6 grid gap-4 rounded-[4px] border border-line bg-white p-4 sm:grid-cols-2">
+      <div className="admin-panel mt-5 grid gap-4 p-4 sm:grid-cols-2">
         <div>
           <label htmlFor="promotion-search" className="label">
             Search
@@ -448,15 +440,15 @@ export function AdminPromotions() {
       </div>
 
       {promotions.length === 0 ? (
-        <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No promotions yet.
         </div>
       ) : visiblePromotions.length === 0 ? (
-        <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No promotions match the current filters.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label="Promotions">
           <table className="w-full min-w-[60rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -502,7 +494,7 @@ export function AdminPromotions() {
                         <button
                           type="button"
                           onClick={() => startEdit(promotion)}
-                          className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                          className="admin-row-action"
                         >
                           Edit
                         </button>
@@ -510,7 +502,7 @@ export function AdminPromotions() {
                           type="button"
                           disabled={busy || togglingId === promotion.id}
                           onClick={() => clickDelete(promotion)}
-                          className="rounded-[2px] px-3 py-1.5 text-xs font-medium text-terracotta transition-colors hover:bg-terracotta/10 disabled:opacity-50"
+                          className={`admin-danger-action ${confirming ? "bg-red-50" : ""}`}
                         >
                           {confirming ? "Click again to delete" : "Delete"}
                         </button>
@@ -518,7 +510,7 @@ export function AdminPromotions() {
                           <button
                             type="button"
                             onClick={() => setConfirmingDeleteId(null)}
-                            className="rounded-[2px] px-2 py-1.5 text-xs font-medium text-muted transition-colors hover:text-charcoal"
+                            className="admin-row-action"
                           >
                             Cancel
                           </button>
@@ -530,7 +522,7 @@ export function AdminPromotions() {
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
     </div>
   );

@@ -33,19 +33,19 @@ Next.js 16 App Router UI (React 19, TypeScript, Tailwind CSS 4) for the tour boo
 - There is no demo/sample data. If the backend is unreachable, pages throw to `app/error.tsx`.
 
 ## Where things live
-- Routes and pages: `app/` (`/`, `/tours`, `/tours/[id]`, `/login`, `/register`, `/payment`, `/my-trips`, `/my-trips/[id]`, `/invoices/[bookingId]`, `/admin`, `/admin/bookings`, `/admin/tours`)
-- Admin console: `app/admin/`, gated client-side by `components/admin-gate.tsx` (`ROLE_ADMIN`); `components/admin-bookings.tsx` records cash payments and advances booking status, `components/admin-tours.tsx` manages tours and departures (setting a departure `CANCELLED` triggers the backend cascade). The header shows an Admin link only for `ROLE_ADMIN`.
+- Routes and pages: `app/(public)/` contains public and customer pages; the route group does not change URLs. Public chrome lives in `components/public-layout.tsx`.
+- Admin console: `app/admin/` mounts the shared workspace from `components/admin/`, gated client-side by `components/admin-gate.tsx` (`ROLE_ADMIN`). Admin pages load protected data on the client using the shared access context, not during prerendering. `components/admin-bookings.tsx` records cash payments and advances booking status; `components/admin-tours.tsx` manages tours and departures (setting a departure `CANCELLED` triggers the backend cascade). The public header shows an Admin link only for `ROLE_ADMIN`.
 - Root layout and fonts: `app/layout.tsx`
 - Global styles / Tailwind entry: `app/globals.css`
 - API client and types: `lib/api.ts`, `lib/types.ts`
 - Session/auth helpers: `lib/auth.ts`; forms in `components/auth-form.tsx`
 - Cached tour reads: `lib/tours.ts` (`use cache`, `cacheLife`, `cacheTag`)
-- Checkout: `app/payment/page.tsx`, `components/payment-form.tsx` (captures a traveler manifest per seat and a promotion code, calls `POST /api/bookings`, leaves the booking `PENDING`)
+- Checkout: `app/(public)/payment/page.tsx`, `components/payment-form.tsx` (captures a traveler manifest per seat and a promotion code, calls `POST /api/bookings`, leaves the booking `PENDING`)
 - Order list/detail and lifecycle actions: `components/account-bookings.tsx`, `components/trip-detail.tsx`, `components/trip-card.tsx`
 - Profile and password: `components/account-profile.tsx`, `lib/profile.ts`
-- Email verification landing: `components/verify-email.tsx`, `app/verify-email/page.tsx`
+- Email verification landing: `components/verify-email.tsx`, `app/(public)/verify-email/page.tsx`
 - Catalogue filters: `components/tour-filters.tsx`, `lib/tour-filters.ts`
-- Invoice (printable): `app/invoices/[bookingId]/page.tsx`, `components/invoice-view.tsx` (reads `GET /api/invoices/me`)
+- Invoice (printable): `app/(public)/invoices/[bookingId]/page.tsx`, `components/invoice-view.tsx` (public view reads `GET /api/invoices/me`)
 - Shared components: `components/`
 - Static assets: `public/`
 - Next config: `next.config.ts`

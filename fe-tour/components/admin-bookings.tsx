@@ -9,7 +9,8 @@ import {
   listBookings,
   updateBookingStatus,
 } from "@/lib/api";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { statusLabel, statusTone } from "@/lib/bookings";
 import { buildBookingListQuery, type BookingListFilters } from "@/lib/booking-list";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
@@ -35,6 +36,7 @@ type FilterForm = {
 const EMPTY_FORM: FilterForm = { status: "", from: "", to: "", q: "" };
 
 export function AdminBookings() {
+  const { getSession } = useAdminAccess();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(PAGE_SIZE);
@@ -59,7 +61,7 @@ export function AdminBookings() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const result = await listBookings(session.accessToken, page, size, filters);
         if (!active) return;
@@ -82,7 +84,7 @@ export function AdminBookings() {
     return () => {
       active = false;
     };
-  }, [page, size, filters, reloadKey]);
+  }, [page, size, filters, reloadKey, getSession]);
 
   function applyFilters() {
     const next: BookingListFilters = {
@@ -120,7 +122,7 @@ export function AdminBookings() {
       return next;
     });
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       const result = await listBookingPayments(session.accessToken, bookingId);
       setPayments((current) => ({ ...current, [bookingId]: result }));
@@ -157,7 +159,7 @@ export function AdminBookings() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await action(session.accessToken);
       invalidatePayments(booking.id);
@@ -171,19 +173,13 @@ export function AdminBookings() {
   }
 
   if (loading && bookings.length === 0) {
-    return <p className="text-sm text-muted">Loading bookings…</p>;
+    return <AdminLoading>Loading bookings…</AdminLoading>;
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow text-forest">Reservations</p>
-          <h2 className="mt-2 font-display text-3xl tracking-tight">
-            {totalElements === 1 ? "1 booking" : `${totalElements} bookings`}
-          </h2>
-        </div>
-      </div>
+      <AdminPageHeading title="Bookings & payments"
+        description={totalElements === 1 ? "1 booking" : `${totalElements} bookings`} />
 
       <form
         aria-label="Filter bookings"
@@ -191,9 +187,9 @@ export function AdminBookings() {
           event.preventDefault();
           applyFilters();
         }}
-        className="mt-6 rounded-[4px] border border-line bg-white p-5"
+        className="admin-panel mt-5 p-4"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <div>
             <label htmlFor="booking-status" className="label">
               Status
@@ -300,7 +296,7 @@ export function AdminBookings() {
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
@@ -308,18 +304,18 @@ export function AdminBookings() {
       {notice ? (
         <p
           role="status"
-          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+          className="admin-success mt-5"
         >
           {notice}
         </p>
       ) : null}
 
       {bookings.length === 0 ? (
-        <div className="mt-8 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No bookings yet.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label="Bookings">
           <table className="w-full min-w-[56rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -367,7 +363,7 @@ export function AdminBookings() {
                             onClick={() =>
                               setExpandedId((current) => (current === booking.id ? null : booking.id))
                             }
-                            className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                            className="admin-row-action"
                           >
                             {expanded ? "Hide details" : "Details"}
                           </button>
@@ -387,7 +383,7 @@ export function AdminBookings() {
                                   `Cash payment recorded for ${booking.bookingCode}.`,
                                 )
                               }
-                              className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest disabled:opacity-50"
+                              className="admin-row-action"
                             >
                               Record cash
                             </button>
@@ -404,7 +400,7 @@ export function AdminBookings() {
                                   `${booking.bookingCode} confirmed.`,
                                 )
                               }
-                              className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest disabled:opacity-50"
+                              className="admin-row-action"
                             >
                               Confirm
                             </button>
@@ -421,7 +417,7 @@ export function AdminBookings() {
                                   `${booking.bookingCode} completed.`,
                                 )
                               }
-                              className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest disabled:opacity-50"
+                              className="admin-row-action"
                             >
                               Complete
                             </button>
@@ -438,7 +434,7 @@ export function AdminBookings() {
                                   `${booking.bookingCode} cancelled.`,
                                 )
                               }
-                              className="rounded-[2px] px-3 py-1.5 text-xs font-medium text-terracotta transition-colors hover:bg-terracotta/10 disabled:opacity-50"
+                              className="admin-danger-action"
                             >
                               Cancel
                             </button>
@@ -511,7 +507,7 @@ export function AdminBookings() {
                                 type="button"
                                 disabled={paymentsLoadingId === booking.id}
                                 onClick={() => loadPayments(booking.id)}
-                                className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest disabled:opacity-50"
+                                className="admin-row-action"
                               >
                                 {paymentsLoadingId === booking.id ? "Loading…" : "Load payments"}
                               </button>
@@ -562,10 +558,10 @@ export function AdminBookings() {
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
 
-      <div className="mt-6 flex items-center justify-between gap-4">
+      <div className="admin-pagination mt-5">
         <button
           type="button"
           disabled={page === 0 || loading}

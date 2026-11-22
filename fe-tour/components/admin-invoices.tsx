@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { filterInvoices, type InvoiceStatusFilter } from "@/lib/admin-invoices";
 import { ApiError, listInvoices } from "@/lib/api";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 
@@ -12,6 +13,7 @@ const STATUSES: InvoiceStatusFilter[] = ["All", "PAID", "UNPAID"];
 const PAGE_SIZE = 100;
 
 export function AdminInvoices() {
+  const { getSession } = useAdminAccess();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
@@ -26,7 +28,7 @@ export function AdminInvoices() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const result = await listInvoices(session.accessToken, page, PAGE_SIZE);
         if (!active) return;
@@ -45,26 +47,23 @@ export function AdminInvoices() {
     return () => {
       active = false;
     };
-  }, [page]);
+  }, [page, getSession]);
 
   const rows = filterInvoices(invoices, { status, query });
 
   if (loading && invoices.length === 0) {
-    return <p className="text-sm text-muted">Loading invoices…</p>;
+    return <AdminLoading>Loading invoices…</AdminLoading>;
   }
 
   return (
     <div>
-      <p className="eyebrow text-forest">Billing</p>
-      <h2 className="mt-2 font-display text-3xl tracking-tight">Invoices</h2>
-      <p className="mt-1 text-xs text-muted">
-        100 invoices per page. Status and search filters apply to the current page only.
-      </p>
+      <AdminPageHeading title="Invoices"
+        description="100 invoices per page. Status and search filters apply to the current page only." />
 
       <form
         aria-label="Filter invoices"
         onSubmit={(event) => event.preventDefault()}
-        className="mt-6 rounded-[4px] border border-line bg-white p-5"
+        className="admin-panel mt-5 p-4"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -104,18 +103,18 @@ export function AdminInvoices() {
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
       ) : null}
 
       {rows.length === 0 ? (
-        <div className="mt-8 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
-          No invoices yet.
+        <div className="admin-notice mt-5" role="status">
+          {query.trim() || status !== "All" ? "No invoices match these filters." : "No invoices yet."}
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label="Invoices">
           <table className="w-full min-w-[52rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -157,7 +156,7 @@ export function AdminInvoices() {
                   <td className="px-4 py-4">
                     <Link
                       href={`/admin/invoices/${invoice.bookingId}`}
-                      className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                      className="admin-row-action"
                     >
                       View
                     </Link>
@@ -166,10 +165,10 @@ export function AdminInvoices() {
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
 
-      <div className="mt-6 flex items-center justify-between gap-4">
+      <div className="admin-pagination mt-5">
         <button
           type="button"
           disabled={page === 0 || loading}

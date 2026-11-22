@@ -10,7 +10,9 @@ import {
   updateAdminTour,
   updateDeparture,
 } from "@/lib/api";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { formatDateRange, formatPrice } from "@/lib/format";
 import type {
   AdminTour,
@@ -61,6 +63,7 @@ const EMPTY_TOUR: TourForm = {
 };
 
 export function AdminTours() {
+  const { getSession } = useAdminAccess();
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function AdminTours() {
   const [departureForm, setDepartureForm] = useState<DepartureForm | null>(null);
   const [savingDeparture, setSavingDeparture] = useState(false);
   const [deletingDepartureId, setDeletingDepartureId] = useState<number | null>(null);
+  const [departureToDelete, setDepartureToDelete] = useState<TourDeparture | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -82,7 +86,7 @@ export function AdminTours() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const result = await listAdminTours(session.accessToken, 0, 100);
         if (!active) return;
@@ -100,7 +104,7 @@ export function AdminTours() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, getSession]);
 
   const selectedTour = tours.find((tour) => tour.id === selectedTourId) ?? null;
 
@@ -134,7 +138,7 @@ export function AdminTours() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       const input: TourInput = {
         name: tourForm.name.trim(),
@@ -202,7 +206,7 @@ export function AdminTours() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       const input: DepartureInput = {
         tourId: departureForm.tourId,
@@ -234,18 +238,11 @@ export function AdminTours() {
   }
 
   async function removeDeparture(departure: TourDeparture) {
-    if (
-      !window.confirm(
-        `Delete the departure on ${formatDateRange(departure.startDate, departure.endDate)}?`,
-      )
-    ) {
-      return;
-    }
     setDeletingDepartureId(departure.id);
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await deleteDeparture(session.accessToken, departure.id);
       setNotice("Departure deleted.");
@@ -258,33 +255,26 @@ export function AdminTours() {
   }
 
   if (loading && tours.length === 0) {
-    return <p className="text-sm text-muted">Loading tours…</p>;
+    return <AdminLoading>Loading tours…</AdminLoading>;
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow text-forest">Catalogue</p>
-          <h2 className="mt-2 font-display text-3xl tracking-tight">
-            {tours.length === 1 ? "1 tour" : `${tours.length} tours`}
-          </h2>
-        </div>
-        <button type="button" onClick={startCreate} className="btn-primary">
-          New tour
-        </button>
-      </div>
+      <AdminPageHeading title="Tours & departures"
+        description={tours.length === 1 ? "1 tour" : `${tours.length} tours`}
+        action={<button type="button" onClick={startCreate} className="btn-primary">New tour</button>}
+      />
 
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest">
+        <p role="status" className="admin-success mt-5">
           {notice}
         </p>
       ) : null}
@@ -292,11 +282,11 @@ export function AdminTours() {
       {tourForm ? (
         <form
           onSubmit={saveTour}
-          className="mt-6 rounded-[4px] border border-line bg-white p-5 sm:p-6"
+          className="admin-panel mt-5 p-4 sm:p-5"
         >
-          <h3 className="font-display text-2xl tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tight">
             {editingTourId === null ? "New tour" : "Edit tour"}
-          </h3>
+          </h2>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label htmlFor="tour-name" className="label">
@@ -395,11 +385,11 @@ export function AdminTours() {
       ) : null}
 
       {tours.length === 0 ? (
-        <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No tours yet. Create the first one.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label="Tours">
           <table className="w-full min-w-[48rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -424,7 +414,7 @@ export function AdminTours() {
                       <button
                         type="button"
                         onClick={() => startEdit(tour)}
-                        className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                        className="admin-row-action"
                       >
                         Edit
                       </button>
@@ -434,7 +424,7 @@ export function AdminTours() {
                           setSelectedTourId(tour.id);
                           setDepartureForm(null);
                         }}
-                        className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                        className="admin-row-action"
                       >
                         Departures
                       </button>
@@ -444,15 +434,15 @@ export function AdminTours() {
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
 
       {selectedTour ? (
-        <div className="mt-8 rounded-[4px] border border-line bg-white p-5 sm:p-6">
+        <div className="admin-panel mt-5 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-display text-2xl tracking-tight">
+            <h2 className="text-lg font-semibold tracking-tight">
               Departures — {selectedTour.name}
-            </h3>
+            </h2>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -477,7 +467,7 @@ export function AdminTours() {
           {departureForm ? (
             <form
               onSubmit={saveDeparture}
-              className="mt-5 rounded-[3px] border border-line bg-ivory/60 p-4"
+              className="admin-confirmation mt-5"
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -621,7 +611,7 @@ export function AdminTours() {
           {selectedTour.departures.length === 0 ? (
             <p className="mt-5 text-sm text-muted">No departures for this tour yet.</p>
           ) : (
-            <div className="mt-5 overflow-x-auto">
+            <AdminTableRegion label="Departures">
               <table className="w-full min-w-[44rem] text-left text-sm">
                 <thead className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-muted">
                   <tr>
@@ -648,15 +638,15 @@ export function AdminTours() {
                           <button
                             type="button"
                             onClick={() => startEditDeparture(selectedTour, departure)}
-                            className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                            className="admin-row-action"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             disabled={deletingDepartureId === departure.id}
-                            onClick={() => removeDeparture(departure)}
-                            className="rounded-[2px] px-3 py-1.5 text-xs font-medium text-terracotta transition-colors hover:bg-terracotta/10 disabled:opacity-50"
+                            onClick={() => setDepartureToDelete(departure)}
+                            className="admin-danger-action"
                           >
                             Delete
                           </button>
@@ -666,10 +656,15 @@ export function AdminTours() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableRegion>
           )}
         </div>
       ) : null}
+      <AdminConfirmDialog
+        message={departureToDelete ? `Delete the departure on ${formatDateRange(departureToDelete.startDate, departureToDelete.endDate)}?` : null}
+        onDismiss={() => setDepartureToDelete(null)}
+        onConfirm={() => { if (departureToDelete) void removeDeparture(departureToDelete); }}
+      />
     </div>
   );
 }

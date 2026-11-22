@@ -26,7 +26,8 @@ import {
   updateImage,
   updateVehicle,
 } from "@/lib/api";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import type {
   AccommodationInput,
   AdminTour,
@@ -170,6 +171,7 @@ async function removeRow(resource: CatalogResource, token: string, id: number): 
 }
 
 export function AdminCatalog() {
+  const { getSession } = useAdminAccess();
   const tabs = catalogTabs();
   const [resource, setResource] = useState<CatalogResource>("destinations");
   const [rows, setRows] = useState<CatalogRow[]>([]);
@@ -192,7 +194,7 @@ export function AdminCatalog() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const [loadedRows, loadedTours] = await Promise.all([
           fetchRows(resource, session.accessToken),
@@ -216,7 +218,7 @@ export function AdminCatalog() {
     return () => {
       active = false;
     };
-  }, [resource, reloadKey]);
+  }, [resource, reloadKey, getSession]);
 
   function selectTab(next: CatalogResource) {
     if (next === resource) return;
@@ -271,7 +273,7 @@ export function AdminCatalog() {
     }
     setSaving(true);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await saveRow(resource, session.accessToken, editingId, input);
       setNotice("Saved.");
@@ -294,7 +296,7 @@ export function AdminCatalog() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return;
       await removeRow(resource, session.accessToken, row.id);
       setNotice("Deleted.");
@@ -306,7 +308,10 @@ export function AdminCatalog() {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2" aria-label="Catalog sections">
+      <AdminPageHeading title="Catalog" description={`Managing ${activeLabel.toLowerCase()}.`}
+        action={<button type="button" onClick={startCreate} className="btn-primary">Add record</button>}
+      />
+      <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Catalog sections">
         {tabs.map((tab) => (
           <button
             key={tab.resource}
@@ -315,8 +320,8 @@ export function AdminCatalog() {
             onClick={() => selectTab(tab.resource)}
             className={
               resource === tab.resource
-                ? "rounded-[2px] border border-forest bg-forest px-4 py-2 text-sm font-medium text-white"
-                : "rounded-[2px] border border-line bg-white px-4 py-2 text-sm font-medium text-charcoal hover:border-forest"
+                ? "btn-primary"
+                : "btn-secondary"
             }
           >
             {tab.label}
@@ -324,20 +329,10 @@ export function AdminCatalog() {
         ))}
       </div>
 
-      <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow text-forest">Catalogue</p>
-          <h2 className="mt-2 font-display text-3xl tracking-tight">{activeLabel}</h2>
-        </div>
-        <button type="button" onClick={startCreate} className="btn-primary">
-          Add record
-        </button>
-      </div>
-
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
@@ -345,7 +340,7 @@ export function AdminCatalog() {
       {notice ? (
         <p
           role="status"
-          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+          className="admin-success mt-5"
         >
           {notice}
         </p>
@@ -354,11 +349,11 @@ export function AdminCatalog() {
       {form ? (
         <form
           onSubmit={(event) => void save(event)}
-          className="mt-6 rounded-[4px] border border-line bg-white p-5 sm:p-6"
+          className="admin-panel mt-5 p-4 sm:p-5"
         >
-          <h3 className="font-display text-2xl tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tight">
             {editingId === null ? "Add record" : "Edit record"}
-          </h3>
+          </h2>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             {FIELDS[resource].map((field) => (
               <div
@@ -445,13 +440,13 @@ export function AdminCatalog() {
       ) : null}
 
       {loading ? (
-        <p className="mt-6 text-sm text-muted">Loading…</p>
+        <div className="mt-5"><AdminLoading>Loading {activeLabel.toLowerCase()}…</AdminLoading></div>
       ) : rows.length === 0 ? (
-        <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No {resource} yet.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label={activeLabel}>
           <table className="w-full min-w-[48rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -474,7 +469,7 @@ export function AdminCatalog() {
                       if (tour) display = tour.name;
                     }
                     return (
-                      <td key={field.name} className="px-4 py-4 text-muted">
+                      <td key={field.name} className="max-w-xs px-4 py-4 break-words text-muted">
                         {display}
                       </td>
                     );
@@ -484,24 +479,29 @@ export function AdminCatalog() {
                       <button
                         type="button"
                         onClick={() => startEdit(row)}
-                        className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest"
+                        className="admin-row-action"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => void remove(row)}
-                        className="rounded-[2px] px-3 py-1.5 text-xs font-medium text-terracotta transition-colors hover:bg-terracotta/10"
+                         className={`admin-danger-action ${confirmDeleteId === row.id ? "bg-red-50" : ""}`}
                       >
                         {confirmDeleteId === row.id ? "Click again to delete" : "Delete"}
-                      </button>
+                       </button>
+                       {confirmDeleteId === row.id && (
+                         <button type="button" className="admin-row-action" onClick={() => setConfirmDeleteId(null)}>
+                           Cancel
+                         </button>
+                       )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
     </div>
   );

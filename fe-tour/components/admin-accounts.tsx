@@ -13,7 +13,8 @@ import {
   isFinalActiveAdmin,
   type AdminAccountFilter,
 } from "@/lib/admin-accounts";
-import { ensureSession } from "@/lib/auth";
+import { useAdminAccess } from "@/components/admin-gate";
+import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { formatDate } from "@/lib/format";
 import type { AccountRoleResponse, AccountUpdateInput, AdminAccount } from "@/lib/types";
 
@@ -37,6 +38,7 @@ function generateTemporaryPassword(): string {
 }
 
 export function AdminAccounts() {
+  const { getSession } = useAdminAccess();
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [roles, setRoles] = useState<AccountRoleResponse[]>([]);
   const [page, setPage] = useState(0);
@@ -69,7 +71,7 @@ export function AdminAccounts() {
     async function load() {
       setLoading(true);
       try {
-        const session = await ensureSession();
+        const session = await getSession();
         if (!active || !session) return;
         const [result, roleList] = await Promise.all([
           listAdminAccounts(session.accessToken, page, PAGE_SIZE),
@@ -94,7 +96,7 @@ export function AdminAccounts() {
     return () => {
       active = false;
     };
-  }, [page, reloadKey]);
+  }, [page, reloadKey, getSession]);
 
   const visibleAccounts = useMemo(() => filterAccounts(accounts, filter), [accounts, filter]);
   const accountCount = totalElements ?? accounts.length;
@@ -133,7 +135,7 @@ export function AdminAccounts() {
     setError(null);
     setNotice(null);
     try {
-      const session = await ensureSession();
+      const session = await getSession();
       if (!session) return false;
       await updateAdminAccount(session.accessToken, account.id, input);
       setNotice(message);
@@ -202,7 +204,7 @@ export function AdminAccounts() {
   function renderConfirmPanel(account: AdminAccount) {
     const draft = getDraft(account);
     return (
-      <div className="mt-3 rounded-[3px] border border-line bg-ivory/60 p-3">
+      <div className="admin-confirmation mt-3">
         <p className="text-xs font-medium text-charcoal">Confirm changes for {account.username}</p>
         <ul className="mt-2 space-y-1 text-xs text-muted">
           <li>Role: {roleNames.get(Number(draft.roleId)) ?? draft.roleId}</li>
@@ -232,28 +234,19 @@ export function AdminAccounts() {
   }
 
   if (loading && accounts.length === 0) {
-    return <p className="text-sm text-muted">Loading accounts…</p>;
+    return <AdminLoading>Loading accounts…</AdminLoading>;
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow text-forest">Access control</p>
-          <h2 className="mt-2 font-display text-3xl tracking-tight">
-            {accountCount === 1 ? "1 account" : `${accountCount} accounts`}
-          </h2>
-          <p className="mt-1 text-xs text-muted">
-            Page {page + 1} of {totalPages} · showing {accounts.length} of {accountCount}.
-            Search and filters apply to the current page only.
-          </p>
-        </div>
-      </div>
+      <AdminPageHeading title="Accounts" description={
+        `Showing ${accounts.length} of ${accountCount} accounts. Search and filters apply to the current page only.`
+      } />
 
       {error ? (
         <p
           role="alert"
-          className="mt-6 rounded-[3px] border border-terracotta/40 bg-terracotta/10 p-4 text-sm text-terracotta"
+          className="admin-notice mt-5"
         >
           {error}
         </p>
@@ -261,7 +254,7 @@ export function AdminAccounts() {
       {notice ? (
         <p
           role="status"
-          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4 text-sm text-forest"
+          className="admin-success mt-5"
         >
           {notice}
         </p>
@@ -270,7 +263,7 @@ export function AdminAccounts() {
       {passwordBanner ? (
         <div
           role="status"
-          className="mt-6 rounded-[3px] border border-forest/30 bg-sage/15 p-4"
+          className="admin-success mt-5"
         >
           <p className="text-sm font-medium text-charcoal">
             Temporary password for {passwordBanner.username}
@@ -317,7 +310,7 @@ export function AdminAccounts() {
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-4 rounded-[4px] border border-line bg-white p-4 sm:grid-cols-3">
+      <div className="admin-panel mt-5 grid gap-4 p-4 sm:grid-cols-3">
         <div>
           <label htmlFor="account-search" className="label">
             Search
@@ -371,11 +364,11 @@ export function AdminAccounts() {
       </div>
 
       {visibleAccounts.length === 0 ? (
-        <div className="mt-6 rounded-[4px] border border-line bg-white p-6 text-sm text-muted">
+        <div className="admin-notice mt-5">
           No accounts on this page match the current filters.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[4px] border border-line bg-white">
+        <AdminTableRegion label="Accounts">
           <table className="w-full min-w-[68rem] text-left text-sm">
             <thead className="border-b border-line bg-sage/10 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
@@ -466,7 +459,7 @@ export function AdminAccounts() {
                               setNotice(null);
                               setConfirmingId(account.id);
                             }}
-                            className="rounded-[2px] border border-forest/40 px-3 py-1.5 text-xs font-medium text-forest transition-colors hover:bg-sage/15 disabled:opacity-50"
+                            className="admin-row-action"
                           >
                             Apply changes
                           </button>
@@ -474,7 +467,7 @@ export function AdminAccounts() {
                             type="button"
                             disabled={busy}
                             onClick={() => void setTemporaryPassword(account)}
-                            className="rounded-[2px] border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:border-forest hover:text-forest disabled:opacity-50"
+                            className="admin-row-action"
                           >
                             Set temporary password
                           </button>
@@ -487,10 +480,10 @@ export function AdminAccounts() {
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableRegion>
       )}
 
-      <div className="mt-6 flex items-center justify-between gap-4">
+      <div className="admin-pagination mt-5">
         <button
           type="button"
           disabled={page === 0 || loading}
