@@ -78,7 +78,7 @@ class PaymentServiceTest {
         booking.setBookingStatus("PENDING");
         booking.setBookingCreatedAt(NOW);
 
-        when(bookingRepository.findById(30L)).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(booking));
         when(paymentRepository.findByPaymentProviderTxnId(any())).thenReturn(Optional.empty());
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentRepository.sumSuccessfulPayments(30L)).thenReturn(new BigDecimal("1000.00"));
@@ -279,6 +279,7 @@ class PaymentServiceTest {
         payment.setPaymentStatus("PENDING");
         payment.setPaymentCreatedAt(NOW);
         when(paymentRepository.findByIdForUpdate(50L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findBookingIdByPaymentId(50L)).thenReturn(Optional.of(30L));
 
         var response = paymentService.update(50L,
                 new PaymentUpdateRequest("CASH", null, "SUCCESS"));

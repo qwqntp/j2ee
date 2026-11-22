@@ -164,6 +164,34 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void googleSignInHasItsOwnBucketWithTenPerMinuteLimit() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);
+        AtomicInteger allowed = new AtomicInteger();
+
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(authRequest("google"), response,
+                    (request, servletResponse) -> allowed.incrementAndGet());
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+
+        // The credentials bucket is untouched, so login from the same IP still passes.
+        MockHttpServletResponse login = new MockHttpServletResponse();
+        filter.doFilter(loginRequest("1.2.3.4"), login,
+                (request, servletResponse) -> allowed.incrementAndGet());
+        assertThat(login.getStatus()).isEqualTo(200);
+
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(authRequest("google"), blocked,
+                (request, servletResponse) -> allowed.incrementAndGet());
+
+        assertThat(allowed).hasValue(11);
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isEqualTo("30");
+    }
+
+    @Test
     void doesNotLimitPublicGets() throws Exception {
         RateLimitFilter filter = new RateLimitFilter(
                 new FixedWindowRateLimiter(CLOCK), new ObjectMapper(), false);

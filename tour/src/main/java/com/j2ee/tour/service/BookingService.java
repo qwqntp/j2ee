@@ -201,6 +201,9 @@ public class BookingService {
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Only administrators can change the booking owner or status");
         }
+        if (request.accountId() != null || request.status() != null || request.guestCount() != null) {
+            VnpayPaymentService.requireNoUnresolvedAttempt(paymentRepository, id);
+        }
         boolean seatsMayChange = request.guestCount() != null || request.status() != null;
         TourDeparture departure = seatsMayChange
                 ? departureRepository.findByIdForUpdate(booking.getDeparture().getDepartureId())
@@ -317,6 +320,7 @@ public class BookingService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Only pending unpaid bookings can be cancelled");
         }
+        VnpayPaymentService.requireNoUnresolvedAttempt(paymentRepository, id);
         BigDecimal paid = paymentRepository.sumSuccessfulPayments(id);
         if (paid != null && paid.compareTo(BigDecimal.ZERO) > 0) {
             throw new ApiException(HttpStatus.CONFLICT,
@@ -337,7 +341,7 @@ public class BookingService {
     @Transactional
     @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id, AuthPrincipal principal) {
-        Booking booking = findOwned(id, principal);
+        Booking booking = findOwnedForUpdate(id, principal);
         if (paymentRepository.existsByBookingBookingId(id)) {
             throw new IllegalStateException("Cannot delete a booking that has payments");
         }

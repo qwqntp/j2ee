@@ -10,6 +10,7 @@ import { isSoldOut } from "@/lib/format";
 import { tourFallbackImage } from "@/lib/tour-images";
 import { loadTour } from "@/lib/tours";
 import type { TourDetail } from "@/lib/types";
+import { checkoutRecoveryHref } from "@/lib/vnpay";
 
 export const metadata: Metadata = {
   title: "Checkout",
@@ -40,8 +41,8 @@ export default function PaymentPage({ searchParams }: Props) {
                 A quiet moment before the journey.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-6 text-muted">
-                Reserve seats and tell us who is traveling. Your booking is created as pending;
-                payment is arranged separately. No card details are collected here.
+                Reserve seats and tell us who is traveling. Pay on VNPay or leave your
+                booking pending and pay later. We do not collect card details here.
               </p>
             </div>
             <Link href="/tours" className="btn-secondary">
@@ -62,6 +63,12 @@ export default function PaymentPage({ searchParams }: Props) {
 
 async function PaymentContent({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
+  const booked = checkoutRecoveryHref(params.reservedBooking);
+  if (booked) {
+    return <EmptyState title="Continue from your booking."
+      description="Open the booking to check payment status or continue to VNPay."
+      action={{ href: booked, label: "View booking" }} />;
+  }
   const tourId = positiveInt(first(params.tourId));
   const departureId = positiveInt(first(params.departureId));
 

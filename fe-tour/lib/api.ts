@@ -29,6 +29,9 @@ import type {
   TourSummary,
   VehicleInput,
   VehicleRow,
+  VnpayReconcile,
+  VnpayStart,
+  VnpayStatus,
 } from "./types";
 import { buildBookingListQuery, type BookingListFilters } from "./booking-list";
 import { buildTourApiQuery, type TourFilters } from "./tour-filters";
@@ -62,6 +65,8 @@ type RequestOptions = {
   body?: unknown;
   token?: string;
   allowEmpty?: boolean;
+  signal?: AbortSignal;
+  cache?: RequestCache;
 };
 
 // Server renders fill a `use cache` entry and can wait on a cold database pool.
@@ -81,7 +86,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       credentials: "include",
-      signal: controller.signal,
+      signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
+      ...(options.cache ? { cache: options.cache } : {}),
     });
 
     const envelope = (await response.json().catch(() => null)) as Envelope<T> | null;
@@ -150,6 +156,13 @@ export function login(input: {
   return apiRequest<AuthSession>("/api/auth/login", { method: "POST", body: input });
 }
 
+export function googleSignIn(idToken: string): Promise<AuthSession> {
+  return apiRequest<AuthSession>("/api/auth/google", {
+    method: "POST",
+    body: { idToken },
+  });
+}
+
 export function refresh(): Promise<AuthSession> {
   return apiRequest<AuthSession>("/api/auth/refresh", { method: "POST" });
 }
@@ -215,8 +228,8 @@ export function createBooking(
   });
 }
 
-export function getBooking(token: string, id: number): Promise<Booking> {
-  return apiRequest<Booking>(`/api/bookings/${id}`, { token });
+export function getBooking(token: string, id: number, signal?: AbortSignal): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}`, { token, signal, cache: "no-store" });
 }
 
 export function listBookings(
@@ -239,6 +252,25 @@ export function cancelBooking(token: string, id: number): Promise<Booking> {
 
 export function payBooking(token: string, id: number): Promise<Payment> {
   return apiRequest<Payment>(`/api/bookings/${id}/payments/mock`, { method: "POST", token });
+}
+
+export function startVnpay(token: string, bookingId: number): Promise<VnpayStart> {
+  return apiRequest<VnpayStart>(`/api/bookings/${bookingId}/payments/vnpay`, { method: "POST", token });
+}
+
+export function verifyVnpayReturn(token: string, query: string): Promise<VnpayStatus> {
+  return apiRequest<VnpayStatus>("/api/payments/vnpay/return", { method: "POST", token, body: { query } });
+}
+
+export function getVnpayStatus(token: string, reference: string): Promise<VnpayStatus> {
+  return apiRequest<VnpayStatus>(`/api/payments/vnpay/status/${encodeURIComponent(reference)}`, { token });
+}
+
+export function reconcileVnpayBooking(token: string, bookingId: number): Promise<VnpayReconcile> {
+  return apiRequest<VnpayReconcile>(`/api/bookings/${bookingId}/payments/vnpay/reconcile`, {
+    method: "POST",
+    token,
+  });
 }
 
 export function confirmBooking(token: string, id: number): Promise<Booking> {

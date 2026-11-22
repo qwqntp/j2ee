@@ -9,6 +9,8 @@ import {
   completeBooking,
   confirmBooking,
   getBooking,
+  reconcileVnpayBooking,
+  startVnpay,
 } from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
 import {
@@ -22,6 +24,8 @@ import { formatDate, formatDateRange, formatDuration, formatPrice } from "@/lib/
 import { publishFlash } from "@/lib/flash";
 import { tourFallbackImage } from "@/lib/tour-images";
 import type { Booking } from "@/lib/types";
+import { openVnpayCheckout, vnpayCheckoutEnabled, vnpayReconcileError, vnpayReconcileNotice } from "@/lib/vnpay";
+import type { VnpayReconcileNotice } from "@/lib/vnpay";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight, IconCalendar, IconClock, IconMapPin, IconUsers } from "./icons";
 import { TripDetailSkeleton } from "./skeleton";
@@ -47,6 +51,12 @@ export function TripDetail({
   const [cancelConflict, setCancelConflict] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [reconcileNotice, setReconcileNotice] = useState<VnpayReconcileNotice | null>(null);
+  const [paymentBlocked, setPaymentBlocked] = useState(false);
+  const paymentInFlight = useRef(false);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const loginHref = `/login?next=${encodeURIComponent(`${basePath}/${bookingId}`)}`;
 
@@ -109,6 +119,66 @@ export function TripDetail({
     setLoading(true);
     setError(null);
     setReloadKey((key) => key + 1);
+  }
+
+  async function handleVnpay() {
+    if (!booking || paymentInFlight.current) return;
+    paymentInFlight.current = true;
+    setPaying(true);
+    setPaymentError(null);
+    setReconcileNotice(null);
+    setPaymentBlocked(false);
+    try {
+      const current = await ensureSession();
+      if (!current) {
+        router.replace(loginHref);
+        return;
+      }
+      const result = await openVnpayCheckout(
+        booking.id,
+        () => startVnpay(current.accessToken, booking.id),
+        (url) => window.location.assign(url),
+      );
+      if (result.error) setPaymentError(result.error);
+    } finally {
+      paymentInFlight.current = false;
+      setPaying(false);
+    }
+  }
+
+  async function handleCheckPayment() {
+    if (!booking || paymentInFlight.current) return;
+    paymentInFlight.current = true;
+    setCheckingPayment(true);
+    setPaymentError(null);
+    try {
+      const current = await ensureSession();
+      if (!current) {
+        router.replace(loginHref);
+        return;
+      }
+      const checked = await reconcileVnpayBooking(current.accessToken, booking.id);
+      const notice = vnpayReconcileNotice(checked);
+      setReconcileNotice(notice);
+      setPaymentBlocked(notice.tone === "pending");
+      if (notice.tone !== "pending") setCancelConflict(null);
+      try {
+        // Reflect a settlement or a released attempt without a full page skeleton.
+        setBooking(await getBooking(current.accessToken, booking.id));
+      } catch {
+        // The reconcile answer is still valid; a refresh will re-read the booking.
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        router.replace(loginHref);
+        return;
+      }
+      setPaymentError(vnpayReconcileError(err));
+    } finally {
+      paymentInFlight.current = false;
+      setCheckingPayment(false);
+    }
   }
 
   async function handleLifecycle(action: "confirm" | "complete") {
@@ -452,6 +522,16 @@ export function TripDetail({
               <p className="mt-2 text-sm leading-6 text-muted">
                 The latest booking status is shown on this page.
               </p>
+              {booking.status === "PENDING" ? (
+                <button
+                  type="button"
+                  onClick={() => { void handleCheckPayment(); }}
+                  disabled={checkingPayment || paying}
+                  className="btn-secondary mt-3"
+                >
+                  {checkingPayment ? "Checking…" : "Check payment status"}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -459,9 +539,43 @@ export function TripDetail({
             <section className="rounded-[4px] border border-terracotta/30 bg-white p-6">
               <p className="eyebrow text-terracotta">Payment pending</p>
               <p className="mt-2 text-sm leading-6 text-muted">
-                Your seats are held. Payment is arranged separately, so this booking stays
-                pending until payment is recorded.
+                Your seats are held. This booking stays pending until payment is confirmed.
               </p>
+              {paymentError ? (
+                <p role="alert" className="mt-3 text-sm text-charcoal">{paymentError}</p>
+              ) : null}
+              {reconcileNotice ? (
+                <p
+                  role={reconcileNotice.tone === "success" || reconcileNotice.tone === "clear"
+                    ? "status" : "alert"}
+                  className={`mt-3 text-sm ${
+                    reconcileNotice.tone === "success" ? "text-forest"
+                      : reconcileNotice.tone === "failed" ? "text-terracotta"
+                        : "text-charcoal"
+                  }`}
+                >
+                  {reconcileNotice.message}
+                </p>
+              ) : null}
+              {booking.totalAmount > 0 && vnpayCheckoutEnabled() ? (
+                <button
+                  type="button"
+                  onClick={handleVnpay}
+                  disabled={paying || checkingPayment || paymentBlocked}
+                  className="btn-primary mt-4 w-full"
+                >
+                  {paying ? "Opening VNPay…" : paymentBlocked ? "Waiting for VNPay" : "Pay with VNPay"}
+                  <IconArrowRight className="h-4 w-4" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => { void handleCheckPayment(); }}
+                disabled={checkingPayment || paying}
+                className="btn-secondary mt-2 w-full"
+              >
+                {checkingPayment ? "Checking…" : "Check payment status"}
+              </button>
             </section>
           ) : booking.status === "PAID" ? (
             <section className="rounded-[4px] border border-forest/30 bg-white p-6">

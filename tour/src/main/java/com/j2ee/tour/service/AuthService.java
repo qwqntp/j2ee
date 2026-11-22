@@ -67,6 +67,7 @@ public class AuthService {
         Account account = new Account();
         account.setUsername(request.username());
         account.setPassword(passwordEncoder.encode(request.password()));
+        account.setPasswordSet(true);
         account.setAccountEmail(request.email());
         account.setEmailVerified(0);
         account.setStatus(ACTIVE);
@@ -130,6 +131,7 @@ public class AuthService {
                 request.token(), AuthTokenService.PASSWORD_RESET);
         Account account = token.getAccount();
         account.setPassword(passwordEncoder.encode(request.newPassword()));
+        account.setPasswordSet(true);
         account.setAccountUpdatedAt(LocalDateTime.now(clock));
         accountRepository.save(account);
         refreshTokenService.revokeAllForAccount(account.getAccountId());
@@ -144,6 +146,10 @@ public class AuthService {
     public AuthResult changePassword(Long accountId, ChangePasswordRequest request) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account not found"));
+        if (!hasUsablePassword(account)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "This account has no password set. Use \"Forgot password\" to set one.");
+        }
         if (request.currentPassword().getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES
                 || !passwordEncoder.matches(request.currentPassword(), account.getPassword())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
@@ -178,6 +184,11 @@ public class AuthService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account not found"));
         return AccountMapper.toResponse(account);
+    }
+
+    private boolean hasUsablePassword(Account account) {
+        // Legacy rows may predate password_set; treat null as a usable password.
+        return account.getPasswordSet() == null || account.getPasswordSet();
     }
 
     private AuthResult issue(Account account, String refreshToken) {

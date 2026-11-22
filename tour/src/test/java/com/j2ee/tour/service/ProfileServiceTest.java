@@ -78,6 +78,22 @@ class ProfileServiceTest {
         assertThat(response.username()).isEqualTo("user01");
         assertThat(response.email()).isEqualTo("user01@example.com");
         assertThat(response.emailVerified()).isZero();
+        assertThat(response.passwordSet()).isTrue();
+        assertThat(response.googleLinked()).isFalse();
+    }
+
+    @Test
+    void getProfileReportsAGoogleOnlyAccountWithoutAPassword() {
+        Account account = account();
+        account.setPasswordSet(false);
+        account.setGoogleSub("google-sub");
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(customerRepository.findByAccountAccountId(1L)).thenReturn(Optional.empty());
+
+        ProfileResponse response = profileService.getProfile(1L);
+
+        assertThat(response.passwordSet()).isFalse();
+        assertThat(response.googleLinked()).isTrue();
     }
 
     @Test

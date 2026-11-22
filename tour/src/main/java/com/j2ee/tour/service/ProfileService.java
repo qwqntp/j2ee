@@ -107,7 +107,9 @@ public class ProfileService {
                 customer == null ? null : customer.getCustomerName(),
                 customer == null ? null : customer.getCustomerPhone(),
                 customer == null ? null : customer.getCustomerAddress(),
-                customer == null ? null : customer.getCustomerDateOfBirth());
+                customer == null ? null : customer.getCustomerDateOfBirth(),
+                account.getPasswordSet() == null || account.getPasswordSet(),
+                account.getGoogleSub() != null && !account.getGoogleSub().isBlank());
     }
 
     private String trim(String value) {

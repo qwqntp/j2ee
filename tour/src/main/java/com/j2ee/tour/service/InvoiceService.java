@@ -59,8 +59,23 @@ public class InvoiceService {
 
     @Transactional
     public InvoiceResponse createForPaidBooking(Booking booking) {
-        return invoiceRepository.findByBookingBookingId(booking.getBookingId())
-                .map(InvoiceResponse::from)
+        return createForPaidBooking(booking, null);
+    }
+
+    @Transactional
+    public InvoiceResponse createForPaidBooking(Booking booking, String settlementMethod) {
+        var existing = settlementMethod == null
+                ? invoiceRepository.findByBookingBookingId(booking.getBookingId())
+                : invoiceRepository.findByBookingIdForUpdate(booking.getBookingId());
+        return existing
+                .map(invoice -> {
+                    if (settlementMethod != null && "UNPAID".equals(invoice.getStatus())) {
+                        invoice.setStatus("PAID");
+                        invoice.setPaymentMethod(settlementMethod);
+                        return InvoiceResponse.from(invoiceRepository.save(invoice));
+                    }
+                    return InvoiceResponse.from(invoice);
+                })
                 .orElseGet(() -> {
                     Invoice invoice = new Invoice();
                     invoice.setInvoiceCreatedAt(LocalDateTime.now(clock));
@@ -69,6 +84,7 @@ public class InvoiceService {
                     invoice.setTaxAmount(BigDecimal.ZERO);
                     invoice.setServiceFee(BigDecimal.ZERO);
                     invoice.setTotalAmount(nonNull(booking.getBookingTotalAmount()));
+                    invoice.setPaymentMethod(settlementMethod);
                     invoice.setBooking(booking);
 
                     if (booking.getTravelers() != null && !booking.getTravelers().isEmpty()) {

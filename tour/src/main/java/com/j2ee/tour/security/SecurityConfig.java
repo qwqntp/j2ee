@@ -63,6 +63,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/register",
                                 "/api/auth/login",
+                                "/api/auth/google",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
                                 "/api/auth/forgot-password",
@@ -76,9 +77,14 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/payments/vnpay/ipn", "/api/payments/vnpay/ipn/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/vnpay/status/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/invoices/me").authenticated()
                         .requestMatchers(HttpMethod.POST,
-                                "/api/bookings/*/payments/mock").authenticated()
+                                "/api/bookings/*/payments/mock", "/api/bookings/*/payments/vnpay",
+                                "/api/bookings/*/payments/vnpay/reconcile",
+                                "/api/payments/vnpay/return").authenticated()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(
                                 "/api/admin/**",

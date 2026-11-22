@@ -343,6 +343,58 @@ class AuthServiceTest {
     }
 
     @Test
+    void resetPasswordMarksThePasswordAsUsable() {
+        Account account = account();
+        account.setPasswordSet(false);
+        when(authTokenService.consume("reset-token", AuthTokenService.PASSWORD_RESET))
+                .thenReturn(authToken(account));
+        when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
+
+        authService.resetPassword(new ResetPasswordRequest("reset-token", "new-password"));
+
+        assertThat(account.getPasswordSet()).isTrue();
+        assertThat(account.getPassword()).isEqualTo("new-hash");
+    }
+
+    @Test
+    void changePasswordRejectsAnAccountWithoutAUsablePassword() {
+        Account account = account();
+        account.setPasswordSet(false);
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> authService.changePassword(1L,
+                new ChangePasswordRequest("any-password", "new-password")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Forgot password")
+                .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
+                        .isEqualTo(HttpStatus.CONFLICT));
+
+        verifyNoInteractions(passwordEncoder, refreshTokenService);
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    void registerMarksThePasswordAsUsable() {
+        AccountRole role = account().getRole();
+        when(accountRepository.existsByUsername("new-user")).thenReturn(false);
+        when(accountRepository.existsByAccountEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(roleRepository.findByRoleName("ROLE_USER")).thenReturn(Optional.of(role));
+        when(passwordEncoder.encode("password123")).thenReturn("hash");
+        when(authTokenService.issue(any(Account.class), eq(AuthTokenService.EMAIL_VERIFICATION)))
+                .thenReturn("verify-token");
+        when(refreshTokenService.issue(any(Account.class))).thenReturn("refresh-1");
+        when(jwtService.issue(any(), eq("new-user"), eq("ROLE_USER"))).thenReturn("access-1");
+
+        authService.register(new RegisterRequest("new-user", "password123", "new@example.com"));
+
+        org.mockito.ArgumentCaptor<Account> captor =
+                org.mockito.ArgumentCaptor.forClass(Account.class);
+        verify(accountRepository).save(captor.capture());
+        assertThat(captor.getValue().getPasswordSet()).isTrue();
+        assertThat(captor.getValue().getGoogleSub()).isNull();
+    }
+
+    @Test
     void changePasswordRejectsWrongCurrentPasswordWithBadRequest() {
         Account account = account();
         when(accountRepository.findById(1L)).thenReturn(Optional.of(account));

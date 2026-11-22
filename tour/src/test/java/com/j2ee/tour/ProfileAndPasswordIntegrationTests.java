@@ -135,6 +135,32 @@ class ProfileAndPasswordIntegrationTests {
     }
 
     @Test
+    void profileReportsGoogleLinkAndWhetherAPasswordIsSet() {
+        account.setGoogleSub("g-" + UUID.randomUUID());
+        account.setPasswordSet(false);
+        accountRepository.save(account);
+
+        var profile = profileService.getProfile(account.getAccountId());
+
+        assertThat(profile.googleLinked()).isTrue();
+        assertThat(profile.passwordSet()).isFalse();
+    }
+
+    @Test
+    void changePasswordRejectsAnAccountThatOnlyUsesGoogle() {
+        account.setPasswordSet(false);
+        accountRepository.save(account);
+
+        assertThatThrownBy(() -> authService.changePassword(
+                account.getAccountId(),
+                new ChangePasswordRequest("any-password", "new-password")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Forgot password")
+                .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
+                        .isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
     void changingPasswordRevokesEveryRefreshTokenAndReplacesIt() {
         String first = refreshTokenService.issue(account);
         String second = refreshTokenService.issue(account);

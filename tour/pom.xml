@@ -108,6 +108,12 @@
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Google ID token verification: NimbusJwtDecoder + JWKS is the smallest
+		     dependency that verifies Google signatures, issuer, audience and expiry. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-jose</artifactId>
+		</dependency>
 
 		<!-- API documentation (Swagger / OpenAPI) -->
 		<dependency>

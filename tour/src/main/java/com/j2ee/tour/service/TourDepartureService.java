@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
@@ -93,10 +92,10 @@ public class TourDepartureService {
      * refunded yet. Completed trips and already-cancelled bookings are kept.
      */
     private void cascadeCancel(TourDeparture departure) {
-        List<Booking> bookings = bookingRepository
-                .findByDepartureDepartureId(departure.getDepartureId());
-        for (Booking booking : bookings) {
-            if (!CANCELLABLE_BOOKING_STATUSES.contains(booking.getBookingStatus())) {
+        for (Long bookingId : bookingRepository.findBookingIdsByDepartureId(departure.getDepartureId())) {
+            // Read after locking so a VNPay settlement that wins the lock is included in refunds.
+            Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+            if (booking == null || !CANCELLABLE_BOOKING_STATUSES.contains(booking.getBookingStatus())) {
                 continue;
             }
             booking.setBookingStatus("CANCELLED");

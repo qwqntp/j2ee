@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiRequest, cancelBooking, forgotPassword, resetPassword } from "./api";
+import {
+  apiRequest, cancelBooking, forgotPassword, getBooking, getVnpayStatus, googleSignIn, reconcileVnpayBooking,
+  resetPassword, startVnpay, verifyVnpayReturn,
+} from "./api";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -7,6 +10,22 @@ afterEach(() => {
 });
 
 describe("apiRequest", () => {
+  it("reads fresh booking status and aborts the fetch when polling stops", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = getBooking("synthetic-session", 42, controller.signal);
+    const cancelled = expect(request).rejects.toHaveProperty("name", "AbortError");
+    controller.abort();
+    await cancelled;
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\/api\/bookings\/42$/),
+      expect.objectContaining({ method: "GET", cache: "no-store" }));
+  });
+
   it("reports a server timeout as a 504 ApiError, not an AbortError", async () => {
     vi.useFakeTimers();
     vi.stubGlobal(
@@ -60,6 +79,45 @@ describe("cancelBooking", () => {
   });
 });
 
+describe("google sign-in API", () => {
+  it("posts only the Google credential and returns the session", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: "Success",
+          data: {
+            accessToken: "access-google",
+            account: {
+              id: 9,
+              username: "google-user",
+              email: "google@example.com",
+              emailVerified: 1,
+              status: 1,
+              roleId: 2,
+              roleName: "ROLE_USER",
+              createdAt: null,
+              updatedAt: null,
+            },
+          },
+          timestamp: "2026-11-21T00:00:00",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const session = await googleSignIn("google-credential");
+
+    expect(session.accessToken).toBe("access-google");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/auth\/google$/);
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toEqual({ idToken: "google-credential" });
+  });
+});
+
 describe("password recovery API", () => {
   it("posts only the email and accepts the empty success envelope", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -105,5 +163,56 @@ describe("password recovery API", () => {
     await expect(forgotPassword("a@example.com")).rejects.toMatchObject({
       status: 429, retryAfterSeconds: null,
     });
+  });
+});
+
+describe("VNPay API", () => {
+  const reference = `VNP${"A".repeat(32)}`;
+
+  it("starts payment with only the owned booking ID and bearer", async () => {
+    const data = { reference, paymentUrl: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+      expiresAt: "2026-11-21T02:15:00Z" };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(startVnpay("synthetic-session", 42)).resolves.toEqual(data);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/bookings\/42\/payments\/vnpay$/);
+    expect(init).toMatchObject({ method: "POST", headers: { Authorization: "Bearer synthetic-session" } });
+    expect(init.body).toBeUndefined();
+  });
+
+  it("sends signed return fields in the body and uses only the reference for rechecks", async () => {
+    const data = { bookingId: 42, reference, status: "PENDING", expired: false, returnOutcome: null,
+      reason: "TRANSACTION_NOT_FOUND", providerCode: "91", providerStatus: null };
+    const fetchMock = vi.fn().mockImplementation(() => Response.json({ success: true, data }));
+    vi.stubGlobal("fetch", fetchMock);
+    const query = `vnp_TxnRef=${reference}&vnp_ResponseCode=00&vnp_SecureHash=synthetic`;
+
+    await expect(verifyVnpayReturn("synthetic-session", query)).resolves.toEqual(data);
+    await expect(getVnpayStatus("synthetic-session", reference)).resolves.toEqual(data);
+    const [[verifyUrl, verifyInit], [lookupUrl, lookupInit]] = fetchMock.mock.calls as [
+      [string, RequestInit], [string, RequestInit]
+    ];
+    expect(verifyUrl).toMatch(/\/api\/payments\/vnpay\/return$/);
+    expect(verifyInit.method).toBe("POST");
+    expect(verifyInit.headers).toMatchObject({ Authorization: "Bearer synthetic-session" });
+    expect(JSON.parse(String(verifyInit.body))).toEqual({ query });
+    expect(lookupUrl).toMatch(new RegExp(`/api/payments/vnpay/status/${reference}$`));
+    expect(lookupInit).toMatchObject({ method: "GET", headers: { Authorization: "Bearer synthetic-session" } });
+    expect(lookupInit.body).toBeUndefined();
+  });
+
+  it("reconciles only the owned booking and returns the verified attempt", async () => {
+    const data = { bookingId: 42, reference, status: "FAILED", checked: true,
+      reason: "VERIFIED_NONPAYMENT", providerCode: "00", providerStatus: "02" };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(reconcileVnpayBooking("synthetic-session", 42)).resolves.toEqual(data);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/bookings\/42\/payments\/vnpay\/reconcile$/);
+    expect(init).toMatchObject({ method: "POST", headers: { Authorization: "Bearer synthetic-session" } });
+    expect(init.body).toBeUndefined();
   });
 });

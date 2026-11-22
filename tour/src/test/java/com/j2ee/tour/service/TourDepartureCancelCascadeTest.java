@@ -95,8 +95,9 @@ class TourDepartureCancelCascadeTest {
         successful.setPaymentId(11L);
         successful.setPaymentStatus("SUCCESS");
 
-        when(bookingRepository.findByDepartureDepartureId(5L))
-                .thenReturn(List.of(paid, completed));
+        when(bookingRepository.findBookingIdsByDepartureId(5L)).thenReturn(List.of(1L, 2L));
+        when(bookingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(paid));
+        when(bookingRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(completed));
         when(paymentRepository.findByBookingBookingId(1L))
                 .thenReturn(List.of(successful));
 
@@ -122,7 +123,8 @@ class TourDepartureCancelCascadeTest {
         paid.setBookingStatus("PAID");
         paid.setAccount(account);
 
-        when(bookingRepository.findByDepartureDepartureId(5L)).thenReturn(List.of(paid));
+        when(bookingRepository.findBookingIdsByDepartureId(5L)).thenReturn(List.of(1L));
+        when(bookingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(paid));
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -146,7 +148,7 @@ class TourDepartureCancelCascadeTest {
         departureService.update(5L, closed);
 
         assertEquals("CLOSED", departure.getDepartureStatus());
-        verify(bookingRepository, never()).findByDepartureDepartureId(5L);
+        verify(bookingRepository, never()).findBookingIdsByDepartureId(5L);
     }
 
     private TourDepartureRequest cancelledRequest() {

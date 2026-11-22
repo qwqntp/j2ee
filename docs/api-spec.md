@@ -22,7 +22,8 @@ Default local base URL: `http://localhost:8080`
 
 ### Success envelope
 
-Every controller response uses:
+Controller responses use this envelope except for the VNPay IPN, which uses the provider's
+acknowledgement format:
 
 ```json
 {
@@ -109,7 +110,11 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | Bucket | Routes | Limit |
 |---|---|---|
 | credentials | `/api/auth/login`, `/api/auth/register` | 10 per minute per IP (shared) |
+| google | `/api/auth/google` | 10 per minute per IP |
 | refresh | `/api/auth/refresh` | 30 per minute per IP |
+| change-password | `/api/auth/change-password` | 10 per minute per IP |
+| forgot-password | `/api/auth/forgot-password` | 5 per minute per IP |
+| reset-password | `/api/auth/reset-password` | 10 per minute per IP |
 
 - Exceeding a limit returns `429` with `Retry-After: <seconds>` and
   `{"success":false,"message":"Too many requests","data":null,...}`.
@@ -127,6 +132,7 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | `GET` | `/api/tours/{id}/departures` | Public | `200` |
 | `POST` | `/api/auth/register` | Public | `201` |
 | `POST` | `/api/auth/login` | Public | `200` |
+| `POST` | `/api/auth/google` | Public | `200` |
 | `POST` | `/api/auth/refresh` | Refresh cookie | `200` |
 | `POST` | `/api/auth/logout` | Refresh cookie (optional) | `200` |
 | `GET` | `/api/auth/me` | Bearer | `200` |
@@ -152,6 +158,11 @@ The in-memory fixed-window limiter applies to these `POST`s:
 | `POST` | `/api/bookings/{id}/cancel` | Bearer | `200` |
 | `DELETE` | `/api/bookings/{id}` | Bearer | `200` |
 | `POST` | `/api/bookings/{bookingId}/payments/callback` | Bearer `ROLE_ADMIN` | `200` |
+| `POST` | `/api/bookings/{bookingId}/payments/vnpay` | Bearer; booking owner | `200` |
+| `POST` | `/api/bookings/{bookingId}/payments/vnpay/reconcile` | Bearer; booking owner | `200` |
+| `POST` | `/api/payments/vnpay/return` | Bearer; booking owner | `200` |
+| `GET` | `/api/payments/vnpay/status/{reference}` | Bearer; booking owner | `200` |
+| `GET` | `/api/payments/vnpay/ipn/{routeToken}` | Registered HTTPS callback URL + VNPay signature | `200` with `RspCode` |
 | `GET` | `/api/invoices/me` | Bearer | `200` |
 | `GET` | `/api/tours/{tourId}/ratings` | Public | `200` |
 | `POST` | `/api/tours/{tourId}/ratings` | Bearer | `201` |
@@ -175,6 +186,114 @@ in `SecurityConfig`).
 - `POST /api/bookings/{id}/cancel` is allowed only for `PENDING` bookings with no successful
   payments; it releases seats and promotion usage and returns `409` otherwise.
 - A booking becomes `PAID` when the sum of `SUCCESS` payments reaches its total amount.
+
+#### VNPay Sandbox
+
+Uses [VNPay PAY 2.1.0](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html).
+The app never collects card or bank details. All VNPay API responses are non-cacheable.
+
+**Start:** `POST /api/bookings/{bookingId}/payments/vnpay` takes no body. Before creating an
+attempt, the backend asks VNPay's QueryDr API about any owned `PENDING` attempt. The owner
+receives `data: { reference, paymentUrl, expiresAt }` (`expiresAt` is an ISO-8601 UTC instant)
+only after that attempt is released or absent. An owned `PENDING` booking with an upcoming
+`OPEN` or `FULL` departure must have a positive outstanding balance of at least
+`10,000 VND` (`VNPayGateway.MINIMUM_AMOUNT`), calculated from the stored total less `SUCCESS`
+payments. The URL uses VND × 100 without rounding, a 15-minute GMT+7 window, and an
+HMAC-SHA512 over sorted form-encoded fields. Every existing `PENDING` attempt blocks a new
+reference until a verified IPN or QueryDr answer releases it; an attempt URL is never reopened.
+Expiry of the URL, a local timeout, and QueryDr "not found" (`91`) are not evidence of
+nonpayment, so they do not release the attempt.
+Errors: `401` no session, `404` missing/other owner's booking, `409` balance below the minimum,
+no payable balance, or unresolved/ineligible booking, `503` missing or invalid Sandbox
+configuration.
+
+**QueryDr reconciliation:** `POST /api/bookings/{bookingId}/payments/vnpay/reconcile` takes no
+body and calls VNPay's signed server-to-server QueryDr endpoint
+(`https://sandbox.vnpayment.vn/merchant_webapi/api/transaction`) about the booking's open
+attempt. It returns
+`data: { bookingId, reference, status, checked, reason, providerCode, providerStatus }`:
+`checked: false` means no managed attempt is `PENDING`; otherwise `status` is the stored
+`PENDING`, `SUCCESS`, or `FAILED` state after the answer is applied.
+
+`reason` explains the actual result of the lookup instead of only repeating the stored status.
+`providerCode` and `providerStatus` carry the documented two-digit VNPay codes when received;
+provider text, payloads, credentials, and signed URLs are never returned.
+
+| `reason` | Meaning | Effect |
+|---|---|---|
+| `VERIFIED_SUCCESS` | Signed `vnp_ResponseCode=00`, `vnp_TransactionStatus=00` | Settles the attempt and booking like a success IPN |
+| `VERIFIED_NONPAYMENT` | Signed `00` with transaction status `02` | Marks the attempt `FAILED`; releases retry and cancellation |
+| `TRANSACTION_NOT_FOUND` | VNPay response code `91` | Stays `PENDING`; not proof of nonpayment |
+| `TRANSACTION_UNRESOLVED` | Signed `00` with status `01`, `04`, `05`, `06`, `07`, or `09` | Stays `PENDING` |
+| `PROVIDER_REJECTED` | VNPay API-level error such as `97` or `99`; `providerCode` carries it | Stays `PENDING` |
+| `PROVIDER_MISMATCH` | Signed answer describes another merchant, reference, amount, or transaction type | Stays `PENDING` |
+| `INVALID_PROVIDER_SIGNATURE` | Bad response hash, or data-bearing response without a signature | Stays `PENDING` |
+| `PROVIDER_MALFORMED_RESPONSE` | Not JSON, unexpected fields/types, or an unsigned `00` | Stays `PENDING` |
+| `PROVIDER_TIMEOUT` | The 5-second connect/read deadline expired | Stays `PENDING` |
+| `PROVIDER_UNREACHABLE` | DNS, TLS, connection, or HTTP failure | Stays `PENDING` |
+
+Only `VERIFIED_SUCCESS` and `VERIFIED_NONPAYMENT` may change the attempt. VNPay can return an
+unsigned `{ "vnp_ResponseCode": "...", "vnp_Message": "..." }` envelope for API-level errors
+(for example Sandbox `99 Unexpected error`). That envelope is reported as `PROVIDER_REJECTED`
+with only the safe code and can never settle or release an attempt. A signature-less success or
+any unsigned response carrying transaction data is rejected.
+
+
+**Browser return and status:** VNPay redirects the browser to the configured frontend URL
+(locally `http://localhost:3000/payment/vnpay-return`). The frontend sends the serialized
+`vnp_` query without the leading `?` to `POST /api/payments/vnpay/return` in JSON `{ "query": "..." }`.
+This authenticated endpoint verifies the signature, merchant, reference, amount and status
+fields, then reconciles the owned attempt through QueryDr. The browser fields are a hint, not
+authoritative evidence: a missing or ambiguous IPN is resolved only by the signed provider
+answer. `GET /api/payments/vnpay/status/{reference}` likewise rechecks the owned attempt through
+QueryDr without a signed query. Both return
+`data: { bookingId, reference, status, expired, returnOutcome, reason, providerCode, providerStatus }`:
+
+- `status` is the recorded `PENDING`, `SUCCESS`, or `FAILED` payment state after reconciliation.
+- `expired` describes the URL's time window, not a final payment outcome.
+- `returnOutcome` is `SUCCESS`, `FAILED`, `CANCELLED`, `EXPIRED`, or `UNRESOLVED` for a
+  verified browser return; it is `null` for a reference-only recheck. Even a verified
+  `returnOutcome: "SUCCESS"` is not settlement by itself.
+- `reason`, `providerCode`, and `providerStatus` use the reconciliation table above. `reason`
+  is `null` when the read did not need to query VNPay (for example an already settled attempt).
+- `400` means invalid return data; `401` means the browser must authenticate; `404` hides absent
+  or foreign attempts. Reauthentication carries only the opaque reference in the login URL.
+
+**IPN:** VNPay calls `GET /api/payments/vnpay/ipn/{routeToken}` with the provider query.
+The backend verifies the registered route credential, HMAC-SHA512, merchant code, managed
+reference, exact stored amount, and provider statuses. Both provider codes must be `00` to settle.
+A definitive nonpayment (such as a signed cancellation or expiry with failed transaction status)
+marks the attempt `FAILED`; ambiguous outcomes stay `PENDING` for reconciliation.
+The booking lock serializes concurrent confirmations. A verified success from IPN or QueryDr
+promotes the booking to `PAID` when covered and creates or settles one invoice in that
+transaction. An already-paid invoice is left untouched.
+
+The provider receives HTTP `200` with `{ "RspCode": "00", "Message": "Confirm Success" }`
+or the corresponding acknowledgement:
+
+| `RspCode` | Meaning |
+|---|---|
+| `00` | First definitive result committed (success or nonpayment) |
+| `02` | Same terminal outcome already processed |
+| `01` | Managed reference not found |
+| `04` | Invalid amount |
+| `97` | Invalid signature, merchant, or registered route credential |
+| `99` | Malformed/ambiguous/contradictory notification or processing failure |
+
+**Configuration:** Set `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAY_URL` (the official
+HTTPS Sandbox pay URL), and `VNPAY_RETURN_URL` on the backend only. Set `VNPAY_IPN_TOKEN` to
+a separate, randomly generated, URL-safe credential (32–128 ASCII letters, digits, `_` or `-`).
+Register the exact `https://<backend-host>/api/payments/vnpay/ipn/<route-token>` with VNPay
+Sandbox. It accepts a standard GET with no extra headers. The bare IPN path does not authorize
+settlement. **VNPay cannot reach localhost:** deploy or forward only the intended callback through
+a public HTTPS ingress. Redact the entire credential-bearing path and query in proxy, application
+and APM logs. Do not disclose the token or hash secret to the frontend. Keep this callback URL
+separate from the browser return URL and use a trusted proxy configuration if forwarding client IPs.
+
+For genuine local Sandbox tests, run the frontend with `npm run build` and `npm run start -- --port 3000`,
+not `npm run dev`. Next.js development logging and tracing can record the incoming URL before
+the result page can remove its query. Checkout does not launch VNPay in development mode. Redact
+return query strings in any frontend ingress or telemetry used in deployed environments.
 
 #### Email verification and password reset
 
@@ -215,20 +334,57 @@ Example verification request:
 { "token": "raw-token-from-email" }
 ```
 
+#### Google sign-in
+
+`POST /api/auth/google` is public and accepts:
+
+```json
+{ "idToken": "credential-from-google-identity-services" }
+```
+
+The backend verifies the ID token with Google's JWKS
+(`https://www.googleapis.com/oauth2/v3/certs`): RS256 signature, issuer is `accounts.google.com`
+or `https://accounts.google.com`, audience equals `GOOGLE_CLIENT_ID`, the token is not expired
+(server `Clock`), and `email_verified` is `true`. No Spring OAuth2 redirect flow, session or client
+secret is involved.
+
+- Success returns the same body and `Set-Cookie` contract as `POST /api/auth/login`: a 15-minute
+  access token plus the HttpOnly `refresh_token` cookie (`200`).
+- `google_sub` is the identity key. If no account has it, an existing account is linked by
+  case-insensitive email; otherwise a new `ROLE_USER` account is created with a unique username
+  derived from the email local part and an unusable random password.
+- If an existing matched account has `emailVerified = 0`, its password hash is replaced with a fresh
+  unusable value and all its refresh tokens are revoked before Google is linked (a pre-registered
+  attacker may know that password). `emailVerified` becomes `1` and `password_set` becomes `false`.
+- A disabled account returns `403` (`Account is disabled`). An invalid token returns `401`
+  (`Invalid Google ID token`). If `GOOGLE_CLIENT_ID` / `app.google.client-id` is blank the endpoint
+  fails closed with `503` (`Google sign-in is not configured`).
+- There is no email-domain allowlist: any Google account with a valid, verified email may sign in.
+
+Configuration: backend `GOOGLE_CLIENT_ID`; frontend `NEXT_PUBLIC_GOOGLE_CLIENT_ID` for
+`https://accounts.google.com/gsi/client`. Values belong in the deployment environment, never in
+committed files.
+
 #### Profile and change password
 
 - `GET /api/profile` returns the authenticated account plus its customer row:
-  `{ customerId, username, email, emailVerified, name, phone, address, dateOfBirth }`. Customer fields
-  are `null` when the account has no customer row yet.
+  `{ customerId, username, email, emailVerified, name, phone, address, dateOfBirth, passwordSet,
+  googleLinked }`. Customer fields are `null` when the account has no customer row yet.
+  `passwordSet` is `false` for Google-only accounts and for accounts whose password was replaced
+  during a Google link; `googleLinked` is `true` when `google_sub` is set. Neither value exposes the
+  password hash or the Google subject.
 - `PUT /api/profile` accepts `{ name, email, phone, address, dateOfBirth }`. `name` is required and
   non-blank; the other fields are optional. A blank email keeps the current one. Changing the email
   updates `accounts.account_email`, resets `emailVerified` to `0` and sends a new verification link.
   Unknown fields are ignored.
 - `POST /api/auth/change-password` accepts `{ currentPassword, newPassword }`. The new password follows
   the register rules (8–100 characters, at most 72 UTF-8 bytes). A wrong current password returns `400`
-  `Current password is incorrect` without revoking anything. On success every refresh token is revoked
-  and a new access/refresh pair is returned through the normal body/cookie contract; existing access
-  tokens remain valid until they expire (at most 15 minutes).
+  `Current password is incorrect` without revoking anything. An account with `password_set = false`
+  (Google-only, or whose password was replaced during a Google link) returns `409`
+  `This account has no password set. Use "Forgot password" to set one.` On success every refresh token
+  is revoked and a new access/refresh pair is returned through the normal body/cookie contract; existing
+  access tokens remain valid until they expire (at most 15 minutes). A successful password reset sets
+  `password_set = true`.
 
 #### Invoices
 
@@ -549,6 +705,29 @@ Errors:
 
 Unknown usernames still run a dummy BCrypt comparison to reduce timing differences.
 
+### POST /api/auth/google
+
+Request:
+
+```json
+{ "idToken": "eyJhbGciOiJSUzI1NiJ9..." }
+```
+
+The token comes from Google Identity Services (`google.accounts.id`) on the frontend. The backend
+verifies it with Google's JWKS and returns `200` with the same body shape as login plus a fresh
+refresh cookie. New accounts are created with `ROLE_USER`, `emailVerified = 1`, `password_set =
+false` and a unique username derived from the email local part. Existing accounts are matched by
+`google_sub` first and case-insensitive email second.
+
+Errors:
+
+- `400` — missing/blank `idToken`.
+- `401` — invalid signature, issuer, audience, expired token, unverified/missing email, or missing
+  `email_verified`.
+- `403` — account is disabled.
+- `429` — more than 10 Google sign-ins in a minute from the same IP.
+- `503` — `GOOGLE_CLIENT_ID` is not configured.
+
 ### POST /api/auth/refresh
 
 No body. The browser sends the `refresh_token` cookie.
@@ -672,8 +851,8 @@ Errors: `401` unauthenticated, `403` authenticated without `ROLE_ADMIN`.
 
 > **Historical design note — superseded.** The booking, payment-callback, promotion, traveler and
 > refund backend is now implemented; see “Batch 1–3 additions (implemented)” above. This section is
-> kept only as design history and is not normative. VNPay-specific return/IPN endpoints remain out
-> of scope; the implemented payment callback is the signed callback endpoint listed above.
+> kept only as design history and is not normative. Use the **VNPay Sandbox** section above for
+> the current creation, browser-return, and IPN paths and payloads.
 
 ### Proposed endpoints
 
@@ -815,8 +994,11 @@ amount from the booking. Response:
   `tour-{id}`. `cacheComponents` and `partialPrefetching` remain enabled.
 - Sample/demo tours are selected **outside** the cached function, so demo data is never stored as
   live inventory. When the API is unavailable, the UI shows a "Showing sample journeys" notice.
-- The payment page is a UI preview. It does not call `/api/bookings` or any payment endpoint, and
-  submitting the form only shows a demo confirmation.
+- Checkout creates a real booking, offers reserve-only or VNPay Sandbox, and can resume payment
+  from booking details. The VNPay result page reconciles through the backend and never infers
+  settlement from the redirect alone. Booking details expose "Check payment status" so a
+  traveller can release retry or cancellation after VNPay confirms nonpayment; an unresolved
+  attempt keeps both blocked with an explanation.
 - Dates are formatted from the API's wall-clock parts without timezone conversion; money is
   formatted as VND.
 
@@ -830,11 +1012,17 @@ amount from the booking. Response:
 - SMTP delivery is implemented but was not verified against a real mail server in the final run.
   When SMTP is unconfigured, sending is skipped with a warning.
 - Password-reset has the required generic response but is not separately rate-limited.
-- Automatically created invoices leave `paymentMethod` null because the booking model does not store
-  the payment method.
+- Automatically created invoices omit `paymentMethod` for paths that do not supply a settlement
+  method; a newly issued or promoted VNPay invoice sets `paymentMethod` to `VNPAY`.
 - Ratings cannot be edited or deleted through the API.
-- VNPay-specific return/IPN endpoints are not implemented; only the signed payment callback endpoint
-  exists.
+- VNPay reconciliation is automatic through signed QueryDr for retry, status, return and
+  reconciliation requests; provider refunds remain manual. A missing or ambiguous IPN leaves the
+  attempt unresolved even after the payment URL expires, and customer retries are intentionally
+  blocked until VNPay confirms the outcome. If VNPay rejects the lookup itself (for example
+  Sandbox `99 Unexpected error`), the API reports `reason: "PROVIDER_REJECTED"` with the safe
+  provider code and keeps the attempt protected; enabling QueryDr for the merchant and
+  registering the server IP are operational prerequisites.
 - The frontend has build/lint/manual runtime checks, but no automated browser or component tests.
-- The final verification pass ran only non-database tests because of a slow/unreliable Supabase
-  connection. The database-backed tests are written and had passed earlier, but should be rerun.
+- Database-backed tests were rerun against an isolated PostgreSQL instance for this change; a
+  separate live VNPay Sandbox round trip still requires real merchant credentials and public
+  HTTPS ingress.

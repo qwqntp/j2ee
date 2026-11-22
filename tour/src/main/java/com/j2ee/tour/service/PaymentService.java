@@ -76,6 +76,8 @@ public class PaymentService {
     public PaymentResponse handleCallback(Long bookingId, PaymentCallbackRequest request,
                                           AuthPrincipal principal) {
         paymentSignatureService.verify(bookingId, request);
+        rejectManagedReference(request.providerTransactionId());
+        Booking booking = findOwnedBookingForUpdate(bookingId, principal);
 
         var existing = paymentRepository.findByPaymentProviderTxnId(request.providerTransactionId());
         if (existing.isPresent()) {
@@ -86,14 +88,14 @@ public class PaymentService {
             return PaymentResponse.from(existing.get());
         }
 
-        Booking booking = findOwnedBooking(bookingId, principal);
+        boolean successful = Boolean.TRUE.equals(request.successful());
+        protectManagedAttempts(booking, successful);
         BigDecimal expectedAmount = booking.getBookingTotalAmount();
         if (request.amount().compareTo(expectedAmount) != 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "Payment amount does not match booking total");
         }
 
-        boolean successful = Boolean.TRUE.equals(request.successful());
         Payment payment = new Payment();
         payment.setBooking(booking);
         payment.setPaymentAmount(expectedAmount);
@@ -121,6 +123,7 @@ public class PaymentService {
                     "Booking is not awaiting payment");
         }
 
+        VnpayPaymentService.requireNoUnresolvedAttempt(paymentRepository, bookingId);
         BigDecimal paid = paymentRepository.sumSuccessfulPayments(bookingId);
         if (paid == null) {
             paid = BigDecimal.ZERO;
@@ -154,6 +157,8 @@ public class PaymentService {
 
     @Transactional
     public PaymentResponse create(PaymentCreateRequest request) {
+        rejectManagedReference(request.providerTxnId());
+        Booking booking = lockBooking(request.bookingId());
         if (request.providerTxnId() != null) {
             var existing = paymentRepository.findByPaymentProviderTxnId(request.providerTxnId());
             if (existing.isPresent()) {
@@ -164,13 +169,13 @@ public class PaymentService {
                 return PaymentResponse.from(existing.get());
             }
         }
-        Booking booking = findBooking(request.bookingId());
+        String status = request.status() == null ? "PENDING" : request.status();
+        protectManagedAttempts(booking, "SUCCESS".equals(status));
         Payment payment = new Payment();
         payment.setBooking(booking);
         payment.setPaymentAmount(booking.getBookingTotalAmount());
         payment.setPaymentMethod(request.paymentMethod());
         payment.setPaymentProviderTxnId(request.providerTxnId());
-        String status = request.status() == null ? "PENDING" : request.status();
         payment.setPaymentStatus(status);
         payment.setPaymentPaidAt("SUCCESS".equals(status) ? LocalDateTime.now(clock) : null);
         payment.setPaymentCreatedAt(LocalDateTime.now(clock));
@@ -181,8 +186,12 @@ public class PaymentService {
 
     @Transactional
     public PaymentResponse update(Long id, PaymentUpdateRequest request) {
-        Payment payment = paymentRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new NoSuchElementException("Payment not found"));
+        rejectManagedReference(request.providerTxnId());
+        Booking booking = lockPaymentBooking(id);
+        Payment payment = lockPayment(id);
+        rejectManagedReference(payment.getPaymentProviderTxnId());
+        protectManagedAttempts(booking, !"SUCCESS".equals(payment.getPaymentStatus())
+                && "SUCCESS".equals(request.status()));
 
         if (request.providerTxnId() != null) {
             paymentRepository.findByPaymentProviderTxnId(request.providerTxnId())
@@ -200,17 +209,19 @@ public class PaymentService {
         }
         payment.setPaymentPaidAt(resolvePaidAt(payment.getPaymentStatus(), payment.getPaymentPaidAt()));
         Payment saved = paymentRepository.save(payment);
-        recomputeBookingStatus(saved.getBooking());
+        recomputeBookingStatus(booking);
         return PaymentResponse.from(saved);
     }
 
     @Transactional
     public void delete(Long id) {
-        Payment payment = find(id);
+        Booking booking = lockPaymentBooking(id);
+        Payment payment = lockPayment(id);
+        rejectManagedReference(payment.getPaymentProviderTxnId());
+        protectManagedAttempts(booking, false);
         if (refundRepository.existsByPaymentPaymentId(id)) {
             throw new IllegalStateException("Cannot delete a payment that has refunds");
         }
-        Booking booking = payment.getBooking();
         paymentRepository.delete(payment);
         recomputeBookingStatus(booking);
     }
@@ -223,6 +234,10 @@ public class PaymentService {
     }
 
     private void recomputeBookingStatus(Booking booking) {
+        recomputeBookingStatus(booking, null);
+    }
+
+    void recomputeBookingStatus(Booking booking, String settlementMethod) {
         String status = booking.getBookingStatus();
         if (!"PENDING".equals(status) && !"PAID".equals(status)) {
             return;
@@ -233,24 +248,50 @@ public class PaymentService {
             booking.setBookingStatus(newStatus);
             bookingRepository.save(booking);
             if ("PAID".equals(newStatus)) {
-                invoiceService.createForPaidBooking(booking);
+                if (settlementMethod == null) {
+                    invoiceService.createForPaidBooking(booking);
+                } else {
+                    invoiceService.createForPaidBooking(booking, settlementMethod);
+                }
             }
         }
     }
 
-    private Booking findBooking(Long id) {
-        return bookingRepository.findById(id)
+    private Booking lockBooking(Long id) {
+        return bookingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
     }
 
-    private Booking findOwnedBooking(Long id, AuthPrincipal principal) {
-        return ensureOwned(findBooking(id), principal);
+    private Booking lockPaymentBooking(Long id) {
+        return lockBooking(paymentRepository.findBookingIdByPaymentId(id)
+                .orElseThrow(() -> new NoSuchElementException("Payment not found")));
+    }
+
+    private Payment lockPayment(Long id) {
+        return paymentRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NoSuchElementException("Payment not found"));
     }
 
     private Booking findOwnedBookingForUpdate(Long id, AuthPrincipal principal) {
-        Booking booking = bookingRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new NoSuchElementException("Booking not found"));
-        return ensureOwned(booking, principal);
+        return ensureOwned(lockBooking(id), principal);
+    }
+
+    private void protectManagedAttempts(Booking booking, boolean addingSuccessfulPayment) {
+        var attempts = VnpayPaymentService.managedAttempts(paymentRepository, booking.getBookingId());
+        boolean pending = attempts.stream().anyMatch(p -> "PENDING".equals(p.getPaymentStatus()));
+        if (pending) {
+            throw new ApiException(HttpStatus.CONFLICT, "A VNPay payment is still unresolved for this booking");
+        }
+        if (addingSuccessfulPayment && attempts.stream().anyMatch(p -> "SUCCESS".equals(p.getPaymentStatus()))) {
+            // The legacy paths record a full booking amount, not a partial balance.
+            throw new ApiException(HttpStatus.CONFLICT, "This booking already has a successful VNPay payment");
+        }
+    }
+
+    private static void rejectManagedReference(String reference) {
+        if (VnpayPaymentService.isManagedReference(reference)) {
+            throw new ApiException(HttpStatus.CONFLICT, "Managed VNPay payments can only be updated by VNPay IPN");
+        }
     }
 
     private Booking ensureOwned(Booking booking, AuthPrincipal principal) {

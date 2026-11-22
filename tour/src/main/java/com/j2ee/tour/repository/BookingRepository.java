@@ -19,7 +19,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long>,
 
     Page<Booking> findByAccountAccountId(Long accountId, Pageable pageable);
 
-    List<Booking> findByDepartureDepartureId(Long departureId);
+    @Query("select b.bookingId from Booking b where b.departure.departureId = :departureId order by b.bookingId")
+    List<Long> findBookingIdsByDepartureId(@Param("departureId") Long departureId);
 
     boolean existsByDepartureDepartureId(Long departureId);
 

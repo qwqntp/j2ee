@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { signIn, signUp } from "@/lib/auth";
 import { publishFlash } from "@/lib/flash";
+import { GoogleSignInButton } from "./google-signin-button";
 
 type Props = { mode: "login" | "register" };
 
@@ -61,6 +62,8 @@ export function AuthForm({ mode }: Props) {
             ? "An account lets you reserve seats and keep your bookings together."
             : "Use your account to reserve seats on a departure."}
         </p>
+
+        <GoogleSignInButton next={next} />
 
         <form onSubmit={onSubmit} className="mt-6 space-y-5">
           <div>

@@ -4,6 +4,7 @@ import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.OpenApiConfig;
 import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.ForgotPasswordRequest;
+import com.j2ee.tour.dto.request.GoogleLoginRequest;
 import com.j2ee.tour.dto.request.LoginRequest;
 import com.j2ee.tour.dto.request.RegisterRequest;
 import com.j2ee.tour.dto.request.ResetPasswordRequest;
@@ -13,6 +14,7 @@ import com.j2ee.tour.dto.response.AuthResponse;
 import com.j2ee.tour.security.AuthCookieService;
 import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.AuthService;
+import com.j2ee.tour.service.GoogleAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final GoogleAuthService googleAuthService;
     private final AuthCookieService cookieService;
 
     @PostMapping("/register")
@@ -52,6 +55,17 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request) {
         return withCookie(authService.login(request), HttpStatus.OK);
+    }
+
+    @PostMapping("/google")
+    @Operation(summary = "Sign in with a Google Identity Services ID token",
+            description = "Verifies the Google ID token (signature, issuer, audience, expiry and "
+                    + "email_verified) and returns the same access token + refresh cookie as login. "
+                    + "Creates an account or links Google to an existing email account. "
+                    + "Rate limit: 10 requests per minute per IP.")
+    public ResponseEntity<ApiResponse<AuthResponse>> google(
+            @Valid @RequestBody GoogleLoginRequest request) {
+        return withCookie(googleAuthService.signIn(request.idToken()), HttpStatus.OK);
     }
 
     @PostMapping("/refresh")

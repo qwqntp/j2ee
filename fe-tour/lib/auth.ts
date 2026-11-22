@@ -3,6 +3,7 @@
 import {
   ApiError,
   getMe,
+  googleSignIn as apiGoogleSignIn,
   login as apiLogin,
   logout as apiLogout,
   refresh as apiRefresh,
@@ -32,6 +33,12 @@ export async function signUp(input: {
   return session;
 }
 
+export async function signInWithGoogle(idToken: string): Promise<AuthSession> {
+  const session = await apiGoogleSignIn(idToken);
+  saveSession(session);
+  return session;
+}
+
 export async function signOut(): Promise<void> {
   const session = getStoredSession();
   try {
@@ -41,7 +48,15 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export async function ensureSession(): Promise<AuthSession | null> {
+let sessionCheck: Promise<AuthSession | null> | null = null;
+
+export function ensureSession(): Promise<AuthSession | null> {
+  // The header and page can mount together; don't present the same rotating cookie twice.
+  sessionCheck ??= resolveSession().finally(() => { sessionCheck = null; });
+  return sessionCheck;
+}
+
+async function resolveSession(): Promise<AuthSession | null> {
   const stored = getStoredSession();
   if (stored) {
     try {

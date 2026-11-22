@@ -14,6 +14,16 @@ import java.util.Optional;
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByPaymentProviderTxnId(String providerTransactionId);
 
+    @Query("select p.booking.bookingId from Payment p where p.paymentId = :id")
+    Optional<Long> findBookingIdByPaymentId(@Param("id") Long id);
+
+    @Query("select p.booking.bookingId from Payment p "
+            + "where p.paymentMethod = 'VNPAY' and p.paymentProviderTxnId = :reference")
+    Optional<Long> findVnpayBookingId(@Param("reference") String reference);
+
+    List<Payment> findByBookingBookingIdAndPaymentMethodAndPaymentProviderTxnIdStartingWith(
+            Long bookingId, String method, String prefix);
+
     Optional<Payment> findFirstByBookingBookingIdAndPaymentStatusOrderByPaymentIdDesc(
             Long bookingId, String paymentStatus);
 

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ApiError, createBooking } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { ApiError, createBooking, startVnpay } from "@/lib/api";
 import { clearSession, ensureSession } from "@/lib/auth";
 import {
   buildBookingRequest,
@@ -14,6 +14,7 @@ import {
 import { publishFlash } from "@/lib/flash";
 import { formatDateRange, formatDuration, formatPrice } from "@/lib/format";
 import type { TourDeparture } from "@/lib/types";
+import { checkoutWithBooking, openVnpayCheckout, vnpayCheckoutEnabled } from "@/lib/vnpay";
 import { IconArrowRight, IconShield, IconUsers } from "./icons";
 import { TourImage } from "./tour-image";
 
@@ -39,6 +40,11 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
   const [conflict, setConflict] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [payment, setPayment] = useState<"reserve" | "vnpay">("reserve");
+  const [recovery, setRecovery] = useState<{ bookingHref: string; error: string | null } | null>(null);
+  const submitting = useRef(false);
+  const bookingCreated = useRef(false);
+  const allowVnpay = vnpayCheckoutEnabled();
 
   const returnTo = `/payment?tourId=${tourId}&departureId=${departure.id}`;
   const loginHref = `/login?next=${encodeURIComponent(returnTo)}`;
@@ -83,7 +89,7 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (submitting.current || bookingCreated.current) return;
 
     setError(null);
     setConflict(null);
@@ -98,6 +104,7 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
       return;
     }
 
+    submitting.current = true;
     setPending(true);
     try {
       const session = await ensureSession();
@@ -111,6 +118,22 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
         buildBookingRequest(departure.id, guests, note, travelers, promotionCode),
       );
 
+      bookingCreated.current = true;
+      if (payment === "vnpay") {
+        try {
+          // Persist only the owned booking link, before the separate payment request can time out.
+          window.history.replaceState(null, "", checkoutWithBooking(tourId, departure.id, created.id));
+        } catch {
+          router.replace(`/account/bookings/${created.id}`);
+          return;
+        }
+        setRecovery(await openVnpayCheckout(
+          created.id,
+          () => startVnpay(session.accessToken, created.id),
+          (url) => window.location.assign(url),
+        ));
+        return;
+      }
       publishFlash("Seats reserved. Your booking is pending.");
       router.push(`/account/bookings/${created.id}`);
       router.refresh();
@@ -131,8 +154,23 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
         err instanceof ApiError ? err.message : "Could not reach the booking service. Try again.",
       );
     } finally {
+      submitting.current = false;
       setPending(false);
     }
+  }
+
+  if (recovery) {
+    return (
+      <section className="mx-auto max-w-xl rounded-[4px] border border-line bg-white p-6 sm:p-8">
+        <h2 className="font-display text-2xl tracking-tight">Your seats are reserved.</h2>
+        <p role={recovery.error ? "alert" : "status"} className="mt-3 text-sm leading-6 text-muted">
+          {recovery.error ?? "You can check your payment or continue from your booking."}
+        </p>
+        <Link href={recovery.bookingHref} className="btn-primary mt-5">
+          View booking
+        </Link>
+      </section>
+    );
   }
 
   if (signedIn !== true) {
@@ -388,6 +426,30 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
           </div>
         </section>
 
+        <section className="rounded-[4px] border border-line bg-white p-6 sm:p-8">
+          <fieldset disabled={pending} className="space-y-3">
+            <legend className="mb-3 font-display text-2xl tracking-tight">Payment option</legend>
+            <label className="flex min-h-11 items-start gap-3 rounded-[3px] border border-line p-3 has-[:enabled]:cursor-pointer">
+              <input type="radio" name="checkout-payment" checked={payment === "vnpay"} disabled={!allowVnpay}
+                onChange={() => setPayment("vnpay")} className="mt-1 accent-forest" />
+              <span className="text-sm">
+                <span className="block font-semibold">Pay with VNPay</span>
+                <span className="mt-1 block text-muted">{allowVnpay
+                  ? "Continue to the VNPay Sandbox payment page."
+                  : "A production frontend build is required for Sandbox payments."}</span>
+              </span>
+            </label>
+            <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-[3px] border border-line p-3">
+              <input type="radio" name="checkout-payment" checked={payment === "reserve"}
+                onChange={() => setPayment("reserve")} className="mt-1 accent-forest" />
+              <span className="text-sm">
+                <span className="block font-semibold">Reserve only</span>
+                <span className="mt-1 block text-muted">Pay later from your booking details.</span>
+              </span>
+            </label>
+          </fieldset>
+        </section>
+
         <div className="flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs leading-5 text-muted">
             {error ? (
@@ -397,12 +459,14 @@ export function PaymentForm({ tourId, tourName, departure, imageUrl, fallbackIma
             ) : (
               <p className="flex items-center gap-2">
                 <IconShield className="h-4 w-4 shrink-0 text-forest" />
-                Your booking is created as pending. No payment is taken here.
+                {payment === "vnpay"
+                  ? "Payment is confirmed only after we hear from VNPay."
+                  : "Your booking is created as pending. No payment is taken here."}
               </p>
             )}
           </div>
           <button type="submit" disabled={pending} className="btn-primary">
-            {pending ? "Reserving seats…" : "Reserve seats"}
+            {pending ? "Preparing your booking…" : payment === "vnpay" ? "Reserve and continue to VNPay" : "Reserve seats"}
             <IconArrowRight className="h-4 w-4" />
           </button>
         </div>

@@ -104,6 +104,8 @@ export type Profile = {
   phone: string | null;
   address: string | null;
   dateOfBirth: string | null;
+  passwordSet: boolean;
+  googleLinked: boolean;
 };
 
 export type AuthSession = {
@@ -153,6 +155,33 @@ export type Payment = {
   status: string;
   paidAt: string | null;
   createdAt: string;
+};
+
+export type VnpayStart = {
+  reference: string;
+  paymentUrl: string;
+  expiresAt: string;
+};
+
+export type VnpayStatus = {
+  bookingId: number;
+  reference: string;
+  status: "PENDING" | "SUCCESS" | "FAILED";
+  expired: boolean;
+  returnOutcome: "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED" | "UNRESOLVED" | null;
+  reason: string | null;
+  providerCode: string | null;
+  providerStatus: string | null;
+};
+
+export type VnpayReconcile = {
+  bookingId: number;
+  reference: string | null;
+  status: "PENDING" | "SUCCESS" | "FAILED" | null;
+  checked: boolean;
+  reason: string | null;
+  providerCode: string | null;
+  providerStatus: string | null;
 };
 
 export type Invoice = {

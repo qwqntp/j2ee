@@ -37,6 +37,13 @@ public class Account {
     @Column(length = 255)
     private String accountEmail;
 
+    @Column(name = "google_sub", length = 64)
+    private String googleSub;
+
+    @NotNull
+    @Column(name = "password_set", nullable = false)
+    private Boolean passwordSet = Boolean.TRUE;
+
     @NotNull
     @Min(0)
     @Max(1)

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -43,6 +44,7 @@ function valuesFromProfile(profile: Profile): ProfileFormValues {
 export function AccountProfile() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [accountProfile, setAccountProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -65,13 +67,13 @@ export function AccountProfile() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
-      <ProfileForm />
-      <ChangePasswordForm />
+      <ProfileForm onLoaded={setAccountProfile} />
+      <ChangePasswordForm profile={accountProfile} />
     </div>
   );
 }
 
-function ProfileForm() {
+function ProfileForm({ onLoaded }: { onLoaded: (profile: Profile) => void }) {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [values, setValues] = useState<ProfileFormValues>(EMPTY_VALUES);
@@ -97,6 +99,7 @@ function ProfileForm() {
         const result = await getProfile(session.accessToken);
         if (!active) return;
         setProfile(result);
+        onLoaded(result);
         setValues(valuesFromProfile(result));
         setError(null);
         setLoading(false);
@@ -116,7 +119,7 @@ function ProfileForm() {
     return () => {
       active = false;
     };
-  }, [reloadKey, router]);
+  }, [onLoaded, reloadKey, router]);
 
   function update<K extends keyof ProfileFormValues>(field: K, value: ProfileFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -152,6 +155,7 @@ function ProfileForm() {
         updated.email.toLowerCase() !== (previousEmail ?? "").toLowerCase();
 
       setProfile(updated);
+      onLoaded(updated);
       setValues(valuesFromProfile(updated));
       setNotice(
         emailChanged
@@ -207,15 +211,22 @@ function ProfileForm() {
             Username <span className="font-medium text-charcoal">{profile.username}</span>
           </p>
         </div>
-        <span
-          className={`rounded-[2px] border px-2.5 py-1 text-[11px] font-semibold tracking-wide ${
-            verified
-              ? "border-forest/40 bg-white text-forest"
-              : "border-terracotta/50 bg-white text-terracotta"
-          }`}
-        >
-          {verified ? "Email verified" : "Email not verified"}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {profile.googleLinked ? (
+            <span className="rounded-[2px] border border-line bg-ivory px-2.5 py-1 text-[11px] font-semibold tracking-wide text-charcoal">
+              Google linked
+            </span>
+          ) : null}
+          <span
+            className={`rounded-[2px] border px-2.5 py-1 text-[11px] font-semibold tracking-wide ${
+              verified
+                ? "border-forest/40 bg-white text-forest"
+                : "border-terracotta/50 bg-white text-terracotta"
+            }`}
+          >
+            {verified ? "Email verified" : "Email not verified"}
+          </span>
+        </div>
       </div>
 
       {!verified ? (
@@ -339,7 +350,7 @@ function ProfileForm() {
   );
 }
 
-function ChangePasswordForm() {
+function ChangePasswordForm({ profile }: { profile: Profile | null }) {
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -392,6 +403,25 @@ function ChangePasswordForm() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (profile && !profile.passwordSet) {
+    return (
+      <section className="rounded-[4px] border border-line bg-white p-6 sm:p-8">
+        <p className="eyebrow text-terracotta">Security</p>
+        <h2 className="mt-2 font-display text-2xl tracking-tight">Password</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          This account signs in with Google, so it does not have a password yet. To add one, use
+          the password reset link and we will email you a secure way to set it.
+        </p>
+        <Link href="/forgot-password" className="btn-secondary mt-5 inline-flex">
+          Set a password
+        </Link>
+        <p className="mt-3 text-xs leading-5 text-muted">
+          You can keep signing in with Google in the meantime.
+        </p>
+      </section>
+    );
   }
 
   return (

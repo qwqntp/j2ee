@@ -15,6 +15,8 @@ public record ProfileResponse(
         String name,
         String phone,
         String address,
-        LocalDate dateOfBirth
+        LocalDate dateOfBirth,
+        boolean passwordSet,
+        boolean googleLinked
 ) {
 }

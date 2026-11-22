@@ -19,6 +19,7 @@ import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AdminStatsService;
 import com.j2ee.tour.service.AuthService;
 import com.j2ee.tour.service.BookingService;
+import com.j2ee.tour.service.GoogleAuthService;
 import com.j2ee.tour.service.InvoiceService;
 import com.j2ee.tour.service.PaymentService;
 import com.j2ee.tour.service.ProfileService;
@@ -69,6 +70,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private GoogleAuthService googleAuthService;
 
     @MockitoBean
     private ProfileService profileService;
@@ -251,6 +255,23 @@ class SecurityConfigTest {
     }
 
     @Test
+    void googleSignInEndpointIsPublic() throws Exception {
+        when(googleAuthService.signIn("google-id-token"))
+                .thenReturn(new AuthService.AuthResult("access-google", "refresh-google", ACCOUNT));
+        when(authCookieService.create("refresh-google")).thenReturn(ResponseCookie
+                .from(AuthCookieService.COOKIE_NAME, "refresh-google")
+                .httpOnly(true).path("/api/auth").build());
+
+        mockMvc.perform(post("/api/auth/google")
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"google-id-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("refresh_token=refresh-google")))
+                .andExpect(jsonPath("$.data.accessToken").value("access-google"));
+    }
+
+    @Test
     void forgotPasswordEndpointIsPublic() throws Exception {
         mockMvc.perform(post("/api/auth/forgot-password")
                         .contentType("application/json")
@@ -276,7 +297,7 @@ class SecurityConfigTest {
         when(jwtService.parse("user-token"))
                 .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
         when(profileService.getProfile(1L)).thenReturn(new ProfileResponse(
-                null, "user01", "user01@example.com", 0, null, null, null, null));
+                null, "user01", "user01@example.com", 0, null, null, null, null, true, false));
 
         mockMvc.perform(get("/api/profile").header("Authorization", "Bearer user-token"))
                 .andExpect(status().isOk())
@@ -296,7 +317,7 @@ class SecurityConfigTest {
                 .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
         when(profileService.updateProfile(eq(1L), any(ProfileRequest.class)))
                 .thenReturn(new ProfileResponse(7L, "user01", "user01@example.com", 0,
-                        "Nguyen Van A", null, null, null));
+                        "Nguyen Van A", null, null, null, true, false));
 
         mockMvc.perform(put("/api/profile")
                         .header("Authorization", "Bearer user-token")

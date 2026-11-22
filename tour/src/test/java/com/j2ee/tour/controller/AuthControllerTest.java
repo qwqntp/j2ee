@@ -7,6 +7,7 @@ import com.j2ee.tour.security.AuthCookieService;
 import com.j2ee.tour.security.FixedWindowRateLimiter;
 import com.j2ee.tour.security.JwtService;
 import com.j2ee.tour.service.AuthService;
+import com.j2ee.tour.service.GoogleAuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -43,6 +44,9 @@ class AuthControllerTest {
     private AuthService authService;
 
     @MockitoBean
+    private GoogleAuthService googleAuthService;
+
+    @MockitoBean
     private AuthCookieService cookieService;
 
     @MockitoBean
@@ -67,6 +71,31 @@ class AuthControllerTest {
                         org.hamcrest.Matchers.containsString("HttpOnly")))
                 .andExpect(jsonPath("$.data.accessToken").value("access-1"))
                 .andExpect(jsonPath("$.data.refreshToken").doesNotExist());
+    }
+
+    @Test
+    void googleSignInReturnsAccessTokenAndSetsRefreshCookie() throws Exception {
+        when(googleAuthService.signIn("google-id-token"))
+                .thenReturn(new AuthService.AuthResult("access-google", "refresh-google", ACCOUNT));
+        when(cookieService.create("refresh-google"))
+                .thenReturn(cookie("refresh-google", Duration.ofDays(7)));
+
+        mockMvc.perform(post("/api/auth/google")
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"google-id-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.containsString("refresh_token=refresh-google")))
+                .andExpect(jsonPath("$.data.accessToken").value("access-google"));
+    }
+
+    @Test
+    void googleSignInRequiresAnIdToken() throws Exception {
+        mockMvc.perform(post("/api/auth/google")
+                        .contentType("application/json")
+                        .content("{\"idToken\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Validation failed"));
     }
 
     @Test

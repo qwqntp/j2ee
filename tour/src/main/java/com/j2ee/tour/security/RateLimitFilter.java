@@ -55,6 +55,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private String bucketFor(String path) {
         return switch (path) {
             case "/api/auth/login", "/api/auth/register" -> "credentials";
+            case "/api/auth/google" -> "google";
             case "/api/auth/refresh" -> "refresh";
             case "/api/auth/change-password" -> "change-password";
             case "/api/auth/forgot-password" -> "forgot-password";

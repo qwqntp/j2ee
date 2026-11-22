@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   logout: vi.fn(),
   refresh: vi.fn(),
   getMe: vi.fn(),
+  googleSignIn: vi.fn(),
 }));
 
 vi.mock("./api", async (importOriginal) => {
@@ -18,6 +19,7 @@ vi.mock("./api", async (importOriginal) => {
     logout: api.logout,
     refresh: api.refresh,
     getMe: api.getMe,
+    googleSignIn: api.googleSignIn,
   };
 });
 
@@ -77,6 +79,17 @@ describe("auth session", () => {
     expect(auth.getStoredSession()).toEqual(session);
   });
 
+  it("stores the session returned by a Google sign-in", async () => {
+    installBrowser();
+    api.googleSignIn.mockResolvedValue(session);
+    const auth = await import("./auth");
+
+    await auth.signInWithGoogle("google-credential");
+
+    expect(api.googleSignIn).toHaveBeenCalledWith("google-credential");
+    expect(auth.getStoredSession()).toEqual(session);
+  });
+
   it("clears the local session even when logout fails", async () => {
     const data = installBrowser();
     seedSession(data, session);
@@ -111,6 +124,21 @@ describe("auth session", () => {
 
     expect(current?.accessToken).toBe("fresh");
     expect(auth.getStoredSession()?.accessToken).toBe("fresh");
+  });
+
+  it("rotates an expired session cookie only once across simultaneous session checks", async () => {
+    const data = installBrowser();
+    seedSession(data, { accessToken: "expired", account });
+    const { ApiError } = await import("./api");
+    api.getMe.mockRejectedValue(new ApiError(401, "expired"));
+    api.refresh.mockResolvedValueOnce({ accessToken: "fresh", account })
+      .mockRejectedValueOnce(new ApiError(401, "refresh reuse detected"));
+    const auth = await import("./auth");
+
+    const [header, paymentReturn] = await Promise.all([auth.ensureSession(), auth.ensureSession()]);
+    expect(header?.accessToken).toBe("fresh");
+    expect(paymentReturn?.accessToken).toBe("fresh");
+    expect(api.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the cached session when the auth service is unreachable", async () => {
