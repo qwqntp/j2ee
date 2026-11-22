@@ -1,18 +1,24 @@
 package com.j2ee.tour.service;
 
+import com.j2ee.tour.common.AdminListPageRequest;
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.InvoiceRequest;
+import com.j2ee.tour.dto.response.AdminInvoiceListItem;
 import com.j2ee.tour.dto.response.InvoiceResponse;
 import com.j2ee.tour.model.Booking;
 import com.j2ee.tour.model.Invoice;
 import com.j2ee.tour.model.Promotion;
 import com.j2ee.tour.repository.BookingRepository;
+import com.j2ee.tour.repository.BookingSpecifications;
 import com.j2ee.tour.repository.InvoiceRepository;
 import com.j2ee.tour.repository.PromotionRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,28 +27,46 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Service
 public class InvoiceService {
+    private static final Set<String> STATUSES = Set.of("PAID", "UNPAID");
+    private static final Map<String, String> SORTABLE = Map.of(
+            "createdAt", "invoiceCreatedAt",
+            "totalAmount", "totalAmount",
+            "id", "invoiceId");
+
     private final InvoiceRepository invoiceRepository;
     private final BookingRepository bookingRepository;
     private final PromotionRepository promotionRepository;
     private final Clock clock;
+    private final int maxPageSize;
 
     public InvoiceService(InvoiceRepository invoiceRepository,
                           BookingRepository bookingRepository,
                           PromotionRepository promotionRepository,
-                          Clock clock) {
+                          Clock clock,
+                          @Value("${app.admin.list.max-page-size:50}") int maxPageSize) {
         this.invoiceRepository = invoiceRepository;
         this.bookingRepository = bookingRepository;
         this.promotionRepository = promotionRepository;
         this.clock = clock;
+        this.maxPageSize = maxPageSize;
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<InvoiceResponse> list(Pageable pageable) {
-        return PageResponse.from(invoiceRepository.findAll(pageable), InvoiceResponse::from);
+    public PageResponse<AdminInvoiceListItem> list(Pageable pageable, String status, String q) {
+        String normalizedStatus = status == null || status.isBlank() ? null : status.trim();
+        if (normalizedStatus != null && !STATUSES.contains(normalizedStatus)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid invoice status");
+        }
+        Pageable effective = AdminListPageRequest.normalize(
+                pageable, maxPageSize, SORTABLE, "createdAt", "id");
+        String pattern = q == null || q.isBlank() ? null : BookingSpecifications.likePattern(q);
+        return PageResponse.from(invoiceRepository.findAdminPage(normalizedStatus, pattern, effective));
     }
 
     @Transactional(readOnly = true)

@@ -1,23 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createPayment,
+  getBooking,
+  listAdminBookings,
   listBookingPayments,
-  listBookings,
   updateBookingStatus,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { statusLabel } from "@/lib/bookings";
-import { buildBookingListQuery, type BookingListFilters } from "@/lib/booking-list";
+import {
+  buildBookingListQuery,
+  createDebouncedCommit,
+  createKeyedRequestTracker,
+  resetAdminPage,
+  type BookingListFilters,
+} from "@/lib/booking-list";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
-import type { Booking, Payment } from "@/lib/types";
+import type { AdminBookingListItem, AdminListSort, Booking, Payment } from "@/lib/types";
 
-const PAGE_SIZE = 20;
+const DEFAULT_SIZE = 10;
 const PAGE_SIZES = [10, 20, 50];
 const STATUSES: Array<NonNullable<BookingListFilters["status"]>> = [
   "PENDING",
@@ -26,27 +33,59 @@ const STATUSES: Array<NonNullable<BookingListFilters["status"]>> = [
   "COMPLETED",
   "CANCELLED",
 ];
+const SORTS: Array<{ value: AdminListSort; label: string }> = [
+  { value: "createdAt,desc", label: "Newest first" },
+  { value: "createdAt,asc", label: "Oldest first" },
+  { value: "totalAmount,desc", label: "Total: high to low" },
+  { value: "totalAmount,asc", label: "Total: low to high" },
+];
 
 type FilterForm = {
   status: BookingListFilters["status"];
   from: string;
   to: string;
   q: string;
+  sort: AdminListSort;
 };
 
-const EMPTY_FORM: FilterForm = { status: "", from: "", to: "", q: "" };
+type CommittedQuery = {
+  page: number;
+  size: number;
+  filters: BookingListFilters;
+};
+
+const EMPTY_FORM: FilterForm = { status: "", from: "", to: "", q: "", sort: "createdAt,desc" };
+
+function toFilters(form: FilterForm): BookingListFilters {
+  return {
+    status: form.status || undefined,
+    from: form.from || undefined,
+    to: form.to || undefined,
+    q: form.q.trim() || undefined,
+    sort: form.sort,
+  };
+}
 
 export function AdminBookings() {
   const { getSession } = useAdminAccess();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [page, setPage] = useState(0);
-  const [size, setSize] = useState(PAGE_SIZE);
-  const [filters, setFilters] = useState<BookingListFilters>({});
+  const [bookings, setBookings] = useState<AdminBookingListItem[]>([]);
+  const [query, setQuery] = useState<CommittedQuery>({
+    page: 0,
+    size: DEFAULT_SIZE,
+    filters: toFilters(EMPTY_FORM),
+  });
   const [form, setForm] = useState<FilterForm>(EMPTY_FORM);
+  const formRef = useRef(form);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [details, setDetails] = useState<Record<number, Booking>>({});
+  const detailCache = useRef<Record<number, Booking>>({});
+  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+  const [detailError, setDetailError] = useState<Record<number, string>>({});
+  const [detailReloadKey, setDetailReloadKey] = useState(0);
+  const detailTracker = useRef(createKeyedRequestTracker());
   const [payments, setPayments] = useState<Record<number, Payment[]>>({});
   const [paymentsLoadingId, setPaymentsLoadingId] = useState<number | null>(null);
   const [paymentsError, setPaymentsError] = useState<Record<number, string>>({});
@@ -57,7 +96,29 @@ export function AdminBookings() {
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const commitFilters = useCallback((nextForm: FilterForm, nextSize?: number) => {
+    const filters = toFilters(nextForm);
+    try {
+      buildBookingListQuery({ page: 0, size: nextSize ?? DEFAULT_SIZE, ...filters });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid filters");
+      return;
+    }
+    setError(null);
+    setQuery((current) => resetAdminPage(current, {
+      size: nextSize ?? current.size,
+      filters,
+    }));
+    setExpandedId(null);
+  }, []);
+
+  const debouncedSearch = useState(() =>
+    createDebouncedCommit<FilterForm>((next) => commitFilters(next)),
+  )[0];
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
   useEffect(() => {
+    const controller = new AbortController();
     let active = true;
 
     async function load() {
@@ -65,7 +126,13 @@ export function AdminBookings() {
       try {
         const session = await getSession();
         if (!active || !session) return;
-        const result = await listBookings(session.accessToken, page, size, filters);
+        const result = await listAdminBookings(
+          session.accessToken,
+          query.page,
+          query.size,
+          query.filters,
+          controller.signal,
+        );
         if (!active) return;
         setBookings(result.content);
         setTotalElements(result.totalElements);
@@ -73,7 +140,7 @@ export function AdminBookings() {
         setHasNext(result.hasNext);
         setError(null);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         setError(
           err instanceof ApiError ? err.message : "Could not load bookings. Try again.",
         );
@@ -88,34 +155,88 @@ export function AdminBookings() {
     void load();
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [page, size, filters, reloadKey, getSession]);
+  }, [query, reloadKey, getSession]);
 
-  function applyFilters() {
-    const next: BookingListFilters = {
-      status: form.status || undefined,
-      from: form.from || undefined,
-      to: form.to || undefined,
-      q: form.q || undefined,
-    };
-    try {
-      buildBookingListQuery({ page: 0, size, ...next });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid filters");
-      return;
+  useEffect(() => {
+    if (expandedId === null || detailCache.current[expandedId]) return;
+    const bookingId = expandedId;
+    const controller = new AbortController();
+    const tracker = detailTracker.current;
+    const token = tracker.begin(bookingId);
+    let active = true;
+
+    async function loadDetail() {
+      setDetailLoadingId(bookingId);
+      setDetailError((current) => {
+        if (!(bookingId in current)) return current;
+        const next = { ...current };
+        delete next[bookingId];
+        return next;
+      });
+      try {
+        const session = await getSession();
+        if (!active || !session || !tracker.isCurrent(bookingId, token)) return;
+        const result = await getBooking(session.accessToken, bookingId, controller.signal);
+        if (!active || !tracker.isCurrent(bookingId, token)) return;
+        detailCache.current = { ...detailCache.current, [bookingId]: result };
+        setDetails((current) => ({ ...current, [bookingId]: result }));
+      } catch (err) {
+        if (!active || controller.signal.aborted || !tracker.isCurrent(bookingId, token)) return;
+        setDetailError((current) => ({
+          ...current,
+          [bookingId]:
+            err instanceof ApiError ? err.message : "Could not load booking details. Try again.",
+        }));
+      } finally {
+        if (active) {
+          setDetailLoadingId((current) => (current === bookingId ? null : current));
+        }
+      }
     }
-    setError(null);
-    setFilters(next);
-    setPage(0);
-    setExpandedId(null);
+
+    void loadDetail();
+    return () => {
+      active = false;
+      tracker.cancel(bookingId);
+      controller.abort();
+      setDetailLoadingId((current) => (current === bookingId ? null : current));
+    };
+  }, [expandedId, detailReloadKey, getSession]);
+
+  function updateForm(patch: Partial<FilterForm>, debounce = false) {
+    const next = { ...formRef.current, ...patch };
+    formRef.current = next;
+    setForm(next);
+    if (debounce) {
+      debouncedSearch.schedule(next);
+    } else {
+      debouncedSearch.cancel();
+      commitFilters(next);
+    }
   }
 
   function clearFilters() {
+    debouncedSearch.cancel();
+    formRef.current = EMPTY_FORM;
     setForm(EMPTY_FORM);
-    setFilters({});
-    setPage(0);
-    setExpandedId(null);
-    setError(null);
+    commitFilters(EMPTY_FORM);
+  }
+
+  function changeSize(nextSize: number) {
+    debouncedSearch.cancel();
+    commitFilters(formRef.current, nextSize);
+  }
+
+  function retryDetail(bookingId: number) {
+    setDetailError((current) => {
+      if (!(bookingId in current)) return current;
+      const next = { ...current };
+      delete next[bookingId];
+      return next;
+    });
+    setDetailReloadKey((key) => key + 1);
   }
 
   async function loadPayments(bookingId: number) {
@@ -155,8 +276,24 @@ export function AdminBookings() {
     });
   }
 
+  function invalidateDetail(bookingId: number) {
+    if (bookingId in detailCache.current) {
+      const next = { ...detailCache.current };
+      delete next[bookingId];
+      detailCache.current = next;
+      setDetails(next);
+    }
+    setDetailError((current) => {
+      if (!(bookingId in current)) return current;
+      const next = { ...current };
+      delete next[bookingId];
+      return next;
+    });
+    setDetailReloadKey((key) => key + 1);
+  }
+
   async function run(
-    booking: Booking,
+    booking: AdminBookingListItem,
     action: (token: string) => Promise<unknown>,
     message: string,
   ) {
@@ -168,6 +305,7 @@ export function AdminBookings() {
       if (!session) return;
       await action(session.accessToken);
       invalidatePayments(booking.id);
+      invalidateDetail(booking.id);
       setNotice(message);
       setReloadKey((key) => key + 1);
     } catch (err) {
@@ -191,11 +329,12 @@ export function AdminBookings() {
         aria-label="Filter bookings"
         onSubmit={(event) => {
           event.preventDefault();
-          applyFilters();
+          debouncedSearch.cancel();
+          commitFilters(formRef.current);
         }}
         className="admin-filter-bar"
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label htmlFor="booking-status" className="label">
               Status
@@ -205,10 +344,9 @@ export function AdminBookings() {
               className="field"
               value={form.status}
               onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
+                updateForm({
                   status: event.target.value as BookingListFilters["status"],
-                }))
+                })
               }
             >
               <option value="">All statuses</option>
@@ -228,9 +366,7 @@ export function AdminBookings() {
               type="date"
               className="field"
               value={form.from}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, from: event.target.value }))
-              }
+              onChange={(event) => updateForm({ from: event.target.value })}
             />
           </div>
           <div>
@@ -242,9 +378,7 @@ export function AdminBookings() {
               type="date"
               className="field"
               value={form.to}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, to: event.target.value }))
-              }
+              onChange={(event) => updateForm({ to: event.target.value })}
             />
           </div>
           <div>
@@ -258,10 +392,25 @@ export function AdminBookings() {
               placeholder="Code, account, tour"
               className="field"
               value={form.q}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, q: event.target.value }))
-              }
+              onChange={(event) => updateForm({ q: event.target.value }, true)}
             />
+          </div>
+          <div>
+            <label htmlFor="booking-sort" className="label">
+              Sort
+            </label>
+            <select
+              id="booking-sort"
+              className="field"
+              value={form.sort}
+              onChange={(event) => updateForm({ sort: event.target.value as AdminListSort })}
+            >
+              {SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="booking-size" className="label">
@@ -270,12 +419,8 @@ export function AdminBookings() {
             <select
               id="booking-size"
               className="field"
-              value={size}
-              onChange={(event) => {
-                setSize(Number(event.target.value));
-                setPage(0);
-                setExpandedId(null);
-              }}
+              value={query.size}
+              onChange={(event) => changeSize(Number(event.target.value))}
             >
               {PAGE_SIZES.map((option) => (
                 <option key={option} value={option}>
@@ -286,26 +431,23 @@ export function AdminBookings() {
           </div>
         </div>
         <div className="mt-4 flex gap-2">
-          <button type="submit" className="btn-primary min-h-0 px-4 py-2 text-xs">
-            Apply
-          </button>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="btn-secondary min-h-0 px-4 py-2 text-xs"
-          >
+          <button type="button" onClick={clearFilters} className="btn-secondary min-h-0 px-4 py-2 text-xs">
             Clear
           </button>
         </div>
       </form>
 
       {error ? (
-        <p
-          role="alert"
-          className="admin-notice mt-5"
-        >
-          {error}
-        </p>
+        <div role="alert" className="admin-notice mt-5">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="btn-secondary mt-3 min-h-0 px-4 py-2 text-xs"
+          >
+            Try again
+          </button>
+        </div>
       ) : null}
       {notice ? (
         <p
@@ -336,6 +478,7 @@ export function AdminBookings() {
               {bookings.map((booking) => {
                 const busy = busyId === booking.id;
                 const expanded = expandedId === booking.id;
+                const detail = details[booking.id];
                 return (
                   <Fragment key={booking.id}>
                     <tr className="align-top">
@@ -343,10 +486,10 @@ export function AdminBookings() {
                         {booking.bookingCode}
                       </td>
                       <td className="px-4 py-4 text-muted">
-                        {booking.tour?.tourName ?? "—"}
+                        {booking.tourName ?? "—"}
                       </td>
                       <td className="px-4 py-4 text-muted">
-                        {formatDateRange(booking.tour?.startDate, booking.tour?.endDate)}
+                        {formatDateRange(booking.startDate, booking.endDate)}
                       </td>
                       <td className="px-4 py-4 text-muted">{booking.guestCount}</td>
                       <td className="px-4 py-4 text-charcoal">
@@ -450,59 +593,76 @@ export function AdminBookings() {
                     {expanded ? (
                       <tr>
                         <td colSpan={7} className="bg-sage/5 px-6 py-5">
-                          <div className="grid gap-6 lg:grid-cols-2">
-                            <section>
-                              <p className="eyebrow text-forest">Booking note</p>
-                              <p className="mt-2 text-sm text-charcoal">
-                                {booking.note || "No note."}
-                              </p>
-                              {booking.promotion ? (
-                                <p className="mt-3 text-sm text-muted">
-                                  Promotion:{" "}
-                                  <span className="text-charcoal">
-                                    {booking.promotion.name} ({booking.promotion.code})
-                                  </span>
+                          {detail ? (
+                            <div className="grid gap-6 lg:grid-cols-2">
+                              <section>
+                                <p className="eyebrow text-forest">Booking note</p>
+                                <p className="mt-2 text-sm text-charcoal">
+                                  {detail.note || "No note."}
                                 </p>
-                              ) : null}
-                              <Link
-                                href={`/admin/invoices/${booking.id}`}
-                                className="btn-secondary mt-4 min-h-0 px-4 py-2 text-xs"
-                              >
-                                View invoice
-                              </Link>
-                            </section>
-                            <section>
-                              <p className="eyebrow text-forest">Travelers</p>
-                              {booking.travelers.length === 0 ? (
-                                <p className="mt-2 text-sm text-muted">No travelers recorded.</p>
-                              ) : (
-                                <table className="mt-2 w-full text-left text-xs">
-                                  <thead className="text-muted">
-                                    <tr>
-                                      <th className="py-2 pr-3 font-semibold">Name</th>
-                                      <th className="py-2 pr-3 font-semibold">DOB</th>
-                                      <th className="py-2 pr-3 font-semibold">Email</th>
-                                      <th className="py-2 font-semibold">Phone</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-line">
-                                    {booking.travelers.map((traveler) => (
-                                      <tr key={traveler.id} className="text-charcoal">
-                                        <td className="py-2 pr-3">{traveler.name}</td>
-                                        <td className="py-2 pr-3">
-                                          {traveler.dateOfBirth
-                                            ? formatDate(traveler.dateOfBirth)
-                                            : "—"}
-                                        </td>
-                                        <td className="py-2 pr-3">{traveler.email ?? "—"}</td>
-                                        <td className="py-2">{traveler.phone ?? "—"}</td>
+                                {detail.promotion ? (
+                                  <p className="mt-3 text-sm text-muted">
+                                    Promotion:{" "}
+                                    <span className="text-charcoal">
+                                      {detail.promotion.name} ({detail.promotion.code})
+                                    </span>
+                                  </p>
+                                ) : null}
+                                <Link
+                                  href={`/admin/invoices/${booking.id}`}
+                                  className="btn-secondary mt-4 min-h-0 px-4 py-2 text-xs"
+                                >
+                                  View invoice
+                                </Link>
+                              </section>
+                              <section>
+                                <p className="eyebrow text-forest">Travelers</p>
+                                {detail.travelers.length === 0 ? (
+                                  <p className="mt-2 text-sm text-muted">No travelers recorded.</p>
+                                ) : (
+                                  <table className="mt-2 w-full text-left text-xs">
+                                    <thead className="text-muted">
+                                      <tr>
+                                        <th className="py-2 pr-3 font-semibold">Name</th>
+                                        <th className="py-2 pr-3 font-semibold">DOB</th>
+                                        <th className="py-2 pr-3 font-semibold">Email</th>
+                                        <th className="py-2 font-semibold">Phone</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </section>
-                          </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-line">
+                                      {detail.travelers.map((traveler) => (
+                                        <tr key={traveler.id} className="text-charcoal">
+                                          <td className="py-2 pr-3">{traveler.name}</td>
+                                          <td className="py-2 pr-3">
+                                            {traveler.dateOfBirth
+                                              ? formatDate(traveler.dateOfBirth)
+                                              : "—"}
+                                          </td>
+                                          <td className="py-2 pr-3">{traveler.email ?? "—"}</td>
+                                          <td className="py-2">{traveler.phone ?? "—"}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </section>
+                            </div>
+                          ) : detailError[booking.id] ? (
+                            <div role="alert" className="text-sm text-terracotta">
+                              <p>{detailError[booking.id]}</p>
+                              <button
+                                type="button"
+                                onClick={() => retryDetail(booking.id)}
+                                className="admin-row-action mt-2"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          ) : (
+                            <p role="status" className="text-sm text-muted">
+                              {detailLoadingId === booking.id ? "Loading details…" : "Loading details…"}
+                            </p>
+                          )}
 
                           <div className="mt-6">
                             <div className="flex flex-wrap items-center gap-3">
@@ -568,22 +728,22 @@ export function AdminBookings() {
       <div className="admin-pagination mt-5">
         <button
           type="button"
-          disabled={page === 0 || loading}
-          onClick={() => setPage((current) => Math.max(0, current - 1))}
+          disabled={query.page === 0 || loading}
+          onClick={() => setQuery((current) => ({ ...current, page: Math.max(0, current.page - 1) }))}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Previous
         </button>
         <div className="text-center text-sm text-muted">
           <p>
-            Page {page + 1} of {totalPages}
+            Page {query.page + 1} of {Math.max(totalPages, 1)}
           </p>
           <p>{totalElements} bookings</p>
         </div>
         <button
           type="button"
           disabled={!hasNext || loading}
-          onClick={() => setPage((current) => current + 1)}
+          onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Next

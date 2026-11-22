@@ -3,18 +3,24 @@ package com.j2ee.tour.security;
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.GlobalExceptionHandler;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.controller.AdminBookingController;
 import com.j2ee.tour.controller.AdminController;
 import com.j2ee.tour.controller.AuthController;
 import com.j2ee.tour.controller.BookingController;
 import com.j2ee.tour.controller.InvoiceController;
 import com.j2ee.tour.controller.MockPaymentController;
 import com.j2ee.tour.controller.ProfileController;
+import com.j2ee.tour.dto.request.AdminBookingFilter;
 import com.j2ee.tour.dto.request.ChangePasswordRequest;
 import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.request.ProfileRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
+import com.j2ee.tour.dto.response.AdminBookingListItem;
+import com.j2ee.tour.dto.response.AdminInvoiceListItem;
+import com.j2ee.tour.dto.response.InvoiceResponse;
 import com.j2ee.tour.dto.response.PaymentResponse;
 import com.j2ee.tour.dto.response.ProfileResponse;
+import com.j2ee.tour.service.AdminBookingQueryService;
 import com.j2ee.tour.service.AdminService;
 import com.j2ee.tour.service.AdminStatsService;
 import com.j2ee.tour.service.AuthService;
@@ -41,6 +47,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -55,8 +62,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {AuthController.class, AdminController.class,
-        BookingController.class, InvoiceController.class, MockPaymentController.class,
-        ProfileController.class})
+        AdminBookingController.class, BookingController.class, InvoiceController.class,
+        MockPaymentController.class, ProfileController.class})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -85,6 +92,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private AdminStatsService adminStatsService;
+
+    @MockitoBean
+    private AdminBookingQueryService adminBookingQueryService;
 
     @MockitoBean
     private BookingService bookingService;
@@ -171,6 +181,38 @@ class SecurityConfigTest {
         mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].username").value("user01"));
+    }
+
+    @Test
+    void adminCanReadAdminBookings() throws Exception {
+        when(jwtService.parse("admin-token"))
+                .thenReturn(new AuthPrincipal(2L, "admin", "ROLE_ADMIN"));
+        when(adminBookingQueryService.list(any(Pageable.class), any(AdminBookingFilter.class)))
+                .thenReturn(new PageResponse<>(List.of(new AdminBookingListItem(
+                        7L, "BK-7", "Tour", LocalDateTime.now(), LocalDateTime.now(),
+                        1, new BigDecimal("100.00"), "PENDING")), 0, 10, 1, 1, true));
+
+        mockMvc.perform(get("/api/admin/bookings")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].bookingCode").value("BK-7"));
+    }
+
+    @Test
+    void userCannotReadAdminBookings() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/admin/bookings")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void anonymousCannotReadAdminBookings() throws Exception {
+        mockMvc.perform(get("/api/admin/bookings"))
+                .andExpect(status().isUnauthorized());
     }
 
     @ParameterizedTest
@@ -277,6 +319,92 @@ class SecurityConfigTest {
                         .contentType("application/json")
                         .content("{\"email\":\"user01@example.com\"}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void adminCanReadInvoiceListWithDisplayedFieldsOnly() throws Exception {
+        when(jwtService.parse("admin-token"))
+                .thenReturn(new AuthPrincipal(2L, "admin", "ROLE_ADMIN"));
+        when(invoiceService.list(any(Pageable.class), eq("PAID"), eq("alice")))
+                .thenReturn(new PageResponse<>(List.of(new AdminInvoiceListItem(
+                        5L, 7L, LocalDateTime.now(), "PAID", new BigDecimal("100.00"),
+                        "CARD", "Alice", "alice@example.com")), 0, 10, 1, 1, true));
+
+        mockMvc.perform(get("/api/invoices?status=PAID&q=alice")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].customerEmail").value("alice@example.com"))
+                .andExpect(jsonPath("$.data.content[0].promotionIds").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].customerPhone").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].taxAmount").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].serviceFee").doesNotExist());
+    }
+
+    @Test
+    void userCannotReadInvoiceList() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/invoices")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void anonymousCannotReadInvoiceList() throws Exception {
+        mockMvc.perform(get("/api/invoices"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminCanReadInvoiceDetailByIdAndBooking() throws Exception {
+        when(jwtService.parse("admin-token"))
+                .thenReturn(new AuthPrincipal(2L, "admin", "ROLE_ADMIN"));
+        InvoiceResponse response = new InvoiceResponse(5L, 7L, LocalDateTime.now(),
+                "PAID", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("100.00"), "CARD", "Alice", "0901234567",
+                "alice@example.com", List.of(11L));
+        when(invoiceService.get(5L)).thenReturn(response);
+        when(invoiceService.getByBooking(7L)).thenReturn(response);
+
+        mockMvc.perform(get("/api/invoices/5")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.promotionIds[0]").value(11));
+        mockMvc.perform(get("/api/invoices/by-booking/7")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(5));
+    }
+
+    @Test
+    void userCannotReadInvoiceDetail() throws Exception {
+        when(jwtService.parse("user-token"))
+                .thenReturn(new AuthPrincipal(1L, "user01", "ROLE_USER"));
+
+        mockMvc.perform(get("/api/invoices/5")
+                        .header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anonymousCannotReadInvoiceDetail() throws Exception {
+        mockMvc.perform(get("/api/invoices/5"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unknownInvoiceReturnsNotFound() throws Exception {
+        when(jwtService.parse("admin-token"))
+                .thenReturn(new AuthPrincipal(2L, "admin", "ROLE_ADMIN"));
+        when(invoiceService.get(999L))
+                .thenThrow(new NoSuchElementException("Invoice not found"));
+
+        mockMvc.perform(get("/api/invoices/999")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Invoice not found"));
     }
 
     @Test

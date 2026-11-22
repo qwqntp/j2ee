@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  apiRequest, cancelBooking, createAdminAccount, deleteAdminAccount, forgotPassword, getBooking, getVnpayStatus, googleSignIn, reconcileVnpayBooking,
-  resetPassword, startVnpay, verifyVnpayReturn,
+  apiRequest, cancelBooking, createAdminAccount, deleteAdminAccount, forgotPassword, getBooking,
+  getInvoiceByBooking, getVnpayStatus, googleSignIn, listAdminBookings, listInvoices,
+  reconcileVnpayBooking, resetPassword, startVnpay, verifyVnpayReturn,
 } from "./api";
 
 afterEach(() => {
@@ -235,5 +236,79 @@ describe("VNPay API", () => {
     expect(url).toMatch(/\/api\/bookings\/42\/payments\/vnpay\/reconcile$/);
     expect(init).toMatchObject({ method: "POST", headers: { Authorization: "Bearer synthetic-session" } });
     expect(init.body).toBeUndefined();
+  });
+});
+
+function adminPage<T>(content: T[]) {
+  return {
+    content, page: 0, size: 10, totalElements: content.length, totalPages: 1,
+    last: true, hasNext: false, hasPrevious: false,
+  };
+}
+
+describe("admin list API", () => {
+  it("requests the admin booking projection with paging, filters and sort", async () => {
+    const data = adminPage([{ id: 1 }]);
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listAdminBookings("synthetic-session", 2, 20, {
+      status: "PAID", from: "2026-11-01", to: "2026-11-30", q: " Ha Long ", sort: "totalAmount,asc",
+    })).resolves.toEqual(data);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(
+      /\/api\/admin\/bookings\?page=2&size=20&status=PAID&from=2026-11-01&to=2026-11-30&q=Ha\+Long&sort=totalAmount%2Casc$/,
+    );
+    expect(init).toMatchObject({
+      method: "GET", cache: "no-store", headers: { Authorization: "Bearer synthetic-session" },
+    });
+  });
+
+  it("requests invoices at page 0 and size 10 by default", async () => {
+    const data = adminPage([]);
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listInvoices("synthetic-session")).resolves.toEqual(data);
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toMatch(/\/api\/invoices\?page=0&size=10$/);
+  });
+
+  it("encodes full-dataset invoice filters and never sends the UI-only All value", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Response.json({ success: true, data: adminPage([]) }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listInvoices("synthetic-session", 2, 20, {
+      status: "UNPAID", q: " an@example.com ", sort: "createdAt,asc",
+    });
+    await listInvoices("synthetic-session", 0, 10, { q: "paid" });
+
+    const [firstUrl] = fetchMock.mock.calls[0] as [string];
+    const [secondUrl] = fetchMock.mock.calls[1] as [string];
+    expect(firstUrl).toMatch(
+      /\/api\/invoices\?page=2&size=20&status=UNPAID&q=an%40example.com&sort=createdAt%2Casc$/,
+    );
+    expect(secondUrl).toMatch(/\/api\/invoices\?page=0&size=10&q=paid$/);
+  });
+
+  it("forwards an abort signal to the admin list and invoice detail reads", async () => {
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const listController = new AbortController();
+    const listRequest = listAdminBookings("synthetic-session", 0, 10, {}, listController.signal);
+    const listAborted = expect(listRequest).rejects.toHaveProperty("name", "AbortError");
+    listController.abort();
+    await listAborted;
+
+    const detailController = new AbortController();
+    const detailRequest = getInvoiceByBooking("synthetic-session", 42, detailController.signal);
+    const detailAborted = expect(detailRequest).rejects.toHaveProperty("name", "AbortError");
+    detailController.abort();
+    await detailAborted;
   });
 });

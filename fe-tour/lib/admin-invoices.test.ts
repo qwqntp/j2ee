@@ -1,54 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { filterInvoices } from "./admin-invoices";
-import type { Invoice } from "./types";
+import { buildInvoiceListQuery, toInvoiceStatusParam } from "./admin-invoices";
 
-describe("filterInvoices", () => {
-  const rows = [
-    {
-      id: 11,
-      bookingId: 7,
-      createdAt: "2026-11-17T08:00:00",
-      status: "PAID",
-      discountAmount: 0,
-      taxAmount: 0,
-      serviceFee: 0,
-      totalAmount: 500,
-      paymentMethod: "CASH",
-      customerName: "An",
-      customerPhone: null,
-      customerEmail: "AN@EXAMPLE.COM",
-      promotionIds: [],
-    },
-    {
-      id: 12,
-      bookingId: 8,
-      createdAt: "2026-11-17T09:00:00",
-      status: "UNPAID",
-      discountAmount: 0,
-      taxAmount: 0,
-      serviceFee: 0,
-      totalAmount: 900,
-      paymentMethod: "CARD",
-      customerName: "Bình",
-      customerPhone: null,
-      customerEmail: "binh@example.com",
-      promotionIds: [],
-    },
-  ] as Invoice[];
-
-  it("matches status and case-insensitive customer/email/booking id", () => {
-    expect(filterInvoices(rows, { status: "PAID", query: "an@" })).toHaveLength(1);
-    expect(filterInvoices(rows, { status: "All", query: "8" })).toHaveLength(1);
+describe("buildInvoiceListQuery", () => {
+  it("sends page 0 and size 10 by default", () => {
+    expect(buildInvoiceListQuery({ page: 0, size: 10 })).toBe("page=0&size=10");
   });
 
-  it("matches name and payment method case-insensitively", () => {
-    expect(filterInvoices(rows, { status: "All", query: "cash" })).toHaveLength(1);
-    expect(filterInvoices(rows, { status: "All", query: "BÌNH" })).toHaveLength(1);
+  it("encodes full-dataset filters and sort", () => {
+    expect(
+      buildInvoiceListQuery({
+        page: 2,
+        size: 20,
+        status: "UNPAID",
+        q: "  an@example.com  ",
+        sort: "createdAt,asc",
+      }),
+    ).toBe(
+      "page=2&size=20&status=UNPAID&q=an%40example.com&sort=createdAt%2Casc",
+    );
   });
 
-  it("returns all rows for an empty filter and does not mutate input", () => {
-    const snapshot = JSON.stringify(rows);
-    expect(filterInvoices(rows, { status: "All", query: "" })).toHaveLength(2);
-    expect(JSON.stringify(rows)).toBe(snapshot);
+  it("omits the UI-only All status", () => {
+    expect(toInvoiceStatusParam("All")).toBeUndefined();
+    expect(toInvoiceStatusParam("PAID")).toBe("PAID");
+    expect(buildInvoiceListQuery({ page: 0, size: 10, status: toInvoiceStatusParam("All") }))
+      .toBe("page=0&size=10");
+  });
+
+  it("rejects an unknown status or sort", () => {
+    expect(() =>
+      buildInvoiceListQuery({ page: 0, size: 10, status: "CANCELLED" as never }),
+    ).toThrow("Invalid status");
+    expect(() =>
+      buildInvoiceListQuery({ page: 0, size: 10, sort: "customerName,asc" as never }),
+    ).toThrow("Invalid sort");
   });
 });

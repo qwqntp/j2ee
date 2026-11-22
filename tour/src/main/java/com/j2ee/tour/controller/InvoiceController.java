@@ -3,11 +3,13 @@ package com.j2ee.tour.controller;
 import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.InvoiceRequest;
+import com.j2ee.tour.dto.response.AdminInvoiceListItem;
 import com.j2ee.tour.dto.response.InvoiceResponse;
 import com.j2ee.tour.security.AuthPrincipal;
 import com.j2ee.tour.service.InvoiceService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -30,8 +33,11 @@ public class InvoiceController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<InvoiceResponse>>> list(Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.success(invoiceService.list(pageable)));
+    public ResponseEntity<ApiResponse<PageResponse<AdminInvoiceListItem>>> list(
+            @PageableDefault(size = 10) Pageable pageable,
+            @RequestParam(required = false) String status,
+            @RequestParam(name = "q", required = false) String q) {
+        return ResponseEntity.ok(ApiResponse.success(invoiceService.list(pageable, status, q)));
     }
 
     @GetMapping("/me")

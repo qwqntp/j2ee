@@ -9,6 +9,13 @@ export type PageData<T> = {
   hasPrevious: boolean;
 };
 
+/** Allowlisted server sorts; the backend appends a stable ID tie-breaker. */
+export type AdminListSort =
+  | "createdAt,asc"
+  | "createdAt,desc"
+  | "totalAmount,asc"
+  | "totalAmount,desc";
+
 export type TourSummary = {
   id: number;
   name: string;
@@ -200,6 +207,30 @@ export type Invoice = {
   customerPhone: string | null;
   customerEmail: string | null;
   promotionIds: number[];
+};
+
+/** Scalar row returned by the admin invoice list. */
+export type AdminInvoiceListItem = {
+  id: number;
+  bookingId: number;
+  createdAt: string;
+  status: string;
+  totalAmount: number;
+  paymentMethod: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+};
+
+/** Scalar row returned by the admin booking list. */
+export type AdminBookingListItem = {
+  id: number;
+  bookingCode: string;
+  tourName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  guestCount: number;
+  totalAmount: number;
+  status: string;
 };
 
 export type AdminTour = TourDetail & {

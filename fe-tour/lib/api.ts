@@ -6,6 +6,8 @@ import type {
   AccommodationInput,
   AccommodationRow,
   AdminAccount,
+  AdminBookingListItem,
+  AdminInvoiceListItem,
   AdminStats,
   AdminTour,
   AuthSession,
@@ -35,6 +37,7 @@ import type {
   VnpayStatus,
 } from "./types";
 import { buildBookingListQuery, type BookingListFilters } from "./booking-list";
+import { buildInvoiceListQuery, type InvoiceListFilters } from "./admin-invoices";
 import { buildTourApiQuery, type TourFilters } from "./tour-filters";
 
 type Envelope<T> = {
@@ -251,6 +254,21 @@ export function listBookings(
   return apiRequest<PageData<Booking>>(`/api/bookings?${query}`, { token });
 }
 
+export function listAdminBookings(
+  token: string,
+  page = 0,
+  size = 10,
+  filters: BookingListFilters = {},
+  signal?: AbortSignal,
+): Promise<PageData<AdminBookingListItem>> {
+  const query = buildBookingListQuery({ page, size, ...filters });
+  return apiRequest<PageData<AdminBookingListItem>>(`/api/admin/bookings?${query}`, {
+    token,
+    signal,
+    cache: "no-store",
+  });
+}
+
 export function listBookingPayments(token: string, bookingId: number): Promise<Payment[]> {
   return apiRequest<Payment[]>(`/api/bookings/${bookingId}/payments`, { token });
 }
@@ -290,16 +308,39 @@ export function completeBooking(token: string, id: number): Promise<Booking> {
   return apiRequest<Booking>(`/api/bookings/${id}/complete`, { method: "POST", token });
 }
 
-export function listMyInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
-  return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, { token });
+export function listMyInvoices(
+  token: string,
+  page = 0,
+  size = 100,
+  signal?: AbortSignal,
+): Promise<PageData<Invoice>> {
+  return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, {
+    token,
+    signal,
+  });
 }
 
-export function listInvoices(token: string, page = 0, size = 100): Promise<PageData<Invoice>> {
-  return apiRequest<PageData<Invoice>>(`/api/invoices?page=${page}&size=${size}`, { token });
+export function listInvoices(
+  token: string,
+  page = 0,
+  size = 10,
+  filters: InvoiceListFilters = {},
+  signal?: AbortSignal,
+): Promise<PageData<AdminInvoiceListItem>> {
+  const query = buildInvoiceListQuery({ page, size, ...filters });
+  return apiRequest<PageData<AdminInvoiceListItem>>(`/api/invoices?${query}`, {
+    token,
+    signal,
+    cache: "no-store",
+  });
 }
 
-export function getInvoiceByBooking(token: string, bookingId: number): Promise<Invoice> {
-  return apiRequest<Invoice>(`/api/invoices/by-booking/${bookingId}`, { token });
+export function getInvoiceByBooking(
+  token: string,
+  bookingId: number,
+  signal?: AbortSignal,
+): Promise<Invoice> {
+  return apiRequest<Invoice>(`/api/invoices/by-booking/${bookingId}`, { token, signal });
 }
 
 export type ProfileInput = {

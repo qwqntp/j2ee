@@ -14,6 +14,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -75,6 +76,7 @@ public class Invoice {
     @JoinColumn(name = "booking_id", nullable = false, unique = true)
     private Booking booking;
 
+    @BatchSize(size = 50)
     @ManyToMany
     @JoinTable(name = "invoice_promotions",
             joinColumns = @JoinColumn(name = "invoice_id"),

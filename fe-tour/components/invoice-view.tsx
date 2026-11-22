@@ -35,10 +35,12 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   const backLabel = isAdmin ? "Back to invoices" : "Back to trip details";
 
   useEffect(() => {
+    const controller = new AbortController();
     let active = true;
 
     async function load() {
       const current = isAdmin ? await adminGetSession?.() : await ensureSession();
+      if (!active) return;
       if (!current) {
         router.replace(isAdmin ? ADMIN_HOME : loginHref);
         return;
@@ -46,10 +48,10 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
 
       try {
         const [bookingResult, invoiceResult] = await Promise.all([
-          getBooking(current.accessToken, bookingId),
+          getBooking(current.accessToken, bookingId, controller.signal),
           isAdmin
-            ? getInvoiceByBooking(current.accessToken, bookingId)
-            : listMyInvoices(current.accessToken, 0, 100).then(
+            ? getInvoiceByBooking(current.accessToken, bookingId, controller.signal)
+            : listMyInvoices(current.accessToken, 0, 100, controller.signal).then(
                 (page) => page.content.find((item) => item.bookingId === bookingId) ?? null,
               ),
         ]);
@@ -58,7 +60,7 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
         setInvoice(invoiceResult);
         setLoading(false);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
           router.replace(isAdmin ? ADMIN_HOME : loginHref);
@@ -77,6 +79,7 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
     load();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [bookingId, loginHref, router, isAdmin, adminGetSession]);
 
