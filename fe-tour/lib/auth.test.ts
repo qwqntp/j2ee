@@ -167,4 +167,45 @@ describe("auth session", () => {
     expect(current).toBeNull();
     expect(auth.getStoredSession()).toBeNull();
   });
+
+  it("does not restore the previous account when an old session check finishes late", async () => {
+    const data = installBrowser();
+    seedSession(data, session);
+    let resolveMe: (value: Account) => void = () => {};
+    api.getMe.mockReturnValue(new Promise<Account>((resolve) => { resolveMe = resolve; }));
+    const auth = await import("./auth");
+
+    const pending = auth.ensureSession();
+    const otherAccount: Account = { ...account, id: 2, username: "bao" };
+    auth.clearSession();
+    auth.saveSession({ accessToken: "other-token", account: otherAccount });
+
+    resolveMe(account);
+    const current = await pending;
+
+    expect(current?.account.id).toBe(2);
+    expect(auth.getStoredSession()).toEqual({ accessToken: "other-token", account: otherAccount });
+  });
+
+  it("starts a fresh check for the new account after a switch", async () => {
+    const data = installBrowser();
+    seedSession(data, session);
+    let resolveFirst: (value: Account) => void = () => {};
+    api.getMe
+      .mockReturnValueOnce(new Promise<Account>((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValue({ ...account, id: 2, username: "bao" });
+    const auth = await import("./auth");
+
+    const first = auth.ensureSession();
+    const otherAccount: Account = { ...account, id: 2, username: "bao" };
+    auth.clearSession();
+    auth.saveSession({ accessToken: "other-token", account: otherAccount });
+
+    const second = await auth.ensureSession();
+    resolveFirst(account);
+    await first;
+
+    expect(second?.account.id).toBe(2);
+    expect(api.getMe).toHaveBeenLastCalledWith("other-token");
+  });
 });

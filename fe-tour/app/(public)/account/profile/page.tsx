@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AccountProfile } from "@/components/account-profile";
+import { AccountSessionBoundary } from "@/components/account-session-boundary";
 import { ProfileSkeleton } from "@/components/skeleton";
 
 export const metadata: Metadata = {
@@ -33,7 +34,9 @@ export default function AccountProfilePage() {
 
       <section className="shell py-10 sm:py-14">
         <Suspense fallback={<ProfileSkeleton />}>
-          <AccountProfile />
+          <AccountSessionBoundary fallback={<ProfileSkeleton />}>
+            <AccountProfile />
+          </AccountSessionBoundary>
         </Suspense>
       </section>
     </>

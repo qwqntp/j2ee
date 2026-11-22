@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, listBookings } from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
+import { registerUserRequest } from "@/lib/user-state";
 import type { Booking } from "@/lib/types";
 import { EmptyState } from "./empty-state";
 import { IconChevronLeft, IconChevronRight } from "./icons";
@@ -25,28 +26,39 @@ export function AccountBookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const accountId = session?.account.id ?? null;
 
   useEffect(() => {
+    const controller = new AbortController();
+    const untrack = registerUserRequest(controller);
     let active = true;
 
     async function load() {
       setLoading(true);
+      setError(null);
       const current = await ensureSession();
-      if (!active) return;
+      if (!active || controller.signal.aborted) return;
       if (!current) {
+        setLoading(false);
         router.replace(loginHref);
         return;
       }
 
       try {
-        const result = await listBookings(current.accessToken, page, PAGE_SIZE);
-        if (!active) return;
+        const result = await listBookings(
+          current.accessToken,
+          page,
+          PAGE_SIZE,
+          {},
+          controller.signal,
+        );
+        if (!active || controller.signal.aborted) return;
         setBookings(result.content);
         setTotalPages(result.totalPages);
         setTotalElements(result.totalElements);
         setError(null);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
           router.replace(loginHref);
@@ -68,8 +80,10 @@ export function AccountBookings() {
     void load();
     return () => {
       active = false;
+      untrack();
+      controller.abort();
     };
-  }, [page, reloadKey, router]);
+  }, [accountId, page, reloadKey, router]);
 
   useEffect(() => {
     if (!loading && session === null) {

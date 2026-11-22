@@ -22,6 +22,7 @@ import {
 } from "@/lib/bookings";
 import { formatDate, formatDateRange, formatDuration, formatPrice } from "@/lib/format";
 import { publishFlash } from "@/lib/flash";
+import { registerUserRequest } from "@/lib/user-state";
 import { tourFallbackImage } from "@/lib/tour-images";
 import type { Booking } from "@/lib/types";
 import { openVnpayCheckout, vnpayCheckoutEnabled, vnpayReconcileError, vnpayReconcileNotice } from "@/lib/vnpay";
@@ -59,26 +60,35 @@ export function TripDetail({
   const paymentInFlight = useRef(false);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const loginHref = `/login?next=${encodeURIComponent(`${basePath}/${bookingId}`)}`;
+  const accountId = session?.account.id ?? null;
 
   useEffect(() => {
+    const controller = new AbortController();
+    const untrack = registerUserRequest(controller);
     let active = true;
 
     async function load() {
+      setBooking(null);
+      setLoading(true);
+      setMissing(false);
+      setError(null);
+
       const current = await ensureSession();
-      if (!active) return;
+      if (!active || controller.signal.aborted) return;
       if (!current) {
+        setLoading(false);
         router.replace(loginHref);
         return;
       }
 
       try {
-        const result = await getBooking(current.accessToken, bookingId);
-        if (!active) return;
+        const result = await getBooking(current.accessToken, bookingId, controller.signal);
+        if (!active || controller.signal.aborted) return;
         setBooking(result);
         setError(null);
         setLoading(false);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
           router.replace(loginHref);
@@ -102,8 +112,10 @@ export function TripDetail({
     void load();
     return () => {
       active = false;
+      untrack();
+      controller.abort();
     };
-  }, [bookingId, loginHref, reloadKey, router]);
+  }, [accountId, bookingId, loginHref, reloadKey, router]);
 
   useEffect(() => {
     if (!loading && session === null) {

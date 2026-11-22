@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, listBookings } from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
+import { registerUserRequest } from "@/lib/user-state";
 import { BOOKING_TABS, groupBookings, type BookingTab } from "@/lib/bookings";
 import type { Booking } from "@/lib/types";
 import { EmptyState } from "./empty-state";
@@ -43,21 +44,33 @@ export function MyTrips() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const accountId = session?.account.id ?? null;
+  const loadMoreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const untrack = registerUserRequest(controller);
     let active = true;
 
     async function load() {
+      setError(null);
       const current = await ensureSession();
-      if (!active) return;
+      if (!active || controller.signal.aborted) return;
       if (!current) {
+        setLoading(false);
         router.replace("/login?next=/my-trips");
         return;
       }
 
       try {
-        const result = await listBookings(current.accessToken, 0, PAGE_SIZE);
-        if (!active) return;
+        const result = await listBookings(
+          current.accessToken,
+          0,
+          PAGE_SIZE,
+          {},
+          controller.signal,
+        );
+        if (!active || controller.signal.aborted) return;
         setBookings(result.content);
         setPage(result.page);
         setHasNext(result.hasNext);
@@ -65,7 +78,7 @@ export function MyTrips() {
         setError(null);
         setLoading(false);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
           router.replace("/login?next=/my-trips");
@@ -86,8 +99,14 @@ export function MyTrips() {
     void load();
     return () => {
       active = false;
+      untrack();
+      controller.abort();
     };
-  }, [router, reloadKey]);
+  }, [accountId, router, reloadKey]);
+
+  useEffect(() => () => {
+    loadMoreController.current?.abort();
+  }, [accountId]);
 
   useEffect(() => {
     if (!loading && session === null) {
@@ -113,19 +132,32 @@ export function MyTrips() {
     if (loadingMore || !hasNext) return;
     setLoadingMore(true);
     setError(null);
+    const controller = new AbortController();
+    loadMoreController.current = controller;
+    const untrack = registerUserRequest(controller);
 
     try {
       const current = await ensureSession();
+      if (controller.signal.aborted) return;
       if (!current) {
         router.replace("/login?next=/my-trips");
         return;
       }
-      const result = await listBookings(current.accessToken, page + 1, PAGE_SIZE);
+      if (accountId !== null && current.account.id !== accountId) return;
+      const result = await listBookings(
+        current.accessToken,
+        page + 1,
+        PAGE_SIZE,
+        {},
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       setBookings((existing) => [...existing, ...result.content]);
       setPage(result.page);
       setHasNext(result.hasNext);
       setTotalElements(result.totalElements);
     } catch (err) {
+      if (controller.signal.aborted) return;
       if (err instanceof ApiError && err.status === 401) {
         clearSession();
         router.replace("/login?next=/my-trips");
@@ -135,6 +167,8 @@ export function MyTrips() {
         err instanceof ApiError ? err.message : "Could not load more trips. Try again.",
       );
     } finally {
+      untrack();
+      if (loadMoreController.current === controller) loadMoreController.current = null;
       setLoadingMore(false);
     }
   }

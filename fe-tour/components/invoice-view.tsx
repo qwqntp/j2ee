@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, getBooking, getInvoiceByBooking, listMyInvoices } from "@/lib/api";
-import { clearSession, ensureSession } from "@/lib/auth";
+import { clearSession, ensureSession, useSession } from "@/lib/auth";
+import { registerUserRequest } from "@/lib/user-state";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
 import type { Booking, Invoice } from "@/lib/types";
 import { EmptyState } from "./empty-state";
@@ -25,6 +26,8 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   const router = useRouter();
   const isAdmin = mode === "admin";
   const adminGetSession = useOptionalAdminAccess()?.getSession;
+  const session = useSession();
+  const accountId = session?.account.id ?? null;
   const [booking, setBooking] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,11 +39,18 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
 
   useEffect(() => {
     const controller = new AbortController();
+    const untrack = registerUserRequest(controller);
     let active = true;
 
     async function load() {
+      setBooking(null);
+      setInvoice(null);
+      setMissing(false);
+      setError(null);
+      setLoading(true);
+
       const current = isAdmin ? await adminGetSession?.() : await ensureSession();
-      if (!active) return;
+      if (!active || controller.signal.aborted) return;
       if (!current) {
         router.replace(isAdmin ? ADMIN_HOME : loginHref);
         return;
@@ -55,7 +65,7 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
                 (page) => page.content.find((item) => item.bookingId === bookingId) ?? null,
               ),
         ]);
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         setBooking(bookingResult);
         setInvoice(invoiceResult);
         setLoading(false);
@@ -79,9 +89,10 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
     load();
     return () => {
       active = false;
+      untrack();
       controller.abort();
     };
-  }, [bookingId, loginHref, router, isAdmin, adminGetSession]);
+  }, [accountId, bookingId, loginHref, router, isAdmin, adminGetSession]);
 
   if (loading) {
     if (isAdmin) return <AdminInvoiceSkeleton />;

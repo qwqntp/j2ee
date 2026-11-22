@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSessionStore, type StorageLike } from "./session";
+import { accountScope, createSessionStore, type StorageLike } from "./session";
 import type { AuthSession } from "./types";
 
 function memoryStorage(): StorageLike & { read: (key: string) => string | null } {
@@ -30,6 +30,18 @@ const session: AuthSession = {
     updatedAt: null,
   },
 };
+
+const otherSession: AuthSession = {
+  accessToken: "other-token",
+  account: { ...session.account, id: 2, username: "bao", email: "bao@example.com" },
+};
+
+describe("accountScope", () => {
+  it("changes when the signed-in account changes and clears on logout", () => {
+    expect(accountScope(session)).not.toBe(accountScope(otherSession));
+    expect(accountScope(null)).toBeNull();
+  });
+});
 
 describe("createSessionStore", () => {
   it("stores a session and notifies subscribers", () => {
@@ -82,5 +94,46 @@ describe("createSessionStore", () => {
     store.set(session);
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("resets per-user state on logout and account change, not on token refresh", () => {
+    const reset = vi.fn();
+    const store = createSessionStore(memoryStorage(), reset);
+
+    store.set(session);
+    store.set({ ...session, accessToken: "refreshed-token" });
+    expect(reset).not.toHaveBeenCalled();
+
+    store.set(otherSession);
+    expect(reset).toHaveBeenCalledTimes(1);
+
+    store.clear();
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+
+  it("resets per-user state when another tab switches account", () => {
+    const storage = memoryStorage();
+    const reset = vi.fn();
+    const store = createSessionStore(storage, reset);
+    store.set(session);
+
+    storage.setItem("tour_access_token", otherSession.accessToken);
+    storage.setItem("tour_account", JSON.stringify(otherSession.account));
+    store.invalidate();
+
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot()).toEqual(otherSession);
+  });
+
+  it("does not reset when another tab only refreshes the same account token", () => {
+    const storage = memoryStorage();
+    const reset = vi.fn();
+    const store = createSessionStore(storage, reset);
+    store.set(session);
+
+    storage.setItem("tour_access_token", "refreshed-token");
+    store.invalidate();
+
+    expect(reset).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { TripDetailSkeleton } from "@/components/skeleton";
+import { AccountSessionBoundary } from "@/components/account-session-boundary";
 import { TripDetail } from "@/components/trip-detail";
 
 export const metadata: Metadata = {
@@ -30,5 +31,9 @@ async function TripDetailRoute({ params }: Props) {
   const bookingIdValue = bookingId(id);
   if (bookingIdValue === null) notFound();
 
-  return <TripDetail key={bookingIdValue} bookingId={bookingIdValue} />;
+  return (
+    <AccountSessionBoundary fallback={<TripDetailSkeleton />}>
+      <TripDetail key={bookingIdValue} bookingId={bookingIdValue} />
+    </AccountSessionBoundary>
+  );
 }

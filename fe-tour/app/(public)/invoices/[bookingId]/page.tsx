@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { InvoiceView } from "@/components/invoice-view";
+import { AccountSessionBoundary } from "@/components/account-session-boundary";
 
 export const metadata: Metadata = {
   title: "Invoice",
@@ -29,5 +30,11 @@ async function InvoiceRoute({ params }: Props) {
   const id = bookingId(raw);
   if (id === null) notFound();
 
-  return <InvoiceView bookingId={id} />;
+  return (
+    <AccountSessionBoundary
+      fallback={<p className="shell py-16 text-sm text-muted">Loading your invoice…</p>}
+    >
+      <InvoiceView bookingId={id} />
+    </AccountSessionBoundary>
+  );
 }

@@ -180,7 +180,7 @@ export function logout(token?: string): Promise<void> {
 }
 
 export function getMe(token: string): Promise<Account> {
-  return apiRequest<Account>("/api/auth/me", { token });
+  return apiRequest<Account>("/api/auth/me", { token, cache: "no-store" });
 }
 
 export function listAdminAccounts(
@@ -249,9 +249,14 @@ export function listBookings(
   page = 0,
   size = 10,
   filters: BookingListFilters = {},
+  signal?: AbortSignal,
 ): Promise<PageData<Booking>> {
   const query = buildBookingListQuery({ page, size, ...filters });
-  return apiRequest<PageData<Booking>>(`/api/bookings?${query}`, { token });
+  return apiRequest<PageData<Booking>>(`/api/bookings?${query}`, {
+    token,
+    signal,
+    cache: "no-store",
+  });
 }
 
 export function listAdminBookings(
@@ -317,6 +322,7 @@ export function listMyInvoices(
   return apiRequest<PageData<Invoice>>(`/api/invoices/me?page=${page}&size=${size}`, {
     token,
     signal,
+    cache: "no-store",
   });
 }
 
@@ -340,7 +346,11 @@ export function getInvoiceByBooking(
   bookingId: number,
   signal?: AbortSignal,
 ): Promise<Invoice> {
-  return apiRequest<Invoice>(`/api/invoices/by-booking/${bookingId}`, { token, signal });
+  return apiRequest<Invoice>(`/api/invoices/by-booking/${bookingId}`, {
+    token,
+    signal,
+    cache: "no-store",
+  });
 }
 
 export type ProfileInput = {
@@ -351,8 +361,8 @@ export type ProfileInput = {
   dateOfBirth?: string;
 };
 
-export function getProfile(token: string): Promise<Profile> {
-  return apiRequest<Profile>("/api/profile", { token });
+export function getProfile(token: string, signal?: AbortSignal): Promise<Profile> {
+  return apiRequest<Profile>("/api/profile", { token, signal, cache: "no-store" });
 }
 
 export function updateProfile(token: string, input: ProfileInput): Promise<Profile> {

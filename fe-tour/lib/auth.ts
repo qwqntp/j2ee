@@ -9,10 +9,30 @@ import {
   refresh as apiRefresh,
   register as apiRegister,
 } from "./api";
-import { clearSession, getStoredSession, saveSession, useSession } from "./session";
+import {
+  clearSession as clearStoredSession,
+  getStoredSession,
+  saveSession as saveStoredSession,
+  useSession,
+} from "./session";
 import type { Account, AuthSession } from "./types";
 
-export { clearSession, getStoredSession, saveSession, useSession };
+export { getStoredSession, useSession };
+
+let sessionCheck: Promise<AuthSession | null> | null = null;
+let sessionEpoch = 0;
+
+export function saveSession(session: AuthSession): void {
+  sessionEpoch += 1;
+  sessionCheck = null;
+  saveStoredSession(session);
+}
+
+export function clearSession(): void {
+  sessionEpoch += 1;
+  sessionCheck = null;
+  clearStoredSession();
+}
 
 export async function signIn(input: {
   username: string;
@@ -48,23 +68,28 @@ export async function signOut(): Promise<void> {
   }
 }
 
-let sessionCheck: Promise<AuthSession | null> | null = null;
-
 export function ensureSession(): Promise<AuthSession | null> {
-  // The header and page can mount together; don't present the same rotating cookie twice.
-  sessionCheck ??= resolveSession().finally(() => { sessionCheck = null; });
-  return sessionCheck;
+  if (sessionCheck) return sessionCheck;
+  const epoch = sessionEpoch;
+  const pending = resolveSession(epoch);
+  sessionCheck = pending;
+  void pending.finally(() => {
+    if (sessionCheck === pending) sessionCheck = null;
+  });
+  return pending;
 }
 
-async function resolveSession(): Promise<AuthSession | null> {
+async function resolveSession(epoch: number): Promise<AuthSession | null> {
   const stored = getStoredSession();
   if (stored) {
     try {
       const account = await getMe(stored.accessToken);
+      if (epoch !== sessionEpoch) return getStoredSession();
       const session = { accessToken: stored.accessToken, account };
       saveSession(session);
       return session;
     } catch (error) {
+      if (epoch !== sessionEpoch) return getStoredSession();
       if (!isUnauthorized(error)) {
         // A timeout or outage should not sign the visitor out.
         return stored;
@@ -74,9 +99,11 @@ async function resolveSession(): Promise<AuthSession | null> {
 
   try {
     const session = await apiRefresh();
+    if (epoch !== sessionEpoch) return getStoredSession();
     saveSession(session);
     return session;
   } catch (error) {
+    if (epoch !== sessionEpoch) return getStoredSession();
     if (isUnauthorized(error)) {
       clearSession();
       return null;

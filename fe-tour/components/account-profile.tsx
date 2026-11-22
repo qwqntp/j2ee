@@ -9,8 +9,9 @@ import {
   getProfile,
   updateProfile,
 } from "@/lib/api";
-import { clearSession, ensureSession, saveSession } from "@/lib/auth";
+import { clearSession, ensureSession, saveSession, useSession } from "@/lib/auth";
 import { publishFlash } from "@/lib/flash";
+import { registerUserRequest } from "@/lib/user-state";
 import {
   profilePayload,
   validatePasswordChange,
@@ -43,25 +44,31 @@ function valuesFromProfile(profile: Profile): ProfileFormValues {
 
 export function AccountProfile() {
   const router = useRouter();
+  const session = useSession();
+  const accountId = session?.account.id ?? null;
   const [ready, setReady] = useState(false);
   const [accountProfile, setAccountProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     let active = true;
 
-    ensureSession().then((session) => {
+    async function load() {
+      setReady(false);
+      setAccountProfile(null);
+      const session = await ensureSession();
       if (!active) return;
       if (session) {
         setReady(true);
       } else {
         router.replace(loginHref);
       }
-    });
+    }
 
+    void load();
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [accountId, router]);
 
   if (!ready) return <ProfileSkeleton />;
 
@@ -75,6 +82,8 @@ export function AccountProfile() {
 
 function ProfileForm({ onLoaded }: { onLoaded: (profile: Profile) => void }) {
   const router = useRouter();
+  const session = useSession();
+  const accountId = session?.account.id ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [values, setValues] = useState<ProfileFormValues>(EMPTY_VALUES);
   const [loading, setLoading] = useState(true);
@@ -84,27 +93,30 @@ function ProfileForm({ onLoaded }: { onLoaded: (profile: Profile) => void }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const untrack = registerUserRequest(controller);
     let active = true;
 
     async function load() {
       setLoading(true);
+      setError(null);
       const session = await ensureSession();
-      if (!active) return;
+      if (!active || controller.signal.aborted) return;
       if (!session) {
         router.replace(loginHref);
         return;
       }
 
       try {
-        const result = await getProfile(session.accessToken);
-        if (!active) return;
+        const result = await getProfile(session.accessToken, controller.signal);
+        if (!active || controller.signal.aborted) return;
         setProfile(result);
         onLoaded(result);
         setValues(valuesFromProfile(result));
         setError(null);
         setLoading(false);
       } catch (err) {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
           clearSession();
           router.replace(loginHref);
@@ -118,8 +130,10 @@ function ProfileForm({ onLoaded }: { onLoaded: (profile: Profile) => void }) {
     void load();
     return () => {
       active = false;
+      untrack();
+      controller.abort();
     };
-  }, [onLoaded, reloadKey, router]);
+  }, [accountId, onLoaded, reloadKey, router]);
 
   function update<K extends keyof ProfileFormValues>(field: K, value: ProfileFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { MyTrips } from "@/components/my-trips";
+import { AccountSessionBoundary } from "@/components/account-session-boundary";
 import { MyTripsSkeleton } from "@/components/skeleton";
 
 export const metadata: Metadata = {
@@ -34,7 +35,9 @@ export default function MyTripsPage() {
 
       <section className="shell py-10 sm:py-14">
         <Suspense fallback={<MyTripsSkeleton />}>
-          <MyTrips />
+          <AccountSessionBoundary fallback={<MyTripsSkeleton />}>
+            <MyTrips />
+          </AccountSessionBoundary>
         </Suspense>
       </section>
     </>
