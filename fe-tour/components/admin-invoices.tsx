@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { filterInvoices, type InvoiceStatusFilter } from "@/lib/admin-invoices";
 import { ApiError, listInvoices } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export function AdminInvoices() {
   const [status, setStatus] = useState<InvoiceStatusFilter>("All");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export function AdminInvoices() {
         if (!active) return;
         setError(err instanceof ApiError ? err.message : "Could not load invoices. Try again.");
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoaded(true);
+        }
       }
     }
 
@@ -51,8 +56,8 @@ export function AdminInvoices() {
 
   const rows = filterInvoices(invoices, { status, query });
 
-  if (loading && invoices.length === 0) {
-    return <AdminLoading>Loading invoices…</AdminLoading>;
+  if (!loaded) {
+    return <AdminTableSkeleton label="Loading invoices…" filters={2} pagination />;
   }
 
   return (
@@ -60,10 +65,11 @@ export function AdminInvoices() {
       <AdminPageHeading title="Invoices"
         description="100 invoices per page. Status and search filters apply to the current page only." />
 
+      <AdminListPanel busy={loading}>
       <form
         aria-label="Filter invoices"
         onSubmit={(event) => event.preventDefault()}
-        className="admin-panel mt-5 p-4"
+        className="admin-filter-bar"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -110,9 +116,10 @@ export function AdminInvoices() {
       ) : null}
 
       {rows.length === 0 ? (
-        <div className="admin-notice mt-5" role="status">
-          {query.trim() || status !== "All" ? "No invoices match these filters." : "No invoices yet."}
-        </div>
+        !error && <AdminEmptyState
+          title={query.trim() || status !== "All" ? "No invoices match these filters." : "No invoices yet."}
+          description={query.trim() || status !== "All" ? "Try a different search or status." : undefined}
+        />
       ) : (
         <AdminTableRegion label="Invoices">
           <table className="w-full min-w-[52rem] text-left text-sm">
@@ -143,15 +150,9 @@ export function AdminInvoices() {
                   <td className="px-4 py-4 text-muted">{invoice.paymentMethod ?? "—"}</td>
                   <td className="px-4 py-4 text-charcoal">{formatPrice(invoice.totalAmount)}</td>
                   <td className="px-4 py-4">
-                    <span
-                      className={`inline-flex rounded-[2px] border px-2 py-1 text-xs font-medium ${
-                        invoice.status === "PAID"
-                          ? "border-forest/40 bg-white text-forest"
-                          : "border-terracotta/50 bg-white text-terracotta"
-                      }`}
-                    >
+                    <AdminStatusBadge tone={invoice.status === "PAID" ? "positive" : invoice.status === "UNPAID" ? "warning" : "neutral"}>
                       {invoice.status}
-                    </span>
+                    </AdminStatusBadge>
                   </td>
                   <td className="px-4 py-4">
                     <Link
@@ -177,7 +178,7 @@ export function AdminInvoices() {
         >
           Previous
         </button>
-        <p className="text-center text-sm text-muted">Page {page + 1}</p>
+        <p className="text-center text-sm text-muted">Page {page + 1} · {rows.length} shown</p>
         <button
           type="button"
           disabled={!hasNext || loading}
@@ -187,6 +188,7 @@ export function AdminInvoices() {
           Next
         </button>
       </div>
+      </AdminListPanel>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type {
   Account,
+  AccountCreateInput,
   AccountRoleResponse,
   AccountUpdateInput,
   AccommodationInput,
@@ -70,7 +71,7 @@ type RequestOptions = {
 };
 
 // Server renders fill a `use cache` entry and can wait on a cold database pool.
-const TIMEOUT_MS = typeof window === "undefined" ? 30_000 : 10_000;
+const TIMEOUT_MS = 30_000;
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
@@ -200,6 +201,14 @@ export function updateAdminAccount(
   input: AccountUpdateInput,
 ): Promise<AdminAccount> {
   return apiRequest<AdminAccount>(`/api/accounts/${id}`, { method: "PUT", token, body: input });
+}
+
+export function createAdminAccount(token: string, input: AccountCreateInput): Promise<AdminAccount> {
+  return apiRequest<AdminAccount>("/api/accounts", { method: "POST", token, body: input });
+}
+
+export function deleteAdminAccount(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/accounts/${id}`, { method: "DELETE", token, allowEmpty: true });
 }
 
 export type TravelerInput = {

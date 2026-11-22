@@ -10,7 +10,8 @@ import type { Booking, Invoice } from "@/lib/types";
 import { EmptyState } from "./empty-state";
 import { IconArrowRight } from "./icons";
 import { useOptionalAdminAccess } from "./admin-gate";
-import { AdminLoading, AdminPageHeading } from "./admin/admin-ui";
+import { AdminPageHeading } from "./admin/admin-ui";
+import { AdminInvoiceSkeleton } from "./admin/admin-skeletons";
 
 const ADMIN_HOME = "/admin";
 
@@ -80,7 +81,7 @@ export function InvoiceView({ bookingId, mode = "mine", backHref }: Props) {
   }, [bookingId, loginHref, router, isAdmin, adminGetSession]);
 
   if (loading) {
-    if (isAdmin) return <AdminLoading>Loading invoice…</AdminLoading>;
+    if (isAdmin) return <AdminInvoiceSkeleton />;
     return (
       <div className="shell py-16">
         <p className="text-sm text-muted">Loading your invoice…</p>

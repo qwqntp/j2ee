@@ -27,7 +27,11 @@ import {
   updateVehicle,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminFormSkeleton, AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
+import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import type {
   AccommodationInput,
   AdminTour,
@@ -177,6 +181,7 @@ export function AdminCatalog() {
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedResource, setLoadedResource] = useState<CatalogResource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -184,9 +189,17 @@ export function AdminCatalog() {
   const [form, setForm] = useState<Record<string, string> | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [rowToDelete, setRowToDelete] = useState<CatalogRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const activeLabel = tabs.find((tab) => tab.resource === resource)?.label ?? resource;
+  const initialLoading = loadedResource !== resource;
+  const fieldGroups = resource === "images"
+    ? [
+        { title: "Image details", fields: FIELDS.images.filter((field) => !field.fromTours) },
+        { title: "Related tour", fields: FIELDS.images.filter((field) => field.fromTours) },
+      ]
+    : [{ title: activeLabel, fields: FIELDS[resource] }];
 
   useEffect(() => {
     let active = true;
@@ -210,7 +223,10 @@ export function AdminCatalog() {
         if (!active) return;
         setError(displayError(err, "Could not load catalog rows."));
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoadedResource(resource);
+        }
       }
     }
 
@@ -223,9 +239,13 @@ export function AdminCatalog() {
   function selectTab(next: CatalogResource) {
     if (next === resource) return;
     setResource(next);
+    setLoadedResource(null);
+    setLoading(true);
+    setRows([]);
+    setTours([]);
     setForm(null);
     setEditingId(null);
-    setConfirmDeleteId(null);
+    setRowToDelete(null);
     setError(null);
     setNotice(null);
   }
@@ -288,11 +308,7 @@ export function AdminCatalog() {
   }
 
   async function remove(row: CatalogRow) {
-    if (confirmDeleteId !== row.id) {
-      setConfirmDeleteId(row.id);
-      return;
-    }
-    setConfirmDeleteId(null);
+    setDeleting(true);
     setError(null);
     setNotice(null);
     try {
@@ -303,33 +319,18 @@ export function AdminCatalog() {
       setReloadKey((key) => key + 1);
     } catch (err) {
       setError(displayError(err, "Could not delete the record.", true));
+    } finally {
+      setDeleting(false);
     }
   }
 
   return (
     <div>
       <AdminPageHeading title="Catalog" description={`Managing ${activeLabel.toLowerCase()}.`}
-        action={<button type="button" onClick={startCreate} className="btn-primary">Add record</button>}
+        action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> Add record</button>}
       />
-      <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Catalog sections">
-        {tabs.map((tab) => (
-          <button
-            key={tab.resource}
-            type="button"
-            aria-pressed={resource === tab.resource}
-            onClick={() => selectTab(tab.resource)}
-            className={
-              resource === tab.resource
-                ? "btn-primary"
-                : "btn-secondary"
-            }
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
 
-      {error ? (
+      {error && !form ? (
         <p
           role="alert"
           className="admin-notice mt-5"
@@ -346,19 +347,19 @@ export function AdminCatalog() {
         </p>
       ) : null}
 
-      {form ? (
-        <form
-          onSubmit={(event) => void save(event)}
-          className="admin-panel mt-5 p-4 sm:p-5"
-        >
-          <h2 className="text-lg font-semibold tracking-tight">
-            {editingId === null ? "Add record" : "Edit record"}
-          </h2>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            {FIELDS[resource].map((field) => (
+      <AdminFormDialog open={form !== null} title={editingId === null ? "Add record" : "Edit record"}
+        busy={saving} narrow={resource !== "images"}
+        onDismiss={() => { setForm(null); setEditingId(null); setError(null); }}>
+      {form && resource === "images" && initialLoading ? <AdminFormSkeleton label="Loading tour options…" /> : form ? (
+        <form onSubmit={(event) => void save(event)}>
+          <div className="admin-form-grid">
+          {fieldGroups.map(({ title, fields }) => (
+          <AdminFormSection key={title} title={title}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {fields.map((field) => (
               <div
                 key={field.name}
-                className={field.kind === "textarea" ? "sm:col-span-2" : undefined}
+                className={fields.length === 1 || field.kind === "textarea" ? "sm:col-span-2" : undefined}
               >
                 <label htmlFor={`catalog-${field.name}`} className="label">
                   {field.label}
@@ -421,30 +422,44 @@ export function AdminCatalog() {
               </div>
             ))}
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
+          </AdminFormSection>
+          ))}
+          </div>
+          {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
+          <AdminFormActions>
             <button type="submit" disabled={saving} className="btn-primary">
               {saving ? "Saving…" : "Save"}
             </button>
             <button
               type="button"
+              disabled={saving}
               onClick={() => {
                 setForm(null);
                 setEditingId(null);
+                setError(null);
               }}
               className="btn-secondary"
             >
               Cancel
             </button>
-          </div>
+          </AdminFormActions>
         </form>
       ) : null}
+      </AdminFormDialog>
 
-      {loading ? (
-        <div className="mt-5"><AdminLoading>Loading {activeLabel.toLowerCase()}…</AdminLoading></div>
+      <AdminListPanel busy={loading && !initialLoading}>
+      <div className="admin-filter-bar flex flex-wrap gap-2" role="group" aria-label="Catalog sections">
+        {tabs.map((tab) => (
+          <button key={tab.resource} type="button" aria-pressed={resource === tab.resource}
+            onClick={() => selectTab(tab.resource)} className={resource === tab.resource ? "btn-primary" : "btn-secondary"}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {initialLoading ? (
+        <AdminTableSkeleton label={`Loading ${activeLabel.toLowerCase()}…`} embedded />
       ) : rows.length === 0 ? (
-        <div className="admin-notice mt-5">
-          No {resource} yet.
-        </div>
+        !error && <AdminEmptyState title={`No ${activeLabel.toLowerCase()} yet`} description="Use Add record to create an entry." />
       ) : (
         <AdminTableRegion label={activeLabel}>
           <table className="w-full min-w-[48rem] text-left text-sm">
@@ -481,20 +496,16 @@ export function AdminCatalog() {
                         onClick={() => startEdit(row)}
                         className="admin-row-action"
                       >
-                        Edit
+                         <AdminIcon name="edit" className="size-4" /> Edit
                       </button>
                       <button
                         type="button"
-                        onClick={() => void remove(row)}
-                         className={`admin-danger-action ${confirmDeleteId === row.id ? "bg-red-50" : ""}`}
+                         disabled={deleting}
+                         onClick={() => setRowToDelete(row)}
+                         className="admin-danger-action"
                       >
-                        {confirmDeleteId === row.id ? "Click again to delete" : "Delete"}
+                         <AdminIcon name="delete" className="size-4" /> Delete
                        </button>
-                       {confirmDeleteId === row.id && (
-                         <button type="button" className="admin-row-action" onClick={() => setConfirmDeleteId(null)}>
-                           Cancel
-                         </button>
-                       )}
                     </div>
                   </td>
                 </tr>
@@ -503,6 +514,14 @@ export function AdminCatalog() {
           </table>
         </AdminTableRegion>
       )}
+      {!initialLoading && <p className="admin-pagination text-sm text-muted">{rows.length} records loaded</p>}
+      </AdminListPanel>
+      <AdminConfirmDialog title="Delete catalog record?"
+        target={rowToDelete ? ("name" in rowToDelete ? rowToDelete.name : `${activeLabel} #${rowToDelete.id}`) : null}
+        consequence="Referenced records may be protected from deletion. If deletion succeeds, it cannot be undone here."
+        confirmLabel="Delete record" onDismiss={() => setRowToDelete(null)}
+        onConfirm={() => { if (rowToDelete) void remove(rowToDelete); }}
+      />
     </div>
   );
 }

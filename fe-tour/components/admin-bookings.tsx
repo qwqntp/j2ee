@@ -10,8 +10,9 @@ import {
   updateBookingStatus,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
-import { statusLabel, statusTone } from "@/lib/bookings";
+import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { statusLabel } from "@/lib/bookings";
 import { buildBookingListQuery, type BookingListFilters } from "@/lib/booking-list";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
 import type { Booking, Payment } from "@/lib/types";
@@ -50,6 +51,7 @@ export function AdminBookings() {
   const [paymentsLoadingId, setPaymentsLoadingId] = useState<number | null>(null);
   const [paymentsError, setPaymentsError] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -76,7 +78,10 @@ export function AdminBookings() {
           err instanceof ApiError ? err.message : "Could not load bookings. Try again.",
         );
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoaded(true);
+        }
       }
     }
 
@@ -172,22 +177,23 @@ export function AdminBookings() {
     }
   }
 
-  if (loading && bookings.length === 0) {
-    return <AdminLoading>Loading bookings…</AdminLoading>;
+  if (!loaded) {
+    return <AdminTableSkeleton label="Loading bookings…" filters={5} pagination />;
   }
 
   return (
     <div>
       <AdminPageHeading title="Bookings & payments"
-        description={totalElements === 1 ? "1 booking" : `${totalElements} bookings`} />
+        description="Monitor reservations, review payment history, and manage booking status." />
 
+      <AdminListPanel busy={loading}>
       <form
         aria-label="Filter bookings"
         onSubmit={(event) => {
           event.preventDefault();
           applyFilters();
         }}
-        className="admin-panel mt-5 p-4"
+        className="admin-filter-bar"
       >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <div>
@@ -311,9 +317,7 @@ export function AdminBookings() {
       ) : null}
 
       {bookings.length === 0 ? (
-        <div className="admin-notice mt-5">
-          No bookings yet.
-        </div>
+        !error && <AdminEmptyState title="No bookings found" description="Try clearing the filters to see other bookings." />
       ) : (
         <AdminTableRegion label="Bookings">
           <table className="w-full min-w-[56rem] text-left text-sm">
@@ -349,11 +353,11 @@ export function AdminBookings() {
                         {formatPrice(booking.totalAmount)}
                       </td>
                       <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-[2px] border px-2 py-1 text-xs font-medium ${statusTone(booking.status)}`}
-                        >
+                        <AdminStatusBadge tone={booking.status === "CANCELLED" ? "danger" :
+                          booking.status === "PENDING" ? "warning" :
+                          booking.status === "PAID" || booking.status === "COMPLETED" ? "positive" : "neutral"}>
                           {statusLabel(booking.status)}
-                        </span>
+                        </AdminStatusBadge>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
@@ -585,6 +589,7 @@ export function AdminBookings() {
           Next
         </button>
       </div>
+      </AdminListPanel>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { InvoiceView } from "@/components/invoice-view";
-import { AdminLoading } from "@/components/admin/admin-ui";
+import { AdminInvoiceSkeleton } from "@/components/admin/admin-skeletons";
 
 export const metadata: Metadata = {
   title: "Admin invoice",
@@ -13,7 +13,7 @@ type Props = { params: Promise<{ bookingId: string }> };
 
 export default function AdminInvoicePage({ params }: Props) {
   return (
-    <Suspense fallback={<AdminLoading>Loading invoice…</AdminLoading>}>
+    <Suspense fallback={<AdminInvoiceSkeleton />}>
       <AdminInvoiceRoute params={params} />
     </Suspense>
   );

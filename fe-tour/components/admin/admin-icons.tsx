@@ -11,7 +11,14 @@ const paths = {
   panel: "M3 5h18v14H3z M9 5v14",
   logout: "M10 17l5-5-5-5 M15 12H3 M14 3h6v18h-6",
   close: "m6 6 12 12 M18 6 6 18",
-} satisfies Record<AdminSection["icon"] | "panel" | "logout" | "close", string>;
+  revenue: "M3 6h18v12H3z M3 10h18 M7 14h3",
+  calendar: "M4 6h16v15H4z M4 10h16 M8 3v5 M16 3v5 M8 14h2 M14 14h2",
+  alert: "M12 3 2.5 20h19L12 3z M12 9v4 M12 16h.01",
+  plus: "M12 5v14 M5 12h14",
+  edit: "m4 16 11-11 4 4L8 20H4v-4z M13 7l4 4",
+  delete: "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v5 M14 11v5",
+  search: "M15.5 15.5 21 21 M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z",
+} satisfies Record<AdminSection["icon"], string> & Record<string, string>;
 
 export function AdminIcon({ name, className = "size-5" }: {
   name: keyof typeof paths;

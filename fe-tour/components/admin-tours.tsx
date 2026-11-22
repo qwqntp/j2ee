@@ -12,7 +12,10 @@ import {
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { formatDateRange, formatPrice } from "@/lib/format";
 import type {
   AdminTour,
@@ -66,6 +69,7 @@ export function AdminTours() {
   const { getSession } = useAdminAccess();
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -96,7 +100,10 @@ export function AdminTours() {
         if (!active) return;
         setError(err instanceof ApiError ? err.message : "Could not load tours. Try again.");
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoaded(true);
+        }
       }
     }
 
@@ -254,18 +261,18 @@ export function AdminTours() {
     }
   }
 
-  if (loading && tours.length === 0) {
-    return <AdminLoading>Loading tours…</AdminLoading>;
+  if (!loaded) {
+    return <AdminTableSkeleton label="Loading tours…" action />;
   }
 
   return (
     <div>
       <AdminPageHeading title="Tours & departures"
-        description={tours.length === 1 ? "1 tour" : `${tours.length} tours`}
-        action={<button type="button" onClick={startCreate} className="btn-primary">New tour</button>}
+        description={`Manage itineraries and departure schedules. ${tours.length} ${tours.length === 1 ? "tour" : "tours"} loaded.`}
+        action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> New tour</button>}
       />
 
-      {error ? (
+      {error && !tourForm && !departureForm ? (
         <p
           role="alert"
           className="admin-notice mt-5"
@@ -279,16 +286,14 @@ export function AdminTours() {
         </p>
       ) : null}
 
-      {tourForm ? (
-        <form
-          onSubmit={saveTour}
-          className="admin-panel mt-5 p-4 sm:p-5"
-        >
-          <h2 className="text-lg font-semibold tracking-tight">
-            {editingTourId === null ? "New tour" : "Edit tour"}
-          </h2>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+      <AdminFormDialog open={tourForm !== null} title={editingTourId === null ? "New tour" : "Edit tour"}
+        busy={savingTour} onDismiss={() => { setTourForm(null); setEditingTourId(null); setError(null); }}>
+      {tourForm && (
+        <form onSubmit={saveTour}>
+          <div className="admin-form-grid">
+            <AdminFormSection title="Tour information" description="Describe the itinerary. Required fields are marked with an asterisk.">
+            <div className="space-y-4">
+            <div>
               <label htmlFor="tour-name" className="label">
                 Name
               </label>
@@ -303,7 +308,7 @@ export function AdminTours() {
                 }
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label htmlFor="tour-description" className="label">
                 Description
               </label>
@@ -332,6 +337,10 @@ export function AdminTours() {
                 }
               />
             </div>
+            </div>
+            </AdminFormSection>
+            <AdminFormSection title="Availability and media">
+            <div className="space-y-4">
             <div>
               <label htmlFor="tour-status" className="label">
                 Status
@@ -351,7 +360,7 @@ export function AdminTours() {
                 ))}
               </select>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label htmlFor="tour-images" className="label">
                 Image URLs (one per line)
               </label>
@@ -365,29 +374,34 @@ export function AdminTours() {
                 }
               />
             </div>
+            </div>
+            </AdminFormSection>
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
+          {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
+          <AdminFormActions>
             <button type="submit" disabled={savingTour} className="btn-primary">
               {savingTour ? "Saving…" : "Save tour"}
             </button>
             <button
               type="button"
+              disabled={savingTour}
               onClick={() => {
                 setTourForm(null);
                 setEditingTourId(null);
+                setError(null);
               }}
               className="btn-secondary"
             >
               Cancel
             </button>
-          </div>
+          </AdminFormActions>
         </form>
-      ) : null}
+      )}
+      </AdminFormDialog>
 
+      <AdminListPanel busy={loading}>
       {tours.length === 0 ? (
-        <div className="admin-notice mt-5">
-          No tours yet. Create the first one.
-        </div>
+        !error && <AdminEmptyState title="No tours yet" description="Create a tour before adding departures." />
       ) : (
         <AdminTableRegion label="Tours">
           <table className="w-full min-w-[48rem] text-left text-sm">
@@ -404,7 +418,7 @@ export function AdminTours() {
               {tours.map((tour) => (
                 <tr key={tour.id}>
                   <td className="px-4 py-4 font-medium text-charcoal">{tour.name}</td>
-                  <td className="px-4 py-4 text-muted">{tour.status}</td>
+                  <td className="px-4 py-4"><AdminStatusBadge tone={tour.status === "OPEN" ? "positive" : tour.status === "CANCELLED" ? "danger" : "neutral"}>{tour.status}</AdminStatusBadge></td>
                   <td className="px-4 py-4 text-muted">
                     {tour.durationDays == null ? "—" : `${tour.durationDays} days`}
                   </td>
@@ -416,7 +430,7 @@ export function AdminTours() {
                         onClick={() => startEdit(tour)}
                         className="admin-row-action"
                       >
-                        Edit
+                        <AdminIcon name="edit" className="size-4" /> Edit
                       </button>
                       <button
                         type="button"
@@ -436,6 +450,7 @@ export function AdminTours() {
           </table>
         </AdminTableRegion>
       )}
+      </AdminListPanel>
 
       {selectedTour ? (
         <div className="admin-panel mt-5 p-4 sm:p-5">
@@ -464,12 +479,13 @@ export function AdminTours() {
             </div>
           </div>
 
-          {departureForm ? (
-            <form
-              onSubmit={saveDeparture}
-              className="admin-confirmation mt-5"
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
+          <AdminFormDialog open={departureForm !== null} title={departureForm?.id == null ? "New departure" : "Edit departure"}
+            busy={savingDeparture} onDismiss={() => { setDepartureForm(null); setError(null); }}>
+          {departureForm && (
+            <form onSubmit={saveDeparture}>
+               <div className="admin-form-grid">
+               <AdminFormSection title="Schedule and capacity" description="Required fields are marked with an asterisk.">
+               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="departure-start" className="label">
                     Start
@@ -545,8 +561,8 @@ export function AdminTours() {
                     }
                   />
                 </div>
-                <div>
-                  <label htmlFor="departure-meeting" className="label">
+                 <div className="sm:col-span-2">
+                   <label htmlFor="departure-meeting" className="label">
                     Meeting point
                   </label>
                   <input
@@ -561,13 +577,17 @@ export function AdminTours() {
                       })
                     }
                   />
-                </div>
-                <div>
+                 </div>
+               </div>
+               </AdminFormSection>
+               <AdminFormSection title="Departure status">
+                 <div>
                   <label htmlFor="departure-status" className="label">
                     Status
                   </label>
-                  <select
-                    id="departure-status"
+                   <select
+                     id="departure-status"
+                     aria-describedby="departure-status-help"
                     className="field"
                     value={departureForm.status}
                     onChange={(event) =>
@@ -583,13 +603,15 @@ export function AdminTours() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-xs leading-5 text-muted">
+                   <p id="departure-status-help" className="mt-2 text-xs leading-5 text-muted">
                     CANCELLED cancels the departure&apos;s live bookings and reserves refunds
                     for successful payments.
                   </p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
+                 </div>
+               </AdminFormSection>
+               </div>
+               {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
+               <AdminFormActions>
                 <button
                   type="submit"
                   disabled={savingDeparture}
@@ -597,16 +619,18 @@ export function AdminTours() {
                 >
                   {savingDeparture ? "Saving…" : "Save departure"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setDepartureForm(null)}
+                 <button
+                   type="button"
+                   disabled={savingDeparture}
+                   onClick={() => { setDepartureForm(null); setError(null); }}
                   className="btn-secondary min-h-0 px-4 py-2 text-xs"
                 >
                   Cancel
                 </button>
-              </div>
-            </form>
-          ) : null}
+               </AdminFormActions>
+             </form>
+           )}
+           </AdminFormDialog>
 
           {selectedTour.departures.length === 0 ? (
             <p className="mt-5 text-sm text-muted">No departures for this tour yet.</p>
@@ -632,7 +656,11 @@ export function AdminTours() {
                         {departure.bookedSlots} / {departure.capacity}
                       </td>
                       <td className="px-3 py-3 text-muted">{formatPrice(departure.price)}</td>
-                      <td className="px-3 py-3 text-muted">{departure.status}</td>
+                         <td className="px-3 py-3">
+                           <AdminStatusBadge tone={departure.status === "CANCELLED" ? "danger" : departure.status === "OPEN" ? "positive" : "neutral"}>
+                             {departure.status}
+                           </AdminStatusBadge>
+                         </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -640,7 +668,7 @@ export function AdminTours() {
                             onClick={() => startEditDeparture(selectedTour, departure)}
                             className="admin-row-action"
                           >
-                            Edit
+                            <AdminIcon name="edit" className="size-4" /> Edit
                           </button>
                           <button
                             type="button"
@@ -648,7 +676,7 @@ export function AdminTours() {
                             onClick={() => setDepartureToDelete(departure)}
                             className="admin-danger-action"
                           >
-                            Delete
+                            <AdminIcon name="delete" className="size-4" /> Delete
                           </button>
                         </div>
                       </td>
@@ -661,7 +689,10 @@ export function AdminTours() {
         </div>
       ) : null}
       <AdminConfirmDialog
-        message={departureToDelete ? `Delete the departure on ${formatDateRange(departureToDelete.startDate, departureToDelete.endDate)}?` : null}
+        title="Delete departure?"
+        target={departureToDelete ? `${selectedTour?.name ?? "Departure"} · ${formatDateRange(departureToDelete.startDate, departureToDelete.endDate)}` : null}
+        consequence="This removes the departure from the schedule. The system will reject deletion when the departure cannot be removed."
+        confirmLabel="Delete departure"
         onDismiss={() => setDepartureToDelete(null)}
         onConfirm={() => { if (departureToDelete) void removeDeparture(departureToDelete); }}
       />

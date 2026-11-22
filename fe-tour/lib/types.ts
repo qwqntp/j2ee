@@ -163,6 +163,8 @@ export type VnpayStart = {
   expiresAt: string;
 };
 
+export type AccountCreateInput = AccountUpdateInput & { password: string };
+
 export type VnpayStatus = {
   bookingId: number;
   reference: string;

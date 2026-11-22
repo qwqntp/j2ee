@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import { AdminIcon } from "./admin-icons";
 
-export function AdminConfirmDialog({ message, onDismiss, onConfirm }: {
-  message: string | null;
+export function AdminConfirmDialog({ title, target, consequence, confirmLabel, onDismiss, onConfirm }: {
+  title: string;
+  target: string | null;
+  consequence: string;
+  confirmLabel: string;
   onDismiss: () => void;
   onConfirm: () => void;
 }) {
@@ -14,23 +18,29 @@ export function AdminConfirmDialog({ message, onDismiss, onConfirm }: {
 
   useEffect(() => {
     const dialog = ref.current;
-    if (message && dialog && !dialog.open) {
+    if (target !== null && dialog && !dialog.open) {
       dialog.showModal();
       cancel.current?.focus();
+    } else if (target === null && dialog?.open) {
+      dialog.close();
     }
-  }, [message]);
+  }, [target]);
 
   return (
     <dialog ref={ref} aria-labelledby={titleId} aria-describedby={descriptionId}
       onClose={onDismiss}
-      className="admin-panel m-auto w-[calc(100%_-_2rem)] max-w-md p-5 text-charcoal shadow-panel backdrop:bg-charcoal/50">
-      <h2 id={titleId} className="text-lg font-semibold tracking-tight">Delete departure?</h2>
-      <p id={descriptionId} className="mt-2 text-sm leading-6 text-muted">{message}</p>
-      <div className="mt-5 flex flex-wrap justify-end gap-2">
+      className="admin-panel m-auto w-[calc(100%_-_2rem)] max-w-md p-5 text-charcoal shadow-panel backdrop:bg-charcoal/55">
+      <span className="admin-dialog-icon"><AdminIcon name="delete" /></span>
+      <h2 id={titleId} className="text-xl font-semibold tracking-tight">{title}</h2>
+      <div id={descriptionId} className="mt-3 grid gap-2 text-sm leading-6">
+        <p className="rounded-lg border border-line bg-ivory/65 p-3 font-semibold wrap-anywhere">{target}</p>
+        <p className="text-muted">{consequence}</p>
+      </div>
+      <div className="admin-form-actions">
         <button ref={cancel} type="button" className="btn-secondary"
           onClick={() => ref.current?.close()}>Cancel</button>
-        <button type="button" className="admin-danger-action border border-red-200 bg-red-50"
-          onClick={() => { ref.current?.close(); onConfirm(); }}>Delete departure</button>
+        <button type="button" className="admin-destructive"
+          onClick={() => { ref.current?.close(); onConfirm(); }}>{confirmLabel}</button>
       </div>
     </dialog>
   );

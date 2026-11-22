@@ -54,3 +54,19 @@ Commands ran from an isolated frontend copy without `.env` files. Chrome and loc
 - Invalid invoice IDs and unknown admin descendants display the admin fallback inside the shell for an authorized admin. Under the app's current Next.js streaming setup, the two tested admin not-found responses carried HTTP 200; an unmatched public URL still returned HTTP 404.
 
 No live payment, live CRUD write, or production account was used. The existing Next.js 16.4.3 installation emitted a security advisory. Both production builds passed after retry; upgrade Next.js separately before deployment. No commits or pushes were made.
+
+## Follow-up — Visual refinement
+
+Used `FE-DACN` as a read-only reference for dashboard composition, management panels, form grouping, and confirmation dialogs. The Hành Trình implementation keeps its own branding, terminology, data, and all eight routes.
+
+- The dashboard now has four primary KPIs, a secondary performance summary, two booking-count visualizations, and the existing top-tour and capacity tables. The backend does not expose historical revenue or growth figures, so there is no trend chart or period selector.
+- Management pages group real filters, scrollable tables, actions, counts, and pagination in shared panels. Promotions, tours, departures, and catalog records retain their embedded forms. Departure, promotion, and catalog deletion use the same accessible confirmation dialog.
+- Initial dashboard, list, invoice detail, and asynchronous image-form loads show layout-matched skeletons. Refetches retain existing rows and show a progress indicator. Skeleton animation is disabled under reduced motion.
+
+**Verification:** Lint, TypeScript, all 176 Vitest tests, and the production build passed. Chrome fixture checks covered all eight routes, sidebar states, widths from 320 to 1440 px, search, pagination, inline forms, dialog focus and deletion against the fixture, a simulated API error and retry, and invoice print styles. Five public response snapshots retained their baseline status, metadata, policies, and chrome. The Next.js security advisory remains; the build passed after retry without a dependency change. No live account, data write, or payment was used.
+
+## Follow-up — Management dialogs
+
+Accounts now shows Edit and Delete side by side in Actions. Add user and Edit open dialogs; role, status, email verification, and temporary-password controls are inside Edit. Add and Delete use the existing admin account endpoints, with the last-active-admin guard preserved. Promotions, Catalog, Tours, and Departures use the same form dialog for their existing add and edit actions and retain confirmation dialogs for existing delete actions.
+
+Lint, TypeScript, all 178 Vitest tests, and the production build passed. Chrome checks verified account creation, editing, temporary-password placement, and deletion against a local fixture. The other management dialogs opened and dismissed correctly, and a long form fit a 320 px viewport with keyboard focus restored on close. No live writes were performed.

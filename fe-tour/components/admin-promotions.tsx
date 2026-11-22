@@ -9,7 +9,11 @@ import {
   updatePromotion,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
+import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { formatPrice } from "@/lib/format";
 import {
   filterPromotions,
@@ -97,6 +101,7 @@ export function AdminPromotions() {
   const { getSession } = useAdminAccess();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -105,7 +110,7 @@ export function AdminPromotions() {
   const [form, setForm] = useState<PromotionForm | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
   const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
@@ -125,7 +130,10 @@ export function AdminPromotions() {
         if (!active) return;
         setError(err instanceof ApiError ? err.message : "Could not load promotions. Try again.");
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setLoaded(true);
+        }
       }
     }
 
@@ -201,45 +209,35 @@ export function AdminPromotions() {
     }
   }
 
-  function clickDelete(promotion: Promotion) {
+  async function removePromotion(promotion: Promotion) {
     setError(null);
     setNotice(null);
-    if (confirmingDeleteId === promotion.id) {
-      void removePromotion(promotion);
-      return;
-    }
-    setConfirmingDeleteId(promotion.id);
-  }
-
-  async function removePromotion(promotion: Promotion) {
     setBusyDeleteId(promotion.id);
     try {
       const session = await getSession();
       if (!session) return;
       await deletePromotion(session.accessToken, promotion.id);
       setNotice("Promotion deleted.");
-      setConfirmingDeleteId(null);
       setReloadKey((key) => key + 1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete the promotion.");
-      setConfirmingDeleteId(null);
     } finally {
       setBusyDeleteId(null);
     }
   }
 
-  if (loading && promotions.length === 0) {
-    return <AdminLoading>Loading promotions…</AdminLoading>;
+  if (!loaded) {
+    return <AdminTableSkeleton label="Loading promotions…" filters={2} action />;
   }
 
   return (
     <div>
       <AdminPageHeading title="Promotions"
-        description={`${promotions.length} loaded. Search and filters apply to the first 100 promotions.`}
-        action={<button type="button" onClick={startCreate} className="btn-primary">New promotion</button>}
+        description="Manage discounts and availability. Search and filters apply to the first 100 promotions."
+        action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> New promotion</button>}
       />
 
-      {error ? (
+      {error && !form ? (
         <p
           role="alert"
           className="admin-notice mt-5"
@@ -256,15 +254,13 @@ export function AdminPromotions() {
         </p>
       ) : null}
 
-      {form ? (
-        <form
-          onSubmit={savePromotion}
-          className="admin-panel mt-5 p-4 sm:p-5"
-        >
-          <h2 className="text-lg font-semibold tracking-tight">
-            {editingId === null ? "New promotion" : "Edit promotion"}
-          </h2>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+      <AdminFormDialog open={form !== null} title={editingId === null ? "New promotion" : "Edit promotion"}
+        busy={saving} onDismiss={() => { setForm(null); setEditingId(null); setError(null); }}>
+      {form && (
+        <form onSubmit={savePromotion}>
+          <div className="admin-form-grid">
+          <AdminFormSection title="Promotion details" description="Set the discount and when it applies. Required fields are marked with an asterisk.">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label htmlFor="promotion-name" className="label">
                 Name
@@ -333,6 +329,15 @@ export function AdminPromotions() {
                 onChange={(event) => setForm({ ...form, endDate: event.target.value })}
               />
             </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="promotion-description" className="label">Description</label>
+              <textarea id="promotion-description" rows={3} className="field" value={form.description}
+                onChange={(event) => setForm({ ...form, description: event.target.value })} />
+            </div>
+          </div>
+          </AdminFormSection>
+          <AdminFormSection title="Availability and limits" description="Set optional usage limits or deactivate the promotion.">
+          <div className="space-y-4">
             <div>
               <label htmlFor="promotion-usage-limit" className="label">
                 Usage limit (optional)
@@ -360,7 +365,7 @@ export function AdminPromotions() {
                 onChange={(event) => setForm({ ...form, minOrderAmount: event.target.value })}
               />
             </div>
-            <div className="flex items-end">
+            <div>
               <label htmlFor="promotion-active" className="flex items-center gap-2 text-sm text-charcoal">
                 <input
                   id="promotion-active"
@@ -371,44 +376,40 @@ export function AdminPromotions() {
                 Active
               </label>
             </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="promotion-description" className="label">
-                Description
-              </label>
-              <textarea
-                id="promotion-description"
-                rows={3}
-                className="field"
-                value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-              />
-            </div>
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
+          </AdminFormSection>
+          </div>
+          {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
+          <AdminFormActions>
             <button type="submit" disabled={saving} className="btn-primary">
               {saving ? "Saving…" : "Save promotion"}
             </button>
             <button
               type="button"
+              disabled={saving}
               onClick={() => {
                 setForm(null);
                 setEditingId(null);
+                setError(null);
               }}
               className="btn-secondary"
             >
               Cancel
             </button>
-          </div>
+          </AdminFormActions>
         </form>
-      ) : null}
+      )}
+      </AdminFormDialog>
 
-      <div className="admin-panel mt-5 grid gap-4 p-4 sm:grid-cols-2">
+      <AdminListPanel busy={loading}>
+      <div className="admin-filter-bar grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="promotion-search" className="label">
             Search
           </label>
           <input
             id="promotion-search"
+            type="search"
             className="field"
             placeholder="Name, code or description"
             value={filter.query}
@@ -440,13 +441,9 @@ export function AdminPromotions() {
       </div>
 
       {promotions.length === 0 ? (
-        <div className="admin-notice mt-5">
-          No promotions yet.
-        </div>
+        !error && <AdminEmptyState title="No promotions yet" description="Create a promotion to set up a discount." />
       ) : visiblePromotions.length === 0 ? (
-        <div className="admin-notice mt-5">
-          No promotions match the current filters.
-        </div>
+        <AdminEmptyState title="No promotions match the current filters" description="Try a different search or lifecycle." />
       ) : (
         <AdminTableRegion label="Promotions">
           <table className="w-full min-w-[60rem] text-left text-sm">
@@ -464,8 +461,8 @@ export function AdminPromotions() {
             </thead>
             <tbody className="divide-y divide-line">
               {visiblePromotions.map((promotion) => {
-                const confirming = confirmingDeleteId === promotion.id;
-                const busy = busyDeleteId === promotion.id;
+                 const busy = busyDeleteId === promotion.id;
+                 const lifecycle = promotionLifecycle(promotion);
                 return (
                   <tr key={promotion.id} className="align-top">
                     <td className="px-4 py-4 font-medium text-charcoal">{promotion.name}</td>
@@ -474,7 +471,7 @@ export function AdminPromotions() {
                     <td className="px-4 py-4 text-muted">
                       {promotion.usedCount}/{promotion.usageLimit ?? "∞"}
                     </td>
-                    <td className="px-4 py-4 text-muted">{promotionLifecycle(promotion)}</td>
+                    <td className="px-4 py-4"><AdminStatusBadge>{lifecycle}</AdminStatusBadge></td>
                     <td className="px-4 py-4 text-muted">
                       <input
                         type="checkbox"
@@ -496,25 +493,16 @@ export function AdminPromotions() {
                           onClick={() => startEdit(promotion)}
                           className="admin-row-action"
                         >
-                          Edit
+                           <AdminIcon name="edit" className="size-4" /> Edit
                         </button>
                         <button
                           type="button"
                           disabled={busy || togglingId === promotion.id}
-                          onClick={() => clickDelete(promotion)}
-                          className={`admin-danger-action ${confirming ? "bg-red-50" : ""}`}
+                           onClick={() => setPromotionToDelete(promotion)}
+                           className="admin-danger-action"
                         >
-                          {confirming ? "Click again to delete" : "Delete"}
+                           <AdminIcon name="delete" className="size-4" /> Delete
                         </button>
-                        {confirming ? (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingDeleteId(null)}
-                            className="admin-row-action"
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -524,6 +512,14 @@ export function AdminPromotions() {
           </table>
         </AdminTableRegion>
       )}
+      <p className="admin-pagination text-sm text-muted">{visiblePromotions.length} of {promotions.length} shown</p>
+      </AdminListPanel>
+      <AdminConfirmDialog title="Delete promotion?" target={promotionToDelete?.name ?? null}
+        consequence="This removes the promotion if the system permits deletion. This action cannot be undone here."
+        confirmLabel="Delete promotion"
+        onDismiss={() => setPromotionToDelete(null)}
+        onConfirm={() => { if (promotionToDelete) void removePromotion(promotionToDelete); }}
+      />
     </div>
   );
 }

@@ -21,10 +21,13 @@ export function AdminSidebar({
       <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-white/15 px-3">
         <Link href="/admin" onNavigate={onClose} aria-label="Hành Trình admin dashboard"
           className="flex min-h-11 min-w-0 items-center gap-3 rounded-md px-2">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/10">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/20">
             <IconCompass className="size-5" />
           </span>
-          {!collapsed && <span className="truncate font-display text-xl">Hành Trình</span>}
+          {!collapsed && <span className="min-w-0">
+            <span className="block truncate font-display text-xl leading-tight">Hành Trình</span>
+            <span className="block truncate text-xs text-ivory/75">Admin workspace</span>
+          </span>}
         </Link>
         {onClose && (
           <button type="button" onClick={onClose} aria-label="Close navigation"
@@ -43,10 +46,10 @@ export function AdminSidebar({
               <li key={href}>
                 <Link href={href} onNavigate={onClose} title={collapsed ? label : undefined}
                   aria-current={pathname === href ? "page" : active ? "location" : undefined}
-                  className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm transition-colors ${
+                  className={`relative flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm transition-colors ${
                     collapsed ? "justify-center" : ""
                   } ${
-                    active ? "border-white/20 bg-white/15 font-semibold text-white"
+                     active ? "border-white/20 bg-white/15 font-semibold text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-sage"
                       : "border-transparent text-ivory/85 hover:bg-white/10 hover:text-white"
                   }`}>
                   <AdminIcon name={icon} className="size-5 shrink-0" />

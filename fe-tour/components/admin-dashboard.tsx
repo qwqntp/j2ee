@@ -1,21 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildDashboardCards, shouldShowSignIn, type DashboardCard } from "@/lib/admin-stats";
+import { buildDashboardCards, shouldShowSignIn } from "@/lib/admin-stats";
 import { ApiError, getAdminStats } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminLoading, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminBarPanel, AdminStatCard } from "@/components/admin/admin-dashboard-panels";
+import { AdminDashboardSkeleton } from "@/components/admin/admin-skeletons";
 import { statusLabel } from "@/lib/bookings";
 import { formatDate, formatPrice, seatsLabel } from "@/lib/format";
 import type { AdminStats } from "@/lib/types";
 
 const BOOKING_STATUSES = ["PENDING", "PAID", "CONFIRMED", "COMPLETED", "CANCELLED"] as const;
-
-const TONE_TEXT: Record<DashboardCard["tone"], string> = {
-  forest: "text-forest",
-  terracotta: "text-terracotta",
-  charcoal: "text-charcoal",
-};
 
 export function AdminDashboard() {
   const { getSession } = useAdminAccess();
@@ -69,7 +65,7 @@ export function AdminDashboard() {
   ) : null;
 
   if (loading && !stats) {
-    return <AdminLoading>Loading dashboard…</AdminLoading>;
+    return <AdminDashboardSkeleton />;
   }
 
   if (shouldShowSignIn(stats, error)) {
@@ -84,50 +80,48 @@ export function AdminDashboard() {
     return errorPanel;
   }
 
-  const cards = buildDashboardCards(stats);
+  const { primary, secondary } = buildDashboardCards(stats);
 
   return (
     <div>
-      <AdminPageHeading title="Dashboard" description={`Statistics generated ${formatDate(stats.generatedAt)}`} />
+      <AdminPageHeading title="Operations overview"
+        description="Track successful payments, booking activity, and upcoming tours."
+        action={<p className="admin-page-meta">Data as of {formatDate(stats.generatedAt)}</p>}
+      />
 
       {errorPanel}
+      {loading && <p role="status" className="admin-refresh">Updating dashboard…</p>}
 
-      <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        {cards.map((card) => (
-          <div key={card.label} className="admin-panel min-w-0 p-4">
-            <p className="text-sm font-medium text-muted">{card.label}</p>
-            <p className={`mt-1 break-words text-xl font-semibold tracking-tight tabular-nums sm:text-2xl ${TONE_TEXT[card.tone]}`}>
-              {card.value}
-            </p>
-          </div>
-        ))}
+      <dl className="admin-kpi-grid mt-5">
+        {primary.map((card) => <AdminStatCard key={card.label} card={card} />)}
+      </dl>
+
+      <div className="admin-analytics-grid mt-5">
+        <AdminBarPanel title="Tour booking activity" description="Booking counts for the top tours in this report."
+          empty="No tour booking activity to show yet."
+          rows={stats.topTours.map((tour) => ({ key: tour.tourId, label: tour.tourName, count: tour.bookingCount }))}
+        />
+        <AdminBarPanel title="Bookings by status" description="Booking counts by current status."
+          empty="No booking statuses to show."
+          rows={BOOKING_STATUSES.map((status) => ({ key: status, label: statusLabel(status), count: stats.bookingsByStatus[status] }))}
+        />
       </div>
 
-      <div className="mt-6 grid gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <section className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">Bookings by status</h2>
-          <AdminTableRegion label="Bookings by status" className="mt-3">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line text-muted">
-                <tr>
-                  <th scope="col" className="font-semibold">Status</th>
-                  <th scope="col" className="text-right font-semibold">Bookings</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {BOOKING_STATUSES.map((status) => (
-                  <tr key={status}>
-                    <td className="text-charcoal">{statusLabel(status)}</td>
-                    <td className="text-right text-muted tabular-nums">{stats.bookingsByStatus[status]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </AdminTableRegion>
-        </section>
+      <section className="admin-panel mt-5 px-5 py-4">
+        <h2 className="text-lg font-semibold tracking-tight">Performance and capacity</h2>
+        <dl className="mt-3 grid gap-x-5 gap-y-3 min-[600px]:grid-cols-3">
+          {secondary.map((card) => (
+            <div key={card.label} className="border-t border-line/70 pt-3">
+              <dt className="text-sm text-muted">{card.label}</dt>
+              <dd className="mt-1 font-semibold tabular-nums">{card.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
-        <section className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">Top tours</h2>
+      <div className="admin-analytics-grid mt-5">
+        <section className="admin-panel admin-dashboard-table min-w-0">
+          <h2 className="px-5 pt-4 text-lg font-semibold tracking-tight">Top tours</h2>
           {stats.topTours.length === 0 ? (
             <p className="admin-notice mt-3">
               No booking performance yet.
@@ -155,10 +149,8 @@ export function AdminDashboard() {
             </AdminTableRegion>
           )}
         </section>
-      </div>
-
-      <section className="mt-6 min-w-0">
-        <h2 className="text-lg font-semibold tracking-tight">Capacity risks</h2>
+      <section className="admin-panel admin-dashboard-table min-w-0">
+        <h2 className="px-5 pt-4 text-lg font-semibold tracking-tight">Capacity risks</h2>
         {stats.capacityRisks.length === 0 ? (
           <p className="admin-notice mt-3">
             No low-capacity departures in the next 90 days.
@@ -188,6 +180,7 @@ export function AdminDashboard() {
           </AdminTableRegion>
         )}
       </section>
+      </div>
     </div>
   );
 }

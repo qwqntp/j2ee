@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  apiRequest, cancelBooking, forgotPassword, getBooking, getVnpayStatus, googleSignIn, reconcileVnpayBooking,
+  apiRequest, cancelBooking, createAdminAccount, deleteAdminAccount, forgotPassword, getBooking, getVnpayStatus, googleSignIn, reconcileVnpayBooking,
   resetPassword, startVnpay, verifyVnpayReturn,
 } from "./api";
 
@@ -76,6 +76,27 @@ describe("cancelBooking", () => {
       Accept: "application/json",
       Authorization: "Bearer access-token",
     });
+  });
+});
+
+describe("admin account mutations", () => {
+  it("creates an account through the admin endpoint without signing in as the new user", async () => {
+    const input = { username: "fixture-user", password: "fixture-initial", email: null, emailVerified: 0, status: 1, roleId: 2 };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data: { id: 42, username: input.username } }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(createAdminAccount("fixture-admin", input)).resolves.toMatchObject({ id: 42 });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\/api\/accounts$/), expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify(input),
+      headers: expect.objectContaining({ Authorization: "Bearer fixture-admin" }),
+    }));
+  });
+
+  it("accepts a successful deletion with no response data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true, data: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(deleteAdminAccount("fixture-admin", 42)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/\/api\/accounts\/42$/), expect.objectContaining({ method: "DELETE" }));
   });
 });
 
