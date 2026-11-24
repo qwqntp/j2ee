@@ -25,10 +25,15 @@ import type {
   Profile,
   Promotion,
   PromotionInput,
+  Refund,
+  RefundUpdateInput,
   TourDestinationOption,
   TourDetail,
   TourDeparture,
   TourInput,
+  TourRating,
+  TourRatingPage,
+  RatingModerationInput,
   TourSummary,
   VehicleInput,
   VehicleRow,
@@ -67,10 +72,12 @@ const BASE_URL = (
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  form?: FormData;
   token?: string;
   allowEmpty?: boolean;
   signal?: AbortSignal;
   cache?: RequestCache;
+  rawText?: boolean;
 };
 
 // Server renders fill a `use cache` entry and can wait on a cold database pool.
@@ -84,17 +91,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const response = await fetch(`${BASE_URL}${path}`, {
       method: options.method ?? "GET",
       headers: {
-        Accept: "application/json",
-        ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
+        Accept: options.rawText ? "application/json, text/csv" : "application/json",
+        ...(options.form || options.body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
       },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       credentials: "include",
       signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
       ...(options.cache ? { cache: options.cache } : {}),
     });
 
-    const envelope = (await response.json().catch(() => null)) as Envelope<T> | null;
+    const envelope = !response.ok || !options.rawText
+      ? (await response.json().catch(() => null)) as Envelope<T> | null
+      : null;
 
     if (!response.ok) {
       const retryAfter = response.headers.get("Retry-After");
@@ -103,6 +112,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         envelope?.message || `Request failed (${response.status})`,
         retryAfter !== null && /^\d+$/.test(retryAfter) ? Number(retryAfter) : null,
       );
+    }
+
+    if (options.rawText) {
+      return (await response.text()) as T;
     }
 
     if (!envelope || !envelope.success) {
@@ -124,6 +137,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 }
 
+export function uploadImage(
+  token: string,
+  file: File,
+): Promise<{ url: string; publicId: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiRequest<{ url: string; publicId: string }>("/api/admin/uploads", {
+    method: "POST",
+    token,
+    form,
+  });
+}
+
 export function getTours(
   filters: TourFilters,
   page: number,
@@ -143,6 +169,50 @@ export function getFeaturedTours(): Promise<PageData<TourSummary>> {
 
 export function getTour(id: number): Promise<TourDetail> {
   return apiRequest<TourDetail>(`/api/tours/${id}`);
+}
+
+export function getTourRatings(tourId: number, page = 0, size = 5): Promise<TourRatingPage> {
+  return apiRequest<TourRatingPage>(`/api/tours/${tourId}/ratings?page=${page}&size=${size}`);
+}
+
+export function createTourRating(
+  token: string,
+  tourId: number,
+  input: { bookingId: number; rating: number; comment?: string | null },
+): Promise<TourRating> {
+  return apiRequest<TourRating>(`/api/tours/${tourId}/ratings`, {
+    method: "POST",
+    token,
+    body: input,
+  });
+}
+
+export function listAdminRatings(
+  token: string,
+  page = 0,
+  size = 20,
+): Promise<PageData<TourRating>> {
+  return apiRequest<PageData<TourRating>>(`/api/admin/ratings?page=${page}&size=${size}`, { token });
+}
+
+export function moderateRating(
+  token: string,
+  id: number,
+  input: RatingModerationInput,
+): Promise<TourRating> {
+  return apiRequest<TourRating>(`/api/admin/ratings/${id}`, {
+    method: "PUT",
+    token,
+    body: input,
+  });
+}
+
+export function deleteRating(token: string, id: number): Promise<void> {
+  return apiRequest<void>(`/api/admin/ratings/${id}`, {
+    method: "DELETE",
+    token,
+    allowEmpty: true,
+  });
 }
 
 export function register(input: {
@@ -282,6 +352,30 @@ export function cancelBooking(token: string, id: number): Promise<Booking> {
   return apiRequest<Booking>(`/api/bookings/${id}/cancel`, { method: "POST", token });
 }
 
+export function requestBookingRefund(token: string, id: number): Promise<Booking> {
+  return apiRequest<Booking>(`/api/bookings/${id}/refund-request`, { method: "POST", token });
+}
+
+export function listAdminRefunds(
+  token: string,
+  page = 0,
+  size = 20,
+): Promise<PageData<Refund>> {
+  return apiRequest<PageData<Refund>>(`/api/refunds?page=${page}&size=${size}`, { token });
+}
+
+export function updateAdminRefund(
+  token: string,
+  id: number,
+  input: RefundUpdateInput,
+): Promise<Refund> {
+  return apiRequest<Refund>(`/api/refunds/${id}`, {
+    method: "PUT",
+    token,
+    body: input,
+  });
+}
+
 export function payBooking(token: string, id: number): Promise<Payment> {
   return apiRequest<Payment>(`/api/bookings/${id}/payments/mock`, { method: "POST", token });
 }
@@ -404,8 +498,24 @@ export async function resetPassword(token: string, newPassword: string): Promise
   });
 }
 
-export function getAdminStats(token: string): Promise<AdminStats> {
-  return apiRequest<AdminStats>("/api/admin/stats", { token });
+export function getAdminStats(
+  token: string,
+  from?: string,
+  to?: string,
+): Promise<AdminStats> {
+  const query = from && to ? `?from=${from}&to=${to}` : "";
+  return apiRequest<AdminStats>(`/api/admin/stats${query}`, { token });
+}
+
+export function getRevenueCsv(
+  token: string,
+  from: string,
+  to: string,
+): Promise<string> {
+  return apiRequest<string>(
+    `/api/admin/reports/revenue.csv?from=${from}&to=${to}`,
+    { token, rawText: true },
+  );
 }
 
 export function listAdminTours(

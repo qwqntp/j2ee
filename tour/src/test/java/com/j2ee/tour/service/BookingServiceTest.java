@@ -67,6 +67,7 @@ class BookingServiceTest {
     private AccountRepository accountRepository;
     private PromotionRepository promotionRepository;
     private PaymentRepository paymentRepository;
+    private RefundService refundService;
     private InvoiceRepository invoiceRepository;
     private InvoiceService invoiceService;
     private TravelerRepository travelerRepository;
@@ -86,6 +87,7 @@ class BookingServiceTest {
         accountRepository = mock(AccountRepository.class);
         promotionRepository = mock(PromotionRepository.class);
         paymentRepository = mock(PaymentRepository.class);
+        refundService = mock(RefundService.class);
         invoiceRepository = mock(InvoiceRepository.class);
         invoiceService = mock(InvoiceService.class);
         travelerRepository = mock(TravelerRepository.class);
@@ -93,7 +95,7 @@ class BookingServiceTest {
         mailDispatcher = new AfterCommitMailDispatcher();
         clock = Clock.fixed(Instant.parse("2026-11-05T03:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
         bookingService = new BookingService(bookingRepository, departureRepository, accountRepository,
-                promotionRepository, paymentRepository, invoiceRepository, invoiceService,
+                promotionRepository, paymentRepository, refundService, invoiceRepository, invoiceService,
                 travelerRepository, emailService, mailDispatcher, clock);
 
         account = new Account();

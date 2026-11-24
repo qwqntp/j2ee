@@ -50,6 +50,9 @@ public class TourRating {
     @Column(name = "rating_comment", columnDefinition = "TEXT")
     private String ratingComment;
 
+    @Column(name = "rating_status", nullable = false, length = 16)
+    private String ratingStatus;
+
     @NotNull
     @Column(name = "rating_created_at", nullable = false)
     private LocalDateTime ratingCreatedAt;

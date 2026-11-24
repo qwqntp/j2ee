@@ -25,6 +25,7 @@ import {
   updateGuide,
   updateImage,
   updateVehicle,
+  uploadImage,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
@@ -189,6 +190,8 @@ export function AdminCatalog() {
   const [form, setForm] = useState<Record<string, string> | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [rowToDelete, setRowToDelete] = useState<CatalogRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -247,6 +250,7 @@ export function AdminCatalog() {
     setEditingId(null);
     setRowToDelete(null);
     setError(null);
+    setImageError(null);
     setNotice(null);
   }
 
@@ -263,6 +267,7 @@ export function AdminCatalog() {
     setEditingId(null);
     setForm(emptyForm());
     setError(null);
+    setImageError(null);
     setNotice(null);
   }
 
@@ -276,6 +281,7 @@ export function AdminCatalog() {
     setEditingId(row.id);
     setForm(next);
     setError(null);
+    setImageError(null);
     setNotice(null);
   }
 
@@ -321,6 +327,22 @@ export function AdminCatalog() {
       setError(displayError(err, "Could not delete the record.", true));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function uploadCatalogImage(file: File | undefined) {
+    if (!file) return;
+    setUploadingImage(true);
+    setImageError(null);
+    try {
+      const session = await getSession();
+      if (!session) return;
+      const uploaded = await uploadImage(session.accessToken, file);
+      setForm((current) => current === null ? current : { ...current, imageUrl: uploaded.url });
+    } catch (err) {
+      setImageError(displayError(err, "Could not upload the image."));
+    } finally {
+      setUploadingImage(false);
     }
   }
 
@@ -424,6 +446,31 @@ export function AdminCatalog() {
           </div>
           </AdminFormSection>
           ))}
+          {resource === "images" ? (
+            <AdminFormSection title="Upload image">
+              <label htmlFor="catalog-image-upload" className="label">
+                Image file
+              </label>
+              <input
+                id="catalog-image-upload"
+                type="file"
+                accept="image/*"
+                className="field"
+                disabled={saving || uploadingImage}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  void uploadCatalogImage(file);
+                }}
+              />
+              {uploadingImage ? (
+                <p role="status" className="mt-1 text-xs text-muted">Uploading…</p>
+              ) : null}
+              {imageError ? (
+                <p role="alert" className="mt-1 text-xs text-terracotta">{imageError}</p>
+              ) : null}
+            </AdminFormSection>
+          ) : null}
           </div>
           {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
           <AdminFormActions>

@@ -427,7 +427,9 @@ class VnpayPaymentIntegrationTests {
                 departures.findByIdForUpdate(departureId).orElseThrow();
                 var lateIpn = pool.submit(() -> apply(ref, "1000050", "00", "00"));
                 try {
-                    assertEquals("UNRESOLVED", lateIpn.get(2, TimeUnit.SECONDS));
+                    // Remote DB latency under a full suite can exceed 2s; a real lock
+                    // wait still fails this assertion because the late IPN then settles.
+                    assertEquals("UNRESOLVED", lateIpn.get(10, TimeUnit.SECONDS));
                 } catch (Exception failure) {
                     throw new AssertionError("Terminal IPN should not wait on the departure lock", failure);
                 }

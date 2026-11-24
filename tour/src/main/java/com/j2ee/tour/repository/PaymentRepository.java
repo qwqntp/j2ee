@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,4 +45,20 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select coalesce(sum(payment.paymentAmount), 0) from Payment payment "
             + "where payment.booking.bookingId = :bookingId and payment.paymentStatus = 'SUCCESS'")
     java.math.BigDecimal sumSuccessfulPayments(@Param("bookingId") Long bookingId);
+
+    @Query("select coalesce(sum(p.paymentAmount), 0) from Payment p "
+            + "where p.paymentStatus = 'SUCCESS' and p.paymentPaidAt between :from and :to")
+    BigDecimal sumSuccessfulPaymentsBetween(@Param("from") LocalDateTime from,
+                                            @Param("to") LocalDateTime to);
+
+    @Query("select count(p) from Payment p "
+            + "where p.paymentStatus = 'SUCCESS' and p.paymentPaidAt between :from and :to")
+    long countSuccessfulPaymentsBetween(@Param("from") LocalDateTime from,
+                                        @Param("to") LocalDateTime to);
+
+    @Query("select cast(p.paymentPaidAt as date), coalesce(sum(p.paymentAmount), 0) from Payment p "
+            + "where p.paymentStatus = 'SUCCESS' and p.paymentPaidAt between :from and :to "
+            + "group by cast(p.paymentPaidAt as date) order by cast(p.paymentPaidAt as date)")
+    List<Object[]> dailySuccessfulPayments(@Param("from") LocalDateTime from,
+                                           @Param("to") LocalDateTime to);
 }

@@ -9,6 +9,7 @@ import {
   listAdminTours,
   updateAdminTour,
   updateDeparture,
+  uploadImage,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
@@ -77,6 +78,8 @@ export function AdminTours() {
   const [tourForm, setTourForm] = useState<TourForm | null>(null);
   const [editingTourId, setEditingTourId] = useState<number | null>(null);
   const [savingTour, setSavingTour] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const [selectedTourId, setSelectedTourId] = useState<number | null>(null);
   const [departureForm, setDepartureForm] = useState<DepartureForm | null>(null);
@@ -118,11 +121,13 @@ export function AdminTours() {
   function startCreate() {
     setEditingTourId(null);
     setTourForm({ ...EMPTY_TOUR });
+    setImageError(null);
     setNotice(null);
   }
 
   function startEdit(tour: AdminTour) {
     setEditingTourId(tour.id);
+    setImageError(null);
     setTourForm({
       name: tour.name,
       description: tour.description ?? "",
@@ -177,6 +182,25 @@ export function AdminTours() {
       setError(err instanceof ApiError ? err.message : "Could not save the tour.");
     } finally {
       setSavingTour(false);
+    }
+  }
+
+  async function uploadTourImage(file: File | undefined) {
+    if (!file) return;
+    setUploadingImage(true);
+    setImageError(null);
+    try {
+      const session = await getSession();
+      if (!session) return;
+      const uploaded = await uploadImage(session.accessToken, file);
+      setTourForm((current) => current === null ? current : {
+        ...current,
+        imageUrls: [current.imageUrls.trim(), uploaded.url].filter(Boolean).join("\n"),
+      });
+    } catch (err) {
+      setImageError(err instanceof ApiError ? err.message : "Could not upload the image.");
+    } finally {
+      setUploadingImage(false);
     }
   }
 
@@ -373,6 +397,27 @@ export function AdminTours() {
                   setTourForm({ ...tourForm, imageUrls: event.target.value })
                 }
               />
+              <label htmlFor="tour-image-upload" className="label mt-3">
+                Upload image
+              </label>
+              <input
+                id="tour-image-upload"
+                type="file"
+                accept="image/*"
+                className="field"
+                disabled={savingTour || uploadingImage}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  void uploadTourImage(file);
+                }}
+              />
+              {uploadingImage ? (
+                <p role="status" className="mt-1 text-xs text-muted">Uploading…</p>
+              ) : null}
+              {imageError ? (
+                <p role="alert" className="mt-1 text-xs text-terracotta">{imageError}</p>
+              ) : null}
             </div>
             </div>
             </AdminFormSection>

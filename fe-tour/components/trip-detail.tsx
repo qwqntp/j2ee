@@ -10,6 +10,7 @@ import {
   confirmBooking,
   getBooking,
   reconcileVnpayBooking,
+  requestBookingRefund,
   startVnpay,
 } from "@/lib/api";
 import { clearSession, ensureSession, useSession } from "@/lib/auth";
@@ -31,6 +32,7 @@ import { EmptyState } from "./empty-state";
 import { IconArrowRight, IconCalendar, IconClock, IconMapPin, IconUsers } from "./icons";
 import { TripDetailSkeleton } from "./skeleton";
 import { TourImage } from "./tour-image";
+import { TourRatings } from "./tour-ratings";
 
 export function TripDetail({
   bookingId,
@@ -50,6 +52,9 @@ export function TripDetail({
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelConflict, setCancelConflict] = useState<string | null>(null);
+  const [refundConfirming, setRefundConfirming] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
@@ -268,6 +273,35 @@ export function TripDetail({
     }
   }
 
+  async function handleRefundRequest() {
+    if (!booking || refunding) return;
+    setRefunding(true);
+    setRefundError(null);
+
+    try {
+      const current = await ensureSession();
+      if (!current) {
+        router.replace(loginHref);
+        return;
+      }
+      const updated = await requestBookingRefund(current.accessToken, booking.id);
+      setBooking(updated);
+      setRefundConfirming(false);
+      publishFlash("Refund requested. Your seats have been released.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        router.replace(loginHref);
+        return;
+      }
+      setRefundError(
+        err instanceof ApiError ? err.message : "Could not request a refund. Try again.",
+      );
+    } finally {
+      setRefunding(false);
+    }
+  }
+
   if (loading) {
     return <TripDetailSkeleton />;
   }
@@ -479,6 +513,10 @@ export function TripDetail({
                 {booking.note}
               </p>
             </section>
+          ) : null}
+
+          {tour && (booking.status === "PAID" || booking.status === "COMPLETED") ? (
+            <TourRatings tourId={tour.tourId} bookingId={booking.id} />
           ) : null}
         </div>
 
@@ -705,6 +743,55 @@ export function TripDetail({
                     className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[3px] border border-terracotta/40 px-5 py-2 text-sm font-medium text-terracotta transition-colors hover:bg-terracotta/10"
                   >
                     Cancel booking
+                  </button>
+                </>
+              )}
+            </section>
+          ) : booking.status === "PAID" || booking.status === "CONFIRMED" ? (
+            <section className="rounded-[4px] border border-terracotta/30 bg-white p-6">
+              <p className="eyebrow text-terracotta">Need to cancel?</p>
+              {refundConfirming ? (
+                <div role="alert">
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    Cancel this booking and request a refund? Refunds are reviewed by the
+                    tour team; the {booking.guestCount} {seatLabel} will be released now.
+                  </p>
+                  {refundError ? (
+                    <p className="mt-2 text-sm text-terracotta">{refundError}</p>
+                  ) : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleRefundRequest()}
+                      disabled={refunding}
+                      className="inline-flex min-h-11 items-center justify-center rounded-[3px] bg-terracotta px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-terracotta/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {refunding ? "Requesting…" : "Yes, request refund"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRefundConfirming(false);
+                        setRefundError(null);
+                      }}
+                      disabled={refunding}
+                      className="btn-secondary"
+                    >
+                      Keep booking
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    Cancelling a paid booking requests a refund and releases your seats.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setRefundConfirming(true)}
+                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-[3px] border border-terracotta/40 px-5 py-2 text-sm font-medium text-terracotta transition-colors hover:bg-terracotta/10"
+                  >
+                    Request refund
                   </button>
                 </>
               )}

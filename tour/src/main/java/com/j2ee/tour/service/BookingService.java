@@ -9,6 +9,7 @@ import com.j2ee.tour.dto.request.CreateBookingRequest;
 import com.j2ee.tour.dto.response.BookingResponse;
 import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.Booking;
+import com.j2ee.tour.model.Payment;
 import com.j2ee.tour.model.Promotion;
 import com.j2ee.tour.model.TourDeparture;
 import com.j2ee.tour.model.Traveler;
@@ -52,6 +53,7 @@ public class BookingService {
     private final AccountRepository accountRepository;
     private final PromotionRepository promotionRepository;
     private final PaymentRepository paymentRepository;
+    private final RefundService refundService;
     private final InvoiceRepository invoiceRepository;
     private final InvoiceService invoiceService;
     private final TravelerRepository travelerRepository;
@@ -64,6 +66,7 @@ public class BookingService {
                           AccountRepository accountRepository,
                           PromotionRepository promotionRepository,
                           PaymentRepository paymentRepository,
+                          RefundService refundService,
                           InvoiceRepository invoiceRepository,
                           InvoiceService invoiceService,
                           TravelerRepository travelerRepository,
@@ -75,6 +78,7 @@ public class BookingService {
         this.accountRepository = accountRepository;
         this.promotionRepository = promotionRepository;
         this.paymentRepository = paymentRepository;
+        this.refundService = refundService;
         this.invoiceRepository = invoiceRepository;
         this.invoiceService = invoiceService;
         this.travelerRepository = travelerRepository;
@@ -326,6 +330,42 @@ public class BookingService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Only pending unpaid bookings can be cancelled");
         }
+
+        TourDeparture departure = departureRepository
+                .findByIdForUpdate(booking.getDeparture().getDepartureId())
+                .orElseThrow(() -> new NoSuchElementException("Departure not found"));
+        releaseSeats(departure, booking.getBookingGuestCount());
+        releasePromotionUsage(booking);
+        booking.setBookingStatus("CANCELLED");
+        Booking saved = bookingRepository.save(booking);
+        sendBookingCancellation(saved);
+        return BookingResponse.from(saved);
+    }
+
+    /**
+     * Owner (or admin) cancels a paid booking and reserves a refund for each
+     * successful payment. The actual money movement stays with the payment provider.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "tours", allEntries = true)
+    public BookingResponse requestRefund(Long id, AuthPrincipal principal) {
+        Booking booking = findOwnedForUpdate(id, principal);
+        String status = booking.getBookingStatus();
+        if (!"PAID".equals(status) && !"CONFIRMED".equals(status)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Only paid or confirmed bookings can be refunded");
+        }
+        VnpayPaymentService.requireNoUnresolvedAttempt(paymentRepository, id);
+
+        List<Payment> successful = paymentRepository.findByBookingBookingId(id).stream()
+                .filter(payment -> "SUCCESS".equals(payment.getPaymentStatus()))
+                .toList();
+        if (successful.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "This booking has no successful payment to refund");
+        }
+        successful.forEach(payment -> refundService.requestRemaining(
+                payment.getPaymentId(), "Customer requested cancellation"));
 
         TourDeparture departure = departureRepository
                 .findByIdForUpdate(booking.getDeparture().getDepartureId())
