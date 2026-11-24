@@ -1,0 +1,13 @@
+# Admin audit log design
+
+Capture authenticated admin POST, PUT, PATCH and DELETE requests under `/api/**` that reach the application, except `/api/auth/**` and VNPay return/IPN. A servlet filter registered after Spring Security snapshots the authenticated principal, wraps eligible requests and publishes an event after processing. Application error responses are recorded as failures; exceptions escaping the application are recorded as 500. Security-chain rejections are outside scope.
+
+The principal supplies account ID, username and role; no database lookup occurs on the request thread. Exclude query strings, credentials and arbitrary raw payloads. A bounded JSON cache and recursive case-insensitive sensitive-key redaction supply at most approximately 2 KB of sanitized detail; omit malformed, oversized and non-JSON bodies. Treat untrusted paths, bodies and filters as hostile. Never log body content or credentials in application warnings.
+
+Publish through `AuditEventPublisher` to a bounded queue of 1000 events using nonblocking offer. A worker independently persists events; queue saturation and persistence errors produce safe warnings and lose events. Graceful shutdown attempts a bounded drain. No audit failure affects request handling. Crash, overload and database outage can lose events, so this is not a tamper-proof or complete compliance audit.
+
+V10 adds an append-only `audit_logs` table with timestamp, actor ID/username/role, method, path, action, entity type/ID, success, status, IP and sanitized details plus the requested indexes. Record the remote address without trusting forwarded headers. Pure path parsing identifies the first resource and numeric ID after `/api/` and optional `admin`, using a trailing operation as action.
+
+`GET /api/admin/audit-logs` uses the existing admin matcher and API envelope with `PageResponse`, newest first and stable ID tie-break. Optional filters are `actor` (case-insensitive username substring), `method`, `entityType`, `entityId`, `success`, `from`, `to`; date boundaries are UTC instants. Page defaults to 0, size to 20 and maximum size is 100. No update or delete endpoint.
+
+The admin page uses the existing session context and list components, displaying time, username, action, entity, success/status and IP, with keyboard-accessible expandable details, filters, pagination and loading, empty and error states. Add a single existing-navigation line. Add focused unit and filter tests, database-backed endpoint tests only against isolated PostgreSQL, and a Vitest query helper test. Document the API and results; never run git commands or edit shared services, SecurityConfig, old migrations or dependencies.

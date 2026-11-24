@@ -178,17 +178,34 @@
 
 ---
 
-## 9. Chưa triển khai (tóm tắt)
+## 9. Chưa triển khai (tóm tắt) update 24/11/2026 15h39
 
-Các mục dưới đây **chưa có** trong code hiện tại, chỉ ghi để tránh nhầm với chức năng đã có:
+Các mục dưới đây **chưa có** trong code hiện tại, chỉ ghi để tránh nhầm với chức năng đã có.
 
-- Giao diện hoàn tiền cho admin và luồng khách yêu cầu hủy/hoàn tiền booking `PAID`.
-- Giao diện đánh giá tour, hiển thị điểm đánh giá và kiểm duyệt đánh giá.
+**Đang triển khai**
+
+- Hoàn tiền: giao diện hoàn tiền cho admin và luồng khách yêu cầu hủy/hoàn tiền booking `PAID`, kèm quy tắc hoàn theo thời điểm hủy.
+- Đánh giá tour: giao diện gửi đánh giá, hiển thị điểm trung bình trên trang tour, kiểm duyệt đánh giá.
 - Upload ảnh tour lên Cloudinary / storage; hiện chỉ nhập URL.
-- Báo cáo doanh thu, xuất Excel/CSV, bộ lọc ngày cho dashboard.
-- Audit log thao tác admin.
-- Admin gửi lại mail / xem trạng thái gửi mail / preview template.
-- Đa ngôn ngữ Việt–Anh; giao diện hiện dùng tiếng Anh.
-- Wishlist, newsletter, form liên hệ, tour liên quan, gallery lightbox.
-- Hóa đơn PDF; hiện chỉ có bản in qua trình duyệt.
+- Thống kê: báo cáo doanh thu, xuất Excel/CSV, bộ lọc ngày cho dashboard.
+
+**Cần bổ sung**
+
+- Tự hủy booking `PENDING` quá hạn giữ chỗ bằng job định kỳ, giải phóng chỗ và hoàn lượt promotion.
+- Admin: danh sách hành khách theo từng departure (in / xuất CSV).
+- Admin: quản lý thanh toán (xem, lọc, đối soát VNPay).
+- Admin: quản lý khách hàng (tìm kiếm, xem lịch sử booking).
+- Admin tạo booking hộ khách (đặt qua điện thoại / tại quầy).
 - Revalidate cache `tours` / `tour-{id}` ngay sau khi admin sửa tour hoặc hủy departure.
+
+**Làm thêm nếu còn thời gian**
+
+- Audit log thao tác admin.
+- Admin gửi lại mail / xem trạng thái gửi mail.
+- Mở rộng công nghệ: RabbitMQ cho mail/audit, Redis cho rate limit và giữ chỗ có TTL, Spring AI chatbot gợi ý tour, CI bằng GitHub Actions.
+
+**Ngoài phạm vi (không làm)**
+
+- Đa ngôn ngữ Việt–Anh; giao diện giữ tiếng Anh.
+- Hóa đơn PDF; giữ bản in qua trình duyệt.
+- Wishlist, newsletter, form liên hệ, tour liên quan, gallery lightbox.
