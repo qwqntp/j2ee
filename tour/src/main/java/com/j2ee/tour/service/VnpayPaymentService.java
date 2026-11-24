@@ -135,6 +135,21 @@ public class VnpayPaymentService {
                 checked.providerCode(), checked.providerStatus());
     }
 
+    /** Called only from the admin-protected reconciliation endpoint. */
+    public VnpayReconcileResponse reconcileAdminPayment(Long paymentId, String clientIp) {
+        Payment payment = payments.findById(paymentId).orElseThrow(VnpayPaymentService::notFound);
+        if (!METHOD.equals(payment.getPaymentMethod()) || !isManagedReference(payment.getPaymentProviderTxnId())
+                || !"PENDING".equals(payment.getPaymentStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Payment is not a pending managed VNPay attempt");
+        }
+        Long bookingId = payment.getBooking().getBookingId();
+        Reconciled checked = reconcile(payment, clientIp);
+        return new VnpayReconcileResponse(bookingId, checked.payment().getPaymentProviderTxnId(),
+                checked.payment().getPaymentStatus(), true,
+                checked.reason() == null ? null : checked.reason().name(),
+                checked.providerCode(), checked.providerStatus());
+    }
+
     @Transactional
     public IpnCode applyIpn(VerifiedNotification notification) {
         return applyVerified(notification.reference(), notification.amountTimes100(), notification.outcome());

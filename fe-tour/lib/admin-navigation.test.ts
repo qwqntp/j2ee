@@ -4,7 +4,7 @@ import { ADMIN_SECTIONS, getAdminLocation } from "./admin-navigation";
 describe("admin navigation", () => {
   it("lists each real top-level management route once", () => {
     expect(ADMIN_SECTIONS.map(({ href }) => href)).toEqual([
-      "/admin", "/admin/bookings", "/admin/accounts", "/admin/promotions",
+      "/admin", "/admin/bookings", "/admin/payments", "/admin/customers", "/admin/accounts", "/admin/promotions",
       "/admin/invoices", "/admin/catalog", "/admin/tours",
     ]);
   });

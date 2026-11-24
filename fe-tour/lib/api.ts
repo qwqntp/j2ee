@@ -124,6 +124,30 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 }
 
+export function getAdminPassengers(token: string, id: number): Promise<import("./admin-passengers").PassengerManifest> {
+  return apiRequest(`/api/admin/departures/${id}/passengers`, { token });
+}
+
+export function listAdminPayments(token: string, query: string): Promise<PageData<import("./admin-payments").AdminPayment>> {
+  return apiRequest(`/api/admin/payments?${query}`, { token });
+}
+
+export function reconcileAdminPayment(token: string, id: number): Promise<import("./types").VnpayReconcile> {
+  return apiRequest(`/api/admin/payments/${id}/reconcile`, { method: "POST", token });
+}
+
+export function listAdminCustomers(token: string, page: number, q: string): Promise<PageData<import("./admin-customers").AdminCustomer>> {
+  return apiRequest(`/api/admin/customers?${new URLSearchParams({ page: String(page), size: "10", q })}`, { token });
+}
+
+export function getAdminCustomer(token: string, id: number): Promise<import("./admin-customers").AdminCustomer> {
+  return apiRequest(`/api/customers/${id}`, { token });
+}
+
+export function listAdminCustomerBookings(token: string, id: number, page: number): Promise<PageData<import("./admin-customers").AdminCustomerBooking>> {
+  return apiRequest(`/api/admin/customers/${id}/bookings?page=${page}&size=10`, { token });
+}
+
 export function getTours(
   filters: TourFilters,
   page: number,

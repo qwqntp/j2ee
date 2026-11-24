@@ -663,6 +663,7 @@ export function AdminTours() {
                          </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
+                          <a className="admin-row-action" href={`/admin/departures/${departure.id}/passengers`}>Passengers</a>
                           <button
                             type="button"
                             onClick={() => startEditDeparture(selectedTour, departure)}

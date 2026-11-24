@@ -1,6 +1,8 @@
 export const ADMIN_SECTIONS = [
   { href: "/admin", label: "Dashboard", icon: "dashboard" },
   { href: "/admin/bookings", label: "Bookings & payments", icon: "bookings" },
+  { href: "/admin/payments", label: "Payments", icon: "invoices" },
+  { href: "/admin/customers", label: "Customers", icon: "accounts" },
   { href: "/admin/accounts", label: "Accounts", icon: "accounts" },
   { href: "/admin/promotions", label: "Promotions", icon: "promotions" },
   { href: "/admin/invoices", label: "Invoices", icon: "invoices" },
