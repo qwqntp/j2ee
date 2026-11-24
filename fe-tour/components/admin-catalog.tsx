@@ -27,7 +27,8 @@ import {
   updateVehicle,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminTableRegion } from "@/components/admin/admin-ui";
+import { lastAvailablePage } from "@/lib/admin-pagination";
 import { AdminFormSkeleton, AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
@@ -42,6 +43,7 @@ import type {
   GuideInput,
   ImageInput,
   VehicleInput,
+  PageData,
 } from "@/lib/types";
 
 type Field = {
@@ -99,18 +101,18 @@ function displayError(error: unknown, fallback: string, deletion = false): strin
   return fallback;
 }
 
-async function fetchRows(resource: CatalogResource, token: string): Promise<CatalogRow[]> {
+async function fetchRows(resource: CatalogResource, token: string, page: number): Promise<PageData<CatalogRow>> {
   switch (resource) {
     case "destinations":
-      return (await listDestination(token)).content;
+      return listDestination(token, page, 10);
     case "accommodations":
-      return (await listAccommodation(token)).content;
+      return listAccommodation(token, page, 10);
     case "vehicles":
-      return (await listVehicle(token)).content;
+      return listVehicle(token, page, 10);
     case "guides":
-      return (await listGuide(token)).content;
+      return listGuide(token, page, 10);
     case "images":
-      return (await listImage(token)).content;
+      return listImage(token, page, 10);
   }
 }
 
@@ -179,6 +181,8 @@ export function AdminCatalog() {
   const tabs = catalogTabs();
   const [resource, setResource] = useState<CatalogResource>("destinations");
   const [rows, setRows] = useState<CatalogRow[]>([]);
+  const [page, setPage] = useState(0);
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadedResource, setLoadedResource] = useState<CatalogResource | null>(null);
@@ -210,13 +214,16 @@ export function AdminCatalog() {
         const session = await getSession();
         if (!active || !session) return;
         const [loadedRows, loadedTours] = await Promise.all([
-          fetchRows(resource, session.accessToken),
+          fetchRows(resource, session.accessToken, page),
           resource === "images"
             ? listAdminTours(session.accessToken, 0, 100).then((page) => page.content)
             : Promise.resolve<AdminTour[]>([]),
         ]);
         if (!active) return;
-        setRows(loadedRows);
+        const validPage = lastAvailablePage(page, loadedRows.totalPages);
+        if (page !== validPage) { setPage(validPage); return; }
+        setRows(loadedRows.content);
+        setPagination(loadedRows);
         setTours(loadedTours);
         setError(null);
       } catch (err) {
@@ -234,11 +241,12 @@ export function AdminCatalog() {
     return () => {
       active = false;
     };
-  }, [resource, reloadKey, getSession]);
+  }, [resource, page, reloadKey, getSession]);
 
   function selectTab(next: CatalogResource) {
     if (next === resource) return;
     setResource(next);
+    setPage(0);
     setLoadedResource(null);
     setLoading(true);
     setRows([]);
@@ -514,7 +522,7 @@ export function AdminCatalog() {
           </table>
         </AdminTableRegion>
       )}
-      {!initialLoading && <p className="admin-pagination text-sm text-muted">{rows.length} records loaded</p>}
+      {!initialLoading && <AdminPagination page={page} {...pagination} loading={loading} onPageChange={setPage} />}
       </AdminListPanel>
       <AdminConfirmDialog title="Delete catalog record?"
         target={rowToDelete ? ("name" in rowToDelete ? rowToDelete.name : `${activeLabel} #${rowToDelete.id}`) : null}

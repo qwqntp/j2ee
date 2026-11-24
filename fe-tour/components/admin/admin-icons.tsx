@@ -16,8 +16,10 @@ const paths = {
   alert: "M12 3 2.5 20h19L12 3z M12 9v4 M12 16h.01",
   plus: "M12 5v14 M5 12h14",
   edit: "m4 16 11-11 4 4L8 20H4v-4z M13 7l4 4",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
   delete: "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v5 M14 11v5",
   search: "M15.5 15.5 21 21 M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z",
+  copy: "M8 8h11v13H8z M5 16H4V3h11v2",
 } satisfies Record<AdminSection["icon"], string> & Record<string, string>;
 
 export function AdminIcon({ name, className = "size-5" }: {

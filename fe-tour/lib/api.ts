@@ -551,8 +551,8 @@ export function createPayment(
   return apiRequest<Payment>("/api/payments", { method: "POST", token, body: input });
 }
 
-export function listDestination(token: string): Promise<PageData<DestinationRow>> {
-  return apiRequest<PageData<DestinationRow>>("/api/tourist-destinations?page=0&size=100", { token });
+export function listDestination(token: string, page = 0, size = 100): Promise<PageData<DestinationRow>> {
+  return apiRequest<PageData<DestinationRow>>(`/api/tourist-destinations?page=${page}&size=${size}`, { token });
 }
 
 export function createDestination(token: string, input: DestinationInput): Promise<DestinationRow> {
@@ -575,8 +575,8 @@ export function deleteDestination(token: string, id: number): Promise<void> {
   });
 }
 
-export function listAccommodation(token: string): Promise<PageData<AccommodationRow>> {
-  return apiRequest<PageData<AccommodationRow>>("/api/accommodations?page=0&size=100", { token });
+export function listAccommodation(token: string, page = 0, size = 100): Promise<PageData<AccommodationRow>> {
+  return apiRequest<PageData<AccommodationRow>>(`/api/accommodations?page=${page}&size=${size}`, { token });
 }
 
 export function createAccommodation(token: string, input: AccommodationInput): Promise<AccommodationRow> {
@@ -599,8 +599,8 @@ export function deleteAccommodation(token: string, id: number): Promise<void> {
   });
 }
 
-export function listVehicle(token: string): Promise<PageData<VehicleRow>> {
-  return apiRequest<PageData<VehicleRow>>("/api/travel-vehicles?page=0&size=100", { token });
+export function listVehicle(token: string, page = 0, size = 100): Promise<PageData<VehicleRow>> {
+  return apiRequest<PageData<VehicleRow>>(`/api/travel-vehicles?page=${page}&size=${size}`, { token });
 }
 
 export function createVehicle(token: string, input: VehicleInput): Promise<VehicleRow> {
@@ -619,8 +619,8 @@ export function deleteVehicle(token: string, id: number): Promise<void> {
   });
 }
 
-export function listGuide(token: string): Promise<PageData<GuideRow>> {
-  return apiRequest<PageData<GuideRow>>("/api/tour-guides?page=0&size=100", { token });
+export function listGuide(token: string, page = 0, size = 100): Promise<PageData<GuideRow>> {
+  return apiRequest<PageData<GuideRow>>(`/api/tour-guides?page=${page}&size=${size}`, { token });
 }
 
 export function createGuide(token: string, input: GuideInput): Promise<GuideRow> {
@@ -639,8 +639,8 @@ export function deleteGuide(token: string, id: number): Promise<void> {
   });
 }
 
-export function listImage(token: string): Promise<PageData<ImageRow>> {
-  return apiRequest<PageData<ImageRow>>("/api/tour-images?page=0&size=100", { token });
+export function listImage(token: string, page = 0, size = 100): Promise<PageData<ImageRow>> {
+  return apiRequest<PageData<ImageRow>>(`/api/tour-images?page=${page}&size=${size}`, { token });
 }
 
 export function createImage(token: string, input: ImageInput): Promise<ImageRow> {

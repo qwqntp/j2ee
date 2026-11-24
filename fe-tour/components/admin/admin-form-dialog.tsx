@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { isDialogBackdropClick } from "@/lib/admin-dialog";
 import { AdminIcon } from "./admin-icons";
 
-export function AdminFormDialog({ open, title, busy = false, narrow = false, onDismiss, children }: {
+export function AdminFormDialog({ open, title, busy = false, narrow = false, backdropClose = false, lockScroll = false, onDismiss, children }: {
   open: boolean;
   title: string;
   busy?: boolean;
   narrow?: boolean;
+  backdropClose?: boolean;
+  lockScroll?: boolean;
   onDismiss: () => void;
   children: ReactNode;
 }) {
@@ -27,10 +30,23 @@ export function AdminFormDialog({ open, title, busy = false, narrow = false, onD
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !lockScroll) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [open, lockScroll]);
+
   return (
     <dialog
       ref={dialog}
       aria-labelledby={id}
+      style={lockScroll ? { maxHeight: "85dvh" } : undefined}
+      onClick={(event) => {
+        if (!backdropClose || busy || event.target !== event.currentTarget) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (isDialogBackdropClick(rect, event.clientX, event.clientY)) onDismiss();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onDismiss();

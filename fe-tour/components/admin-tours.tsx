@@ -4,23 +4,18 @@ import { useEffect, useState } from "react";
 import {
   ApiError,
   createAdminTour,
-  createDeparture,
-  deleteDeparture,
   listAdminTours,
   updateAdminTour,
-  updateDeparture,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
+import { TourDeparturesDialog } from "@/components/admin/tour-departures-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
-import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { lastAvailablePage } from "@/lib/admin-pagination";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
-import { formatDateRange, formatPrice } from "@/lib/format";
 import type {
   AdminTour,
-  DepartureInput,
-  TourDeparture,
   TourInput,
 } from "@/lib/types";
 
@@ -38,19 +33,7 @@ type TourForm = {
   vehicleIds: number[];
 };
 
-type DepartureForm = {
-  id: number | null;
-  tourId: number;
-  startDate: string;
-  endDate: string;
-  capacity: string;
-  price: string;
-  meetingPoint: string;
-  status: string;
-};
-
 const TOUR_STATUSES = ["DRAFT", "OPEN", "CLOSED", "CANCELLED"];
-const DEPARTURE_STATUSES = ["OPEN", "FULL", "CLOSED", "CANCELLED"];
 
 const EMPTY_TOUR: TourForm = {
   name: "",
@@ -68,6 +51,8 @@ const EMPTY_TOUR: TourForm = {
 export function AdminTours() {
   const { getSession } = useAdminAccess();
   const [tours, setTours] = useState<AdminTour[]>([]);
+  const [page, setPage] = useState(0);
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +64,6 @@ export function AdminTours() {
   const [savingTour, setSavingTour] = useState(false);
 
   const [selectedTourId, setSelectedTourId] = useState<number | null>(null);
-  const [departureForm, setDepartureForm] = useState<DepartureForm | null>(null);
-  const [savingDeparture, setSavingDeparture] = useState(false);
-  const [deletingDepartureId, setDeletingDepartureId] = useState<number | null>(null);
-  const [departureToDelete, setDepartureToDelete] = useState<TourDeparture | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -92,9 +73,12 @@ export function AdminTours() {
       try {
         const session = await getSession();
         if (!active || !session) return;
-        const result = await listAdminTours(session.accessToken, 0, 100);
+        const result = await listAdminTours(session.accessToken, page, 10);
         if (!active) return;
+        const validPage = lastAvailablePage(page, result.totalPages);
+        if (page !== validPage) { setPage(validPage); return; }
         setTours(result.content);
+        setPagination(result);
         setError(null);
       } catch (err) {
         if (!active) return;
@@ -111,7 +95,7 @@ export function AdminTours() {
     return () => {
       active = false;
     };
-  }, [reloadKey, getSession]);
+  }, [page, reloadKey, getSession]);
 
   const selectedTour = tours.find((tour) => tour.id === selectedTourId) ?? null;
 
@@ -180,87 +164,6 @@ export function AdminTours() {
     }
   }
 
-  function startCreateDeparture(tour: AdminTour) {
-    setDepartureForm({
-      id: null,
-      tourId: tour.id,
-      startDate: "",
-      endDate: "",
-      capacity: "10",
-      price: "",
-      meetingPoint: "",
-      status: "OPEN",
-    });
-  }
-
-  function startEditDeparture(tour: AdminTour, departure: TourDeparture) {
-    setDepartureForm({
-      id: departure.id,
-      tourId: tour.id,
-      startDate: departure.startDate.slice(0, 16),
-      endDate: departure.endDate.slice(0, 16),
-      capacity: String(departure.capacity),
-      price: String(departure.price),
-      meetingPoint: departure.meetingPoint ?? "",
-      status: departure.status,
-    });
-  }
-
-  async function saveDeparture(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!departureForm) return;
-    setSavingDeparture(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const session = await getSession();
-      if (!session) return;
-      const input: DepartureInput = {
-        tourId: departureForm.tourId,
-        startDate: departureForm.startDate,
-        endDate: departureForm.endDate,
-        capacity: Number(departureForm.capacity),
-        price: Number(departureForm.price),
-        meetingPoint: departureForm.meetingPoint.trim() || undefined,
-        status: departureForm.status,
-      };
-      if (departureForm.id === null) {
-        await createDeparture(session.accessToken, input);
-        setNotice("Departure created.");
-      } else {
-        await updateDeparture(session.accessToken, departureForm.id, input);
-        setNotice(
-          departureForm.status === "CANCELLED"
-            ? "Departure cancelled. Live bookings were cancelled and refunds reserved."
-            : "Departure saved.",
-        );
-      }
-      setDepartureForm(null);
-      setReloadKey((key) => key + 1);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the departure.");
-    } finally {
-      setSavingDeparture(false);
-    }
-  }
-
-  async function removeDeparture(departure: TourDeparture) {
-    setDeletingDepartureId(departure.id);
-    setError(null);
-    setNotice(null);
-    try {
-      const session = await getSession();
-      if (!session) return;
-      await deleteDeparture(session.accessToken, departure.id);
-      setNotice("Departure deleted.");
-      setReloadKey((key) => key + 1);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not delete the departure.");
-    } finally {
-      setDeletingDepartureId(null);
-    }
-  }
-
   if (!loaded) {
     return <AdminTableSkeleton label="Loading tours…" action />;
   }
@@ -268,11 +171,11 @@ export function AdminTours() {
   return (
     <div>
       <AdminPageHeading title="Tours & departures"
-        description={`Manage itineraries and departure schedules. ${tours.length} ${tours.length === 1 ? "tour" : "tours"} loaded.`}
+        description={`Manage itineraries and departure schedules. ${pagination.totalElements} tours total.`}
         action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> New tour</button>}
       />
 
-      {error && !tourForm && !departureForm ? (
+      {error && !tourForm ? (
         <p
           role="alert"
           className="admin-notice mt-5"
@@ -436,7 +339,6 @@ export function AdminTours() {
                         type="button"
                         onClick={() => {
                           setSelectedTourId(tour.id);
-                          setDepartureForm(null);
                         }}
                         className="admin-row-action"
                       >
@@ -450,253 +352,13 @@ export function AdminTours() {
           </table>
         </AdminTableRegion>
       )}
+      <AdminPagination page={page} {...pagination} loading={loading} onPageChange={setPage} />
       </AdminListPanel>
 
       {selectedTour ? (
-        <div className="admin-panel mt-5 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-tight">
-              Departures — {selectedTour.name}
-            </h2>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => startCreateDeparture(selectedTour)}
-                className="btn-secondary min-h-0 px-4 py-2 text-xs"
-              >
-                New departure
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTourId(null);
-                  setDepartureForm(null);
-                }}
-                className="btn-secondary min-h-0 px-4 py-2 text-xs"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-
-          <AdminFormDialog open={departureForm !== null} title={departureForm?.id == null ? "New departure" : "Edit departure"}
-            busy={savingDeparture} onDismiss={() => { setDepartureForm(null); setError(null); }}>
-          {departureForm && (
-            <form onSubmit={saveDeparture}>
-               <div className="admin-form-grid">
-               <AdminFormSection title="Schedule and capacity" description="Required fields are marked with an asterisk.">
-               <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="departure-start" className="label">
-                    Start
-                  </label>
-                  <input
-                    id="departure-start"
-                    type="datetime-local"
-                    required
-                    className="field"
-                    value={departureForm.startDate}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        startDate: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label htmlFor="departure-end" className="label">
-                    End
-                  </label>
-                  <input
-                    id="departure-end"
-                    type="datetime-local"
-                    required
-                    className="field"
-                    value={departureForm.endDate}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        endDate: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label htmlFor="departure-capacity" className="label">
-                    Capacity
-                  </label>
-                  <input
-                    id="departure-capacity"
-                    type="number"
-                    min={1}
-                    required
-                    className="field"
-                    value={departureForm.capacity}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        capacity: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label htmlFor="departure-price" className="label">
-                    Price per seat
-                  </label>
-                  <input
-                    id="departure-price"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    required
-                    className="field"
-                    value={departureForm.price}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        price: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-                 <div className="sm:col-span-2">
-                   <label htmlFor="departure-meeting" className="label">
-                    Meeting point
-                  </label>
-                  <input
-                    id="departure-meeting"
-                    maxLength={255}
-                    className="field"
-                    value={departureForm.meetingPoint}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        meetingPoint: event.target.value,
-                      })
-                    }
-                  />
-                 </div>
-               </div>
-               </AdminFormSection>
-               <AdminFormSection title="Departure status">
-                 <div>
-                  <label htmlFor="departure-status" className="label">
-                    Status
-                  </label>
-                   <select
-                     id="departure-status"
-                     aria-describedby="departure-status-help"
-                    className="field"
-                    value={departureForm.status}
-                    onChange={(event) =>
-                      setDepartureForm({
-                        ...departureForm,
-                        status: event.target.value,
-                      })
-                    }
-                  >
-                    {DEPARTURE_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                   <p id="departure-status-help" className="mt-2 text-xs leading-5 text-muted">
-                    CANCELLED cancels the departure&apos;s live bookings and reserves refunds
-                    for successful payments.
-                  </p>
-                 </div>
-               </AdminFormSection>
-               </div>
-               {error && <p className="admin-notice mt-4" role="alert">{error}</p>}
-               <AdminFormActions>
-                <button
-                  type="submit"
-                  disabled={savingDeparture}
-                  className="btn-primary min-h-0 px-4 py-2 text-xs"
-                >
-                  {savingDeparture ? "Saving…" : "Save departure"}
-                </button>
-                 <button
-                   type="button"
-                   disabled={savingDeparture}
-                   onClick={() => { setDepartureForm(null); setError(null); }}
-                  className="btn-secondary min-h-0 px-4 py-2 text-xs"
-                >
-                  Cancel
-                </button>
-               </AdminFormActions>
-             </form>
-           )}
-           </AdminFormDialog>
-
-          {selectedTour.departures.length === 0 ? (
-            <p className="mt-5 text-sm text-muted">No departures for this tour yet.</p>
-          ) : (
-            <AdminTableRegion label="Departures">
-              <table className="w-full min-w-[44rem] text-left text-sm">
-                <thead className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-muted">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">Dates</th>
-                    <th className="px-3 py-2 font-semibold">Seats</th>
-                    <th className="px-3 py-2 font-semibold">Price</th>
-                    <th className="px-3 py-2 font-semibold">Status</th>
-                    <th className="px-3 py-2 font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {selectedTour.departures.map((departure) => (
-                    <tr key={departure.id}>
-                      <td className="px-3 py-3 text-muted">
-                        {formatDateRange(departure.startDate, departure.endDate)}
-                      </td>
-                      <td className="px-3 py-3 text-muted">
-                        {departure.bookedSlots} / {departure.capacity}
-                      </td>
-                      <td className="px-3 py-3 text-muted">{formatPrice(departure.price)}</td>
-                         <td className="px-3 py-3">
-                           <AdminStatusBadge tone={departure.status === "CANCELLED" ? "danger" : departure.status === "OPEN" ? "positive" : "neutral"}>
-                             {departure.status}
-                           </AdminStatusBadge>
-                         </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <a className="admin-row-action" href={`/admin/departures/${departure.id}/passengers`}>Passengers</a>
-                          <button
-                            type="button"
-                            onClick={() => startEditDeparture(selectedTour, departure)}
-                            className="admin-row-action"
-                          >
-                            <AdminIcon name="edit" className="size-4" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingDepartureId === departure.id}
-                            onClick={() => setDepartureToDelete(departure)}
-                            className="admin-danger-action"
-                          >
-                            <AdminIcon name="delete" className="size-4" /> Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </AdminTableRegion>
-          )}
-        </div>
+        <TourDeparturesDialog tour={selectedTour} loading={loading} loadError={error} onDismiss={() => setSelectedTourId(null)}
+          onReload={() => setReloadKey((key) => key + 1)} />
       ) : null}
-      <AdminConfirmDialog
-        title="Delete departure?"
-        target={departureToDelete ? `${selectedTour?.name ?? "Departure"} · ${formatDateRange(departureToDelete.startDate, departureToDelete.endDate)}` : null}
-        consequence="This removes the departure from the schedule. The system will reject deletion when the departure cannot be removed."
-        confirmLabel="Delete departure"
-        onDismiss={() => setDepartureToDelete(null)}
-        onConfirm={() => { if (departureToDelete) void removeDeparture(departureToDelete); }}
-      />
     </div>
   );
 }

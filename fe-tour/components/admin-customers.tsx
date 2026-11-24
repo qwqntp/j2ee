@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { listAdminCustomers } from "@/lib/api";
 import type { AdminCustomer } from "@/lib/admin-customers";
 import type { PageData } from "@/lib/types";
@@ -33,8 +34,9 @@ export function AdminCustomers() {
 
   return <div><AdminPageHeading title="Customers" description="Find a customer and review their bookings." />
     <AdminListPanel>
-      <form className="admin-filter-bar flex gap-3" onSubmit={(e) => { e.preventDefault(); setPage(0); setQuery(search.trim()); }}>
-        <label>Search name, email or phone <input type="search" maxLength={100} value={search} onChange={(e) => setSearch(e.target.value)} /></label><button className="admin-row-action">Search</button>
+      <form className="admin-filter-bar admin-toolbar" onSubmit={(e) => { e.preventDefault(); setPage(0); setQuery(search.trim()); }}>
+        <label className="admin-toolbar-search"><span className="sr-only">Search name, email or phone</span><AdminIcon name="search" className="size-4" /><input className="field" type="search" placeholder="Name, email or phone" maxLength={100} value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+        <div className="admin-toolbar-row"><button className="btn-primary admin-toolbar-primary">Search</button></div>
       </form>
       {error && <p role="alert" className="p-4">{error} <button className="admin-row-action" onClick={() => setReload((n) => n + 1)}>Try again</button></p>}
       {!data && !error ? <AdminTableSkeleton label="Loading customers…" embedded /> : data && data.content.length === 0 ? <AdminEmptyState title="No customers found" /> : data && <AdminTableRegion label="Customers">

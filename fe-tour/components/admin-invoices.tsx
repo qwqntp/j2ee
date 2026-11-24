@@ -11,6 +11,7 @@ import { ApiError, listInvoices } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { createDebouncedCommit, resetAdminPage } from "@/lib/booking-list";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { AdminInvoiceListItem, AdminListSort } from "@/lib/types";
@@ -166,10 +167,15 @@ export function AdminInvoices() {
           debouncedSearch.cancel();
           commitFilters(form);
         }}
-        className="admin-filter-bar"
+        className="admin-filter-bar admin-toolbar"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
+        <label className="admin-toolbar-search">
+          <span className="sr-only">Search invoices</span><AdminIcon name="search" className="size-4" />
+          <input id="invoice-q" type="search" maxLength={100} placeholder="Booking, customer, email, payment" className="field"
+            value={form.q} onChange={(event) => updateForm({ q: event.target.value }, true)} />
+        </label>
+        <div className="admin-toolbar-row">
+          <div className="admin-toolbar-control">
             <label htmlFor="invoice-status" className="label">
               Status
             </label>
@@ -186,21 +192,7 @@ export function AdminInvoices() {
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="invoice-q" className="label">
-              Search
-            </label>
-            <input
-              id="invoice-q"
-              type="search"
-              maxLength={100}
-              placeholder="Booking, customer, email, payment"
-              className="field"
-              value={form.q}
-              onChange={(event) => updateForm({ q: event.target.value }, true)}
-            />
-          </div>
-          <div>
+          <div className="admin-toolbar-control">
             <label htmlFor="invoice-sort" className="label">
               Sort
             </label>
@@ -217,7 +209,7 @@ export function AdminInvoices() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="admin-toolbar-control">
             <label htmlFor="invoice-size" className="label">
               Per page
             </label>
@@ -234,9 +226,7 @@ export function AdminInvoices() {
               ))}
             </select>
           </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={clearFilters} className="btn-secondary min-h-0 px-4 py-2 text-xs">
+          <button type="button" onClick={clearFilters} className="admin-toolbar-ghost">
             Clear
           </button>
         </div>

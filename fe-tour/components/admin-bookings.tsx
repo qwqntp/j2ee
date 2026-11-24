@@ -13,6 +13,7 @@ import {
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { statusLabel } from "@/lib/bookings";
 import {
   buildBookingListQuery,
@@ -332,10 +333,15 @@ export function AdminBookings() {
           debouncedSearch.cancel();
           commitFilters(formRef.current);
         }}
-        className="admin-filter-bar"
+        className="admin-filter-bar admin-toolbar"
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
+        <label className="admin-toolbar-search">
+          <span className="sr-only">Search bookings</span><AdminIcon name="search" className="size-4" />
+          <input id="booking-q" type="search" maxLength={100} placeholder="Code, account, tour" className="field"
+            value={form.q} onChange={(event) => updateForm({ q: event.target.value }, true)} />
+        </label>
+        <div className="admin-toolbar-row">
+          <div className="admin-toolbar-control">
             <label htmlFor="booking-status" className="label">
               Status
             </label>
@@ -357,7 +363,8 @@ export function AdminBookings() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="admin-toolbar-dates">
+          <div className="admin-toolbar-control">
             <label htmlFor="booking-from" className="label">
               From
             </label>
@@ -369,7 +376,7 @@ export function AdminBookings() {
               onChange={(event) => updateForm({ from: event.target.value })}
             />
           </div>
-          <div>
+          <div className="admin-toolbar-control">
             <label htmlFor="booking-to" className="label">
               To
             </label>
@@ -381,21 +388,8 @@ export function AdminBookings() {
               onChange={(event) => updateForm({ to: event.target.value })}
             />
           </div>
-          <div>
-            <label htmlFor="booking-q" className="label">
-              Search
-            </label>
-            <input
-              id="booking-q"
-              type="search"
-              maxLength={100}
-              placeholder="Code, account, tour"
-              className="field"
-              value={form.q}
-              onChange={(event) => updateForm({ q: event.target.value }, true)}
-            />
           </div>
-          <div>
+          <div className="admin-toolbar-control">
             <label htmlFor="booking-sort" className="label">
               Sort
             </label>
@@ -412,7 +406,7 @@ export function AdminBookings() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="admin-toolbar-control">
             <label htmlFor="booking-size" className="label">
               Per page
             </label>
@@ -429,9 +423,7 @@ export function AdminBookings() {
               ))}
             </select>
           </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={clearFilters} className="btn-secondary min-h-0 px-4 py-2 text-xs">
+          <button type="button" onClick={clearFilters} className="admin-toolbar-ghost">
             Clear
           </button>
         </div>

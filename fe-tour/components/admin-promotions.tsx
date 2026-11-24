@@ -9,7 +9,8 @@ import {
   updatePromotion,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { lastAvailablePage } from "@/lib/admin-pagination";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
@@ -100,6 +101,8 @@ function inputWithActive(promotion: Promotion, active: boolean): PromotionInput 
 export function AdminPromotions() {
   const { getSession } = useAdminAccess();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [page, setPage] = useState(0);
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,9 +125,12 @@ export function AdminPromotions() {
       try {
         const session = await getSession();
         if (!active || !session) return;
-        const page = await listPromotions(session.accessToken, 0, 100);
+        const result = await listPromotions(session.accessToken, page, 10);
         if (!active) return;
-        setPromotions(page.content);
+        const validPage = lastAvailablePage(page, result.totalPages);
+        if (page !== validPage) { setPage(validPage); return; }
+        setPromotions(result.content);
+        setPagination(result);
         setError(null);
       } catch (err) {
         if (!active) return;
@@ -141,7 +147,7 @@ export function AdminPromotions() {
     return () => {
       active = false;
     };
-  }, [reloadKey, getSession]);
+  }, [page, reloadKey, getSession]);
 
   const visiblePromotions = useMemo(
     () => filterPromotions(promotions, filter),
@@ -233,7 +239,7 @@ export function AdminPromotions() {
   return (
     <div>
       <AdminPageHeading title="Promotions"
-        description="Manage discounts and availability. Search and filters apply to the first 100 promotions."
+        description="Manage discounts and availability. Search and filters apply to the current page."
         action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> New promotion</button>}
       />
 
@@ -402,11 +408,12 @@ export function AdminPromotions() {
       </AdminFormDialog>
 
       <AdminListPanel busy={loading}>
-      <div className="admin-filter-bar grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="promotion-search" className="label">
-            Search
+      <div className="admin-filter-bar admin-toolbar">
+        <div className="admin-toolbar-search">
+          <label htmlFor="promotion-search" className="sr-only">
+            Search promotions
           </label>
+          <AdminIcon name="search" className="size-4" />
           <input
             id="promotion-search"
             type="search"
@@ -416,7 +423,7 @@ export function AdminPromotions() {
             onChange={(event) => setFilter({ ...filter, query: event.target.value })}
           />
         </div>
-        <div>
+        <div className="admin-toolbar-row"><div className="admin-toolbar-control">
           <label htmlFor="promotion-lifecycle-filter" className="label">
             Lifecycle
           </label>
@@ -437,6 +444,7 @@ export function AdminPromotions() {
               </option>
             ))}
           </select>
+        </div>
         </div>
       </div>
 
@@ -512,7 +520,7 @@ export function AdminPromotions() {
           </table>
         </AdminTableRegion>
       )}
-      <p className="admin-pagination text-sm text-muted">{visiblePromotions.length} of {promotions.length} shown</p>
+      <AdminPagination page={page} {...pagination} loading={loading} onPageChange={setPage} />
       </AdminListPanel>
       <AdminConfirmDialog title="Delete promotion?" target={promotionToDelete?.name ?? null}
         consequence="This removes the promotion if the system permits deletion. This action cannot be undone here."

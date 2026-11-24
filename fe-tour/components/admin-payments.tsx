@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminIcon } from "@/components/admin/admin-icons";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { ApiError, listAdminPayments, reconcileAdminPayment } from "@/lib/api";
 import { buildPaymentQuery, type AdminPayment, type PaymentFilters } from "@/lib/admin-payments";
@@ -57,27 +58,43 @@ export function AdminPayments() {
     catch (err) { setError(err instanceof Error ? err.message : "Invalid filters."); }
   }
 
+  async function copyTransaction(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice("Transaction ID copied.");
+    } catch {
+      setNotice(`Could not copy the transaction ID: ${value}`);
+    }
+  }
+
   return <div>
     <AdminPageHeading title="Payments" description="Search and reconcile payment attempts." />
     <AdminListPanel>
-      <form className="admin-filter-bar flex flex-wrap gap-3" onSubmit={submit}>
-        <label>Status <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="">All</option>{["PENDING", "SUCCESS", "FAILED"].map((s) => <option key={s}>{s}</option>)}</select></label>
-        <label>Method <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}><option value="">All</option>{["CASH", "VNPAY", "MOMO", "CARD"].map((s) => <option key={s}>{s}</option>)}</select></label>
-        <label>From <input type="date" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} /></label>
-        <label>To <input type="date" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} /></label>
-        <label>Booking code or transaction ID <input type="search" maxLength={100} value={form.q} onChange={(e) => setForm({ ...form, q: e.target.value })} /></label>
-        <button className="admin-row-action" type="submit">Search</button>
+      <form className="admin-filter-bar admin-toolbar" aria-label="Filter payments" onSubmit={submit}>
+        <label className="admin-toolbar-search"><span className="sr-only">Search booking code or transaction ID</span><AdminIcon name="search" className="size-4" /><input className="field" type="search" placeholder="Booking code or transaction ID" maxLength={100} value={form.q} onChange={(e) => setForm({ ...form, q: e.target.value })} /></label>
+        <div className="admin-toolbar-row">
+          <label className="admin-toolbar-control">Status<select className="field" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="">All statuses</option>{["PENDING", "SUCCESS", "FAILED"].map((s) => <option key={s}>{s}</option>)}</select></label>
+          <label className="admin-toolbar-control">Method<select className="field" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}><option value="">All methods</option>{["CASH", "VNPAY", "MOMO", "CARD"].map((s) => <option key={s}>{s}</option>)}</select></label>
+          <div className="admin-toolbar-dates">
+            <label className="admin-toolbar-control">From<input className="field" type="date" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} /></label>
+            <label className="admin-toolbar-control">To<input className="field" type="date" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} /></label>
+          </div>
+          <div className="admin-filter-actions"><button className="btn-primary admin-toolbar-primary" type="submit">Search</button><button className="admin-toolbar-ghost" type="button" onClick={() => { setForm(initial); setFilters(initial); setError(null); }}>Reset</button></div>
+        </div>
       </form>
-      {error && <p role="alert" className="p-4">{error}</p>}
-      {notice && <p role="status" className="p-4">{notice}</p>}
+      {error && <p role="alert" className="admin-notice">{error}</p>}
+      {notice && <p role="status" className="admin-refresh">{notice}</p>}
       {!data && !error ? <AdminTableSkeleton label="Loading payments…" embedded /> : data && data.content.length === 0 ? <AdminEmptyState title="No payments found" /> : data && <AdminTableRegion label="Payments">
-        <table className="w-full text-left text-sm"><thead><tr>{["Time", "Booking", "Amount", "Method", "Status", "Provider transaction", "Actions"].map((s) => <th className="px-3 py-2" key={s}>{s}</th>)}</tr></thead>
+        <table className="admin-payments-table w-full text-left text-sm"><thead><tr>{["Time", "Booking", "Amount", "Method", "Status", "Provider transaction", "Actions"].map((s) => <th className={s === "Amount" ? "text-right" : ""} key={s}>{s}</th>)}</tr></thead>
           <tbody className="divide-y divide-line">{data.content.map((p) => <tr key={p.id}>
-            <td className="px-3 py-3">{formatDate(p.createdAt)} {p.createdAt.slice(11, 16)}</td><td className="px-3 py-3">{p.bookingCode}</td><td className="px-3 py-3">{formatPrice(p.amount)}</td><td className="px-3 py-3">{p.method}</td><td className="px-3 py-3">{p.status}</td><td className="px-3 py-3">{p.providerTransactionId || "—"}</td>
-            <td className="px-3 py-3"><Link className="admin-row-action" href={`/account/bookings/${p.bookingId}`}>Open booking</Link> {p.status === "PENDING" && p.method === "VNPAY" && <button className="admin-row-action" disabled={pending !== null} onClick={() => void reconcile(p.id)}>{pending === p.id ? "Reconciling…" : "Reconcile with VNPay"}</button>}</td>
+            <td className="whitespace-nowrap"><span className="block">{formatDate(p.createdAt)}</span><span className="block text-xs text-muted">{p.createdAt.slice(11, 16)}</span></td>
+            <td className="whitespace-nowrap font-medium">{p.bookingCode}</td><td className="whitespace-nowrap text-right tabular-nums">{formatPrice(p.amount)}</td><td className="whitespace-nowrap">{p.method}</td>
+            <td><AdminStatusBadge tone={p.status === "SUCCESS" ? "positive" : p.status === "PENDING" ? "warning" : p.status === "FAILED" ? "danger" : "neutral"}>{p.status}</AdminStatusBadge></td>
+            <td>{p.providerTransactionId ? <div className="admin-identifier"><span title={p.providerTransactionId} tabIndex={0}>{p.providerTransactionId}</span><button type="button" className="admin-copy-action" aria-label={`Copy transaction ID ${p.providerTransactionId}`} title="Copy transaction ID" onClick={() => void copyTransaction(p.providerTransactionId!)}><AdminIcon name="copy" className="size-4" /></button></div> : "—"}</td>
+            <td><div className="flex items-center gap-2 whitespace-nowrap"><Link className="admin-row-action" href={`/account/bookings/${p.bookingId}`} aria-label={`Open booking ${p.bookingCode}`}><AdminIcon name="eye" className="size-4" /> <span>Open</span></Link> {p.status === "PENDING" && p.method === "VNPAY" && <button className="admin-row-action" disabled={pending !== null} onClick={() => void reconcile(p.id)}>{pending === p.id ? "Reconciling…" : "Reconcile"}</button>}</div></td>
           </tr>)}</tbody></table>
       </AdminTableRegion>}
-      {data && <div className="flex items-center justify-between p-4"><button className="admin-row-action" disabled={filters.page === 0} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous</button><span>Page {filters.page + 1} of {Math.max(1, data.totalPages)} · {data.totalElements} payments</span><button className="admin-row-action" disabled={!data.hasNext} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next</button></div>}
+      {data && <div className="admin-pagination"><button className="admin-row-action" disabled={filters.page === 0} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous</button><span className="text-sm text-muted">Page {filters.page + 1} of {Math.max(1, data.totalPages)} · {data.totalElements} payments</span><button className="admin-row-action" disabled={!data.hasNext} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next</button></div>}
     </AdminListPanel>
   </div>;
 }

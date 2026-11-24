@@ -38,6 +38,17 @@ export function AdminListPanel({ children, busy = false }: { children: ReactNode
   );
 }
 
+export function AdminPagination({ page, totalPages, totalElements, hasNext, loading, onPageChange }: {
+  page: number; totalPages: number; totalElements: number; hasNext: boolean;
+  loading: boolean; onPageChange: (page: number) => void;
+}) {
+  return <nav className="admin-pagination" aria-label="Pagination">
+    <button type="button" className="admin-row-action" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)}>Previous</button>
+    <p className="text-center text-sm text-muted" aria-live="polite">Page {page + 1} of {Math.max(1, totalPages)} · {totalElements} total</p>
+    <button type="button" className="admin-row-action" disabled={!hasNext || loading} onClick={() => onPageChange(page + 1)}>Next</button>
+  </nav>;
+}
+
 export function AdminFormSection({ title, description, children }: {
   title: string;
   description?: string;
