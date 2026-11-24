@@ -15,9 +15,9 @@ Open `http://localhost:3000`.
 
 ```powershell
 npm run lint
-npx tsc --noEmit
 npm test
-npm run build
+npm run build        # production build (also type-checks)
+npx tsc --noEmit     # optional; run after build/dev so generated types exist
 npm start
 ```
 
@@ -69,6 +69,8 @@ enforces the role):
 - `/admin/invoices`, `/admin/invoices/[bookingId]` — invoice list and printable detail.
 - `/admin/catalog` — accommodations, guides, vehicles, destinations and tour images.
 - `/admin/tours` — tours and departures, including the guide-overlap guard.
+- `/admin/departures/[id]/passengers` — passenger manifest for one departure, with print and CSV
+  export.
 
 ## Design
 

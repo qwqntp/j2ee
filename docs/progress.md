@@ -1,5 +1,11 @@
 # Progress — Tour Booking System
 
+## Admin passenger, payment and customer screens (2026-11-24)
+
+- Added passenger manifest with print and client-side CSV; payment search and VNPay reconciliation;
+  customer search and read-only booking history. See `docs/admin/task-admin-screens-result.md` for
+  verification, shared-file changes and outstanding limitations.
+
 Updated: 2026-11-07 (Asia/Ho_Chi_Minh)
 
 ## Status

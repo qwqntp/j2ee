@@ -35,6 +35,8 @@ cp .env.example .env        # Windows: copy .env.example .env
 Notes:
 
 - `.env` uses **Java properties syntax** (`KEY=value`), not shell `export` syntax.
+- Replace the `change-me` placeholders in the copied file. If you leave a datasource line out,
+  the default from `application.properties` applies (`postgres`/`postgres` locally).
 - OS environment variables override values from `.env`; command-line arguments override both.
 - Never commit `.env` (ignored by [`../.gitignore`](../.gitignore)).
 - There are no production Spring profiles. Tests activate the `test` profile with
@@ -171,7 +173,8 @@ cd tour
 ## Build
 
 ```bash
-./mvnw package
+./mvnw package                 # runs the full test suite (needs PostgreSQL)
+./mvnw -DskipTests package     # build the jar without tests
 java -jar target/tour-0.0.1-SNAPSHOT.jar
 ```
 

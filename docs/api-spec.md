@@ -1026,3 +1026,26 @@ amount from the booking. Response:
 - Database-backed tests were rerun against an isolated PostgreSQL instance for this change; a
   separate live VNPay Sandbox round trip still requires real merchant credentials and public
   HTTPS ingress.
+
+## Admin passenger, payment and customer screens
+
+All endpoints below require `ROLE_ADMIN` and use the standard response/error envelopes.
+
+- `GET /api/admin/departures/{id}/passengers` returns `departureId`, `tourName`, `startDate`,
+  `capacity`, `booked`, `remaining` and `passengers`. Each passenger has `fullName`, `phone`,
+  `email`, `dateOfBirth`, `gender`, `idDocument`, `bookingId`, `bookingCode`, `bookingStatus`
+  and `contactNote`. Cancelled bookings are excluded. Bookings without traveler rows contribute
+  to booked seats but have no passenger row.
+- `GET /api/admin/payments` returns a `PageResponse`, newest first, with optional `status`
+  (`PENDING`, `SUCCESS`, `FAILED`), `method` (`CASH`, `VNPAY`, `MOMO`, `CARD`), `from`, `to`
+  (inclusive dates), and `q` (booking code or provider transaction ID). Page size is capped at 50.
+- `POST /api/admin/payments/{id}/reconcile` takes no body. Only a pending managed VNPay attempt
+  is eligible; a non-pending or unmanaged payment returns 409. It uses the existing signed QueryDr
+  verification and returns the same result fields as customer reconciliation. A provider error or
+  unresolved answer does not imply settlement.
+- `GET /api/admin/customers?q=...&page=0&size=10` searches customer name, email and phone and
+  returns a `PageResponse`; page size is capped at 50. Profile details use the existing
+  `GET /api/customers/{id}` admin endpoint.
+- `GET /api/admin/customers/{id}/bookings?page=0&size=10` returns paginated `id`, `code`,
+  `tourName`, `status`, and `total`, newest first; page size is capped at 50. Customers without
+  an associated account have no associated bookings.
