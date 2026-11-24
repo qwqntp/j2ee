@@ -317,6 +317,6 @@ Frontend:
 Docs:
 
 - `docs/api-spec.md`
-- `docs/task-g2-fix-report.md` (this report)
+- `docs/archive/task-g2-fix-report.md` (this report)
 
 No commit or push was performed.

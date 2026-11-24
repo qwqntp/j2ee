@@ -38,7 +38,7 @@
 | Web | `tour/src/main/java/com/j2ee/tour/controller/VnpayPaymentController.java`, `tour/src/main/java/com/j2ee/tour/security/SecurityConfig.java`, `tour/src/main/java/com/j2ee/tour/dto/response/VnpayStartResponse.java`, `VnpayStatusResponse.java` | Route permissions, request/response shape, sanitized failures |
 | Checkout | `fe-tour/lib/api.ts`, `fe-tour/lib/types.ts`, `fe-tour/lib/vnpay.ts`, `fe-tour/components/payment-form.tsx`, `fe-tour/components/trip-detail.tsx`, `fe-tour/app/payment/page.tsx` | API calls and guarded redirects from new or existing bookings |
 | Browser return | `fe-tour/app/payment/vnpay-return/page.tsx`, `fe-tour/components/vnpay-return.tsx`, `fe-tour/lib/vnpay.ts` | Signed return, status, reauthentication and navigation |
-| Docs | `docs/api-spec.md`, `docs/task-g2-report.md` | API, deployment, verification evidence and manual checklist |
+| Docs | `docs/api-spec.md`, `docs/archive/task-g2-report.md` | API, deployment, verification evidence and manual checklist |
 
 Task order: protocol → payment lifecycle → HTTP contract → checkout → browser return → full verification. Check the backend contract and focused Maven tests before moving to frontend work; check the two frontend paths together before full verification.
 
@@ -100,10 +100,10 @@ Task order: protocol → payment lifecycle → HTTP contract → checkout → br
 
 ### Task 6: Verify and document what actually ran
 
-**Files:** Update `docs/api-spec.md`; create `docs/task-g2-report.md`.
+**Files:** Update `docs/api-spec.md`; create `docs/archive/task-g2-report.md`.
 
 - [ ] From the dotenv-free backend copy, run `.\mvnw.cmd test` if a loopback-isolated PostgreSQL instance is available. Check actual run/failure/error/skip totals. If unavailable, run `.\mvnw.cmd "-Dtest=*Test" test`, confirm which DB-backed classes were excluded, and report them. Do not read raw logs if they can contain sensitive requests.
 - [ ] From the dotenv-free frontend copy, run `npm.cmd run lint`, `npx.cmd tsc --noEmit`, `npm.cmd test`, and `npm.cmd run build`. Regenerate framework types in that copy if needed; verify the build actually emits `/payment/vnpay-return`.
 - [ ] Update `docs/api-spec.md`: endpoint methods/auth/payloads and response states; IPN verification order and `RspCode`s; same booking lock and safe retry policy; public HTTPS IPN registration and path/query log redaction; the localhost browser return; remove contradictory historical/current claims.
 - [ ] Run `git diff --check` on in-scope non-dotenv paths and inspect relevant source changes for leakage or uncommitted G1 overwrites. Use review and verification skills as applicable; no commits or pushes.
-- [ ] Write `docs/task-g2-report.md` with modified files, complete flow, migration decision, security choices, actual checks, and a manual Sandbox checklist (owner checkout, return/IPN ordering, cancelled/expired, unauthorized/invalid and duplicate, expired session, invoices, missing IPN/reconciliation). State explicitly whether an actual Sandbox payment was performed.
+- [ ] Write `docs/archive/task-g2-report.md` with modified files, complete flow, migration decision, security choices, actual checks, and a manual Sandbox checklist (owner checkout, return/IPN ordering, cancelled/expired, unauthorized/invalid and duplicate, expired session, invoices, missing IPN/reconciliation). State explicitly whether an actual Sandbox payment was performed.

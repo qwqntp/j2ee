@@ -1,6 +1,6 @@
 # Danh sách chức năng hiện có
 
-> Cập nhật: 23/11/2026  
+> Cập nhật: 24/11/2026  
 > Phạm vi: `tour/` (Spring Boot API) và `fe-tour/` (Next.js UI).  
 > Nguồn: controller, route, component và migration hiện tại.
 

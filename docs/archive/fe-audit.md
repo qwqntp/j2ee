@@ -2,7 +2,7 @@
 
 > Date: 2026-11-14
 > Scope: end-user surfaces in `fe-tour/`. Backend reference: `tour/src/main/java/com/j2ee/tour/controller/`
-> and `docs/task-b1-report.md`, `docs/task-b2-report.md`, `docs/feature-audit.md`.
+> and `docs/archive/task-b1-report.md`, `docs/archive/task-b2-report.md`, `docs/feature-audit.md`.
 >
 > Status legend: **exists** = complete for the F1 acceptance criteria; **partial** = useful code
 > exists but a required part is missing or behaves differently; **missing** = no UI.
