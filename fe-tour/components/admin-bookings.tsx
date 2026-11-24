@@ -14,6 +14,7 @@ import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { statusLabel } from "@/lib/bookings";
 import {
   buildBookingListQuery,
@@ -499,12 +500,14 @@ export function AdminBookings() {
                           <button
                             type="button"
                             aria-expanded={expanded}
+                            aria-label={`${expanded ? "Hide" : "View"} details for booking ${booking.bookingCode}`}
+                            title={expanded ? "Hide details" : "View details"}
                             onClick={() =>
                               setExpandedId((current) => (current === booking.id ? null : booking.id))
                             }
-                            className="admin-row-action"
+                            className={adminActionStyles.view}
                           >
-                            {expanded ? "Hide details" : "Details"}
+                            <AdminIcon name="eye" className="size-4" />
                           </button>
                           {booking.status === "PENDING" ? (
                             <button

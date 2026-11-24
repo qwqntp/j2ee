@@ -2,12 +2,11 @@
 
 import { useEffect, useId, useRef } from "react";
 import { AdminIcon } from "./admin-icons";
+import { adminActionStyles } from "./admin-action-styles";
 import { AdminStatusBadge } from "./admin-ui";
 import { accountStatusLabel } from "../../lib/admin-accounts";
 import { formatDate } from "../../lib/format";
 import type { AdminAccount } from "../../lib/types";
-
-const actionClass = "inline-flex size-11 cursor-pointer items-center justify-center rounded-lg border border-current bg-white transition-colors hover:border-transparent hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white";
 
 export function AdminAccountRow({ account, protectedAdmin, deleting, onDetails, onEdit, onDelete }: {
   account: AdminAccount;
@@ -25,15 +24,15 @@ export function AdminAccountRow({ account, protectedAdmin, deleting, onDetails, 
     </AdminStatusBadge></td>
     <td><div className="flex items-center justify-center gap-2 whitespace-nowrap">
       <button type="button" aria-label={`View ${account.username} details`} title="View details"
-        className={`${actionClass} text-[#0084ff] hover:bg-[#0084ff]`} onClick={onDetails}>
+        className={adminActionStyles.view} onClick={onDetails}>
         <AdminIcon name="eye" className="size-4" />
       </button>
       <button type="button" aria-label={`Edit ${account.username}`} title="Edit"
-        className={`${actionClass} text-charcoal hover:bg-charcoal`} onClick={onEdit}>
+        className={adminActionStyles.edit} onClick={onEdit}>
         <AdminIcon name="edit" className="size-4" />
       </button>
       <button type="button" aria-label={`Delete ${account.username}`}
-        className={`${actionClass} text-red-800 hover:bg-red-800 disabled:hover:text-red-800`}
+        className={adminActionStyles.delete}
         disabled={protectedAdmin || deleting}
         title={protectedAdmin ? "The final active administrator cannot be deleted." : "Delete"} onClick={onDelete}>
         <AdminIcon name="delete" className="size-4" />

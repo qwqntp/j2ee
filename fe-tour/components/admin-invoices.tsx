@@ -12,6 +12,7 @@ import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { createDebouncedCommit, resetAdminPage } from "@/lib/booking-list";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { AdminInvoiceListItem, AdminListSort } from "@/lib/types";
@@ -287,9 +288,11 @@ export function AdminInvoices() {
                   <td className="px-4 py-4">
                     <Link
                       href={`/admin/invoices/${invoice.bookingId}`}
-                      className="admin-row-action"
+                      className={adminActionStyles.view}
+                      aria-label={`View invoice for booking ${invoice.bookingId}`}
+                      title="View invoice"
                     >
-                      View
+                      <AdminIcon name="eye" className="size-4" />
                     </Link>
                   </td>
                 </tr>

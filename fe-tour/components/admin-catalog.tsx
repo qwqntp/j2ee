@@ -33,6 +33,7 @@ import { AdminFormSkeleton, AdminTableSkeleton } from "@/components/admin/admin-
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import type {
   AccommodationInput,
   AdminTour,
@@ -502,17 +503,19 @@ export function AdminCatalog() {
                       <button
                         type="button"
                         onClick={() => startEdit(row)}
-                        className="admin-row-action"
+                        className={adminActionStyles.edit}
+                        aria-label={`Edit record ${row.id}`} title="Edit"
                       >
-                         <AdminIcon name="edit" className="size-4" /> Edit
+                         <AdminIcon name="edit" className="size-4" />
                       </button>
                       <button
                         type="button"
                          disabled={deleting}
                          onClick={() => setRowToDelete(row)}
-                         className="admin-danger-action"
+                         className={adminActionStyles.delete}
+                         aria-label={`Delete record ${row.id}`} title="Delete"
                       >
-                         <AdminIcon name="delete" className="size-4" /> Delete
+                         <AdminIcon name="delete" className="size-4" />
                        </button>
                     </div>
                   </td>

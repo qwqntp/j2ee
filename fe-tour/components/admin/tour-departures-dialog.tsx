@@ -5,6 +5,7 @@ import { useAdminAccess } from "@/components/admin-gate";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { AdminFormActions, AdminFormSection, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { ApiError, createDeparture, deleteDeparture, updateDeparture } from "@/lib/api";
 import { formatDateRange, formatPrice } from "@/lib/format";
@@ -139,11 +140,13 @@ export function TourDeparturesDialog({ tour, loading, loadError, onDismiss, onRe
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
                         <a className="admin-row-action" href={`/admin/departures/${departure.id}/passengers`}>Passengers</a>
-                        <button type="button" onClick={() => startEdit(departure)} className="admin-row-action">
-                          <AdminIcon name="edit" className="size-4" /> Edit
+                        <button type="button" onClick={() => startEdit(departure)} className={adminActionStyles.edit}
+                          aria-label={`Edit departure ${departure.id}`} title="Edit">
+                          <AdminIcon name="edit" className="size-4" />
                         </button>
-                        <button type="button" disabled={deletingId === departure.id} onClick={() => setToDelete(departure)} className="admin-danger-action">
-                          <AdminIcon name="delete" className="size-4" /> Delete
+                        <button type="button" disabled={deletingId === departure.id} onClick={() => setToDelete(departure)} className={adminActionStyles.delete}
+                          aria-label={`Delete departure ${departure.id}`} title="Delete">
+                          <AdminIcon name="delete" className="size-4" />
                         </button>
                       </div>
                     </td>

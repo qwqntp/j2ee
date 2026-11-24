@@ -14,6 +14,7 @@ import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, Ad
 import { lastAvailablePage } from "@/lib/admin-pagination";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import type {
   AdminTour,
   TourInput,
@@ -331,9 +332,10 @@ export function AdminTours() {
                       <button
                         type="button"
                         onClick={() => startEdit(tour)}
-                        className="admin-row-action"
+                        className={adminActionStyles.edit}
+                        aria-label={`Edit ${tour.name}`} title="Edit"
                       >
-                        <AdminIcon name="edit" className="size-4" /> Edit
+                        <AdminIcon name="edit" className="size-4" />
                       </button>
                       <button
                         type="button"

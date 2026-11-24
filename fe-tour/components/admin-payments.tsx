@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { ApiError, listAdminPayments, reconcileAdminPayment } from "@/lib/api";
 import { buildPaymentQuery, type AdminPayment, type PaymentFilters } from "@/lib/admin-payments";
@@ -91,7 +92,7 @@ export function AdminPayments() {
             <td className="whitespace-nowrap font-medium">{p.bookingCode}</td><td className="whitespace-nowrap text-right tabular-nums">{formatPrice(p.amount)}</td><td className="whitespace-nowrap">{p.method}</td>
             <td><AdminStatusBadge tone={p.status === "SUCCESS" ? "positive" : p.status === "PENDING" ? "warning" : p.status === "FAILED" ? "danger" : "neutral"}>{p.status}</AdminStatusBadge></td>
             <td>{p.providerTransactionId ? <div className="admin-identifier"><span title={p.providerTransactionId} tabIndex={0}>{p.providerTransactionId}</span><button type="button" className="admin-copy-action" aria-label={`Copy transaction ID ${p.providerTransactionId}`} title="Copy transaction ID" onClick={() => void copyTransaction(p.providerTransactionId!)}><AdminIcon name="copy" className="size-4" /></button></div> : "—"}</td>
-            <td><div className="flex items-center gap-2 whitespace-nowrap"><Link className="admin-row-action" href={`/account/bookings/${p.bookingId}`} aria-label={`Open booking ${p.bookingCode}`}><AdminIcon name="eye" className="size-4" /> <span>Open</span></Link> {p.status === "PENDING" && p.method === "VNPAY" && <button className="admin-row-action" disabled={pending !== null} onClick={() => void reconcile(p.id)}>{pending === p.id ? "Reconciling…" : "Reconcile"}</button>}</div></td>
+            <td><div className="flex items-center gap-2 whitespace-nowrap"><Link className={adminActionStyles.view} href={`/account/bookings/${p.bookingId}`} aria-label={`Open booking ${p.bookingCode}`} title="Open booking"><AdminIcon name="eye" className="size-4" /></Link> {p.status === "PENDING" && p.method === "VNPAY" && <button className="admin-row-action" disabled={pending !== null} onClick={() => void reconcile(p.id)}>{pending === p.id ? "Reconciling…" : "Reconcile"}</button>}</div></td>
           </tr>)}</tbody></table>
       </AdminTableRegion>}
       {data && <div className="admin-pagination"><button className="admin-row-action" disabled={filters.page === 0} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous</button><span className="text-sm text-muted">Page {filters.page + 1} of {Math.max(1, data.totalPages)} · {data.totalElements} payments</span><button className="admin-row-action" disabled={!data.hasNext} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next</button></div>}

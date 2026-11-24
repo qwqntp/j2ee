@@ -15,6 +15,7 @@ import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { formatPrice } from "@/lib/format";
 import {
   filterPromotions,
@@ -499,17 +500,19 @@ export function AdminPromotions() {
                         <button
                           type="button"
                           onClick={() => startEdit(promotion)}
-                          className="admin-row-action"
+                          className={adminActionStyles.edit}
+                          aria-label={`Edit ${promotion.name}`} title="Edit"
                         >
-                           <AdminIcon name="edit" className="size-4" /> Edit
+                           <AdminIcon name="edit" className="size-4" />
                         </button>
                         <button
                           type="button"
                           disabled={busy || togglingId === promotion.id}
                            onClick={() => setPromotionToDelete(promotion)}
-                           className="admin-danger-action"
+                           className={adminActionStyles.delete}
+                           aria-label={`Delete ${promotion.name}`} title="Delete"
                         >
-                           <AdminIcon name="delete" className="size-4" /> Delete
+                           <AdminIcon name="delete" className="size-4" />
                         </button>
                       </div>
                     </td>
