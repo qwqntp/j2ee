@@ -226,8 +226,8 @@ under `anyRequest().authenticated()`.
   `@MockitoBean ProfileService`, real cookie stubbing, profile/password security cases.
 - `tour/src/test/java/com/j2ee/tour/service/AuthServiceTest.java` — 6 change-password tests.
 - `tour/src/test/java/com/j2ee/tour/security/RateLimitFilterTest.java` — change-password bucket test.
-- `docs/task-b2-plan-review.md` — pre-implementation review (already present).
-- `docs/task-b2-report.md` — this report.
+- `docs/archive/task-b2-plan-review.md` — pre-implementation review (already present).
+- `docs/archive/task-b2-report.md` — this report.
 
 ---
 

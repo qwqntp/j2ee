@@ -10,7 +10,7 @@
 | Phase | Result |
 |---|---|
 | 0 — destinations endpoint | Added public `GET /api/tours/destinations`, repository/service/controller, 2 controller tests, API spec |
-| 1 — frontend audit | `docs/fe-audit.md` written against the real controllers |
+| 1 — frontend audit | `docs/archive/fe-audit.md` written against the real controllers |
 | 2 — tour filters + sort | New filter form, URL state, destination dropdown, backend 400 surface, cache boundary |
 | 3 — real booking form | Per-traveler manifest, promotion code, server-priced totals, 400 inline / 409 banner, redirect to order |
 | 4 — my orders | `/account/bookings` list and `/account/bookings/[id]` detail with cancel + 409 handling |
@@ -49,7 +49,7 @@ the literal `/destinations` mapping ahead of `/{id}`.
 
 ## Phase 1 — audit
 
-`docs/fe-audit.md` records, per feature, what existed, what was missing, and which backend endpoint
+`docs/archive/fe-audit.md` records, per feature, what existed, what was missing, and which backend endpoint
 covers it. Headline findings:
 
 - Filters were missing entirely (the page sent only `keyword`/`page`).

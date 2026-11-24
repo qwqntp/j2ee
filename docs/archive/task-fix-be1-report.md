@@ -243,7 +243,7 @@ Response: `PageResponse<AdminInvoiceListItem>`.
 1. The Next.js security advisory that blocked the 16.4.3 build was resolved by the 16.4.6 upgrade in section 11. The build now exits 0.
 2. Post-change browser measurements and request-count acceptance are unmeasured because the paired browser was offline.
 3. `VnpayPaymentIntegrationTests.lateContradictoryIpnDoesNotWaitOnTheDepartureLock` remains failing for the timing reason described above.
-4. `docs/skills.md` is an untouched, pre-existing untracked file and was not modified by this task.
+4. `docs/archive/skills.md` is an untouched, pre-existing untracked file and was not modified by this task.
 
 ## 10. Repository state
 

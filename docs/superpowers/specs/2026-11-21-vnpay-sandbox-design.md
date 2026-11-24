@@ -123,7 +123,7 @@ responses are not cacheable.
   files or leaking output containing secret data. Add frontend tests for return status,
   session-context recovery and API request shape, and run lint, typecheck, full test suites
   where available, and production build. Report any unavailable checks accurately.
-- Update `docs/api-spec.md` and write `docs/task-g2-report.md` with actual results and a manual
+- Update `docs/api-spec.md` and write `docs/archive/task-g2-report.md` with actual results and a manual
   checklist. Backend payment URL settings remain `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`,
   `VNPAY_PAY_URL`, and `VNPAY_RETURN_URL`. VNPay must separately register the public HTTPS
   IPN ingress address; the local browser-return URL is not an IPN address. No genuine Sandbox

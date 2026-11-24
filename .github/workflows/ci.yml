@@ -1,0 +1,64 @@
+# Continuous integration: checks only, no deployment and no secrets.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests (no database)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tour
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Unit, Mockito and @WebMvcTest classes only. *IntegrationTests and
+      # TourApplicationTests need a real PostgreSQL, so they are excluded.
+      # `bash` avoids relying on the executable bit of the committed wrapper.
+      - name: Run backend tests
+        run: bash ./mvnw -B "-Dtest=!*IntegrationTests,!TourApplicationTests" test
+
+  frontend:
+    name: Frontend lint, tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fe-tour
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: fe-tour/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # package.json has no typecheck script; `next build` type-checks.
+      - run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Harmless placeholders; nothing is deployed from CI.
+          API_URL: http://localhost:8080
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ci-placeholder.apps.googleusercontent.com

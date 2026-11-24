@@ -34,7 +34,7 @@ Changed files:
 - `tour/src/test/java/com/j2ee/tour/service/ProfileServiceTest.java`
 - `tour/src/test/java/com/j2ee/tour/service/BookingServiceTest.java`
 - `tour/src/test/java/com/j2ee/tour/service/TourDepartureCancelCascadeTest.java`
-- `docs/task-mail-report.md` (this file)
+- `docs/archive/task-mail-report.md` (this file)
 
 ---
 

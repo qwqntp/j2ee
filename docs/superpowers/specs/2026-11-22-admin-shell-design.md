@@ -60,4 +60,4 @@ In a browser, navigate through all seven top-level sections and the nested invoi
 - **Ask first:** Adding dependencies or changing authentication or payment behavior.
 - **Never:** Modify Spring Boot, read or modify `.env` files or secrets, perform real payments during verification, or commit, push, or run destructive Git commands without permission.
 - **Out of scope:** New management modules, standalone create/edit routes, new metrics, and public-site redesign.
-- **Deliverable:** Record implemented changes, covered routes, test results, and verification limitations in `docs/task-fe1-report.md` after the work is finished.
+- **Deliverable:** Record implemented changes, covered routes, test results, and verification limitations in `docs/archive/task-fe1-report.md` after the work is finished.

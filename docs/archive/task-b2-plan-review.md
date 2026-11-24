@@ -104,7 +104,7 @@ Other required detail:
 - **Missing filter cases:** tour with **no departures** appears unfiltered and last in `priceAsc` / `priceDesc` / `dateAsc`; excluded by price/date filters; **included** when only `minDays` is set; one-departure-satisfies-all-prices semantics; `startTo` inclusive end-of-day; `minPrice > maxPrice` → 400; unknown `sort` → 400; page-count correctness (`totalElements`) with a destination filter.
 - **Change password:** wrong current → chosen status; same-as-current → 400; 72-byte boundary; two refresh tokens before the change — both revoked after, new one works; old password login fails, new succeeds; `accountUpdatedAt` advanced (use a fixed `Clock` in the unit test).
 - **Profile:** create-when-missing; update existing; duplicate email → 409 (and the DB-index race path); email unchanged-case → no `emailVerified` reset; future `dateOfBirth` → 400; `name` blank → 400; `accountId` in the body is ignored/unknown.
-- **Baseline first.** Capture the current suite numbers before touching code. `task-b1-report.md` says 133 with DB; `task-b3-report.md` could not run the DB tests. The final report must state what actually executed, not just "counts".
+- **Baseline first.** Capture the current suite numbers before touching code. `docs/archive/task-b1-report.md` says 133 with DB; `docs/task-b3-report.md` could not run the DB tests. The final report must state what actually executed, not just "counts".
 
 ---
 
@@ -137,7 +137,7 @@ Other required detail:
 
 **Part 3:** `AuthController` (new method), `AuthService.changePassword`, `dto/request/ChangePasswordRequest`, `RateLimitFilter`, `RateLimitFilterTest`, `SecurityConfigTest`, `AuthServiceTest`, plus integration coverage.
 
-**Docs:** `docs/task-b2-report.md`.
+**Docs:** `docs/archive/task-b2-report.md`.
 
 No new dependencies, no `fe-tour/` edits, no migration.
 

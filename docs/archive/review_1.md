@@ -851,7 +851,7 @@ git commit -m "perf: optimize local editorial images with next/image"
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/review_1.md`. Please review it. Which execution approach would you prefer?
+Plan complete and saved to `docs/archive/review_1.md`. Please review it. Which execution approach would you prefer?
 
 - **Subagent-driven** — a fresh subagent implements each task and a fresh reviewer checks it before the next one starts. Best when the schema task is likely to need back-and-forth and you want each diff reviewed in isolation.
 - **Native** — I implement every task in this session, then one fresh reviewer checks the whole branch. Cheapest and fastest; the plan carries the design.
