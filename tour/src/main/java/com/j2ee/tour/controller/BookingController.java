@@ -111,6 +111,15 @@ public class BookingController {
         return ResponseEntity.ok(ApiResponse.success(bookingService.cancel(id, principal)));
     }
 
+    @PostMapping("/{id}/refund-request")
+    @Operation(summary = "Cancel a paid booking and reserve a refund",
+            description = "Owner or admin. Reserves a REQUESTED refund per successful payment.")
+    public ResponseEntity<ApiResponse<BookingResponse>> requestRefund(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(bookingService.requestRefund(id, principal)));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable Long id,

@@ -1,11 +1,13 @@
 export const ADMIN_SECTIONS = [
   { href: "/admin", label: "Dashboard", icon: "dashboard" },
   { href: "/admin/bookings", label: "Bookings & payments", icon: "bookings" },
+  { href: "/admin/refunds", label: "Refunds", icon: "revenue" },
   { href: "/admin/accounts", label: "Accounts", icon: "accounts" },
   { href: "/admin/promotions", label: "Promotions", icon: "promotions" },
   { href: "/admin/invoices", label: "Invoices", icon: "invoices" },
   { href: "/admin/catalog", label: "Catalog", icon: "catalog" },
   { href: "/admin/tours", label: "Tours & departures", icon: "tours" },
+  { href: "/admin/ratings", label: "Ratings", icon: "search" },
 ] as const;
 
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];

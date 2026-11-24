@@ -12,6 +12,7 @@ public record TourRatingResponse(
         Long bookingId,
         Integer rating,
         String comment,
+        String status,
         LocalDateTime createdAt
 ) {
     public static TourRatingResponse from(TourRating rating) {
@@ -23,6 +24,7 @@ public record TourRatingResponse(
                 rating.getBooking().getBookingId(),
                 rating.getRatingValue(),
                 rating.getRatingComment(),
+                rating.getRatingStatus(),
                 rating.getRatingCreatedAt()
         );
     }

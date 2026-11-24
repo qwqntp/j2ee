@@ -15,6 +15,7 @@ import {
 } from "@/components/icons";
 import { TourDetailSkeleton } from "@/components/skeleton";
 import { TourImage } from "@/components/tour-image";
+import { TourRatings } from "@/components/tour-ratings";
 import { ApiError } from "@/lib/api";
 import {
   formatDate,
@@ -325,6 +326,10 @@ async function TourDetailContent({ params }: Props) {
             </p>
           </div>
         </aside>
+      </section>
+
+      <section className="shell pb-16">
+        <TourRatings tourId={tour.id} />
       </section>
 
       <section id="departures" className="border-t border-line bg-white/50">

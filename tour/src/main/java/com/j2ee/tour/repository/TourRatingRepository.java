@@ -9,11 +9,11 @@ import org.springframework.data.repository.query.Param;
 
 public interface TourRatingRepository extends JpaRepository<TourRating, Long> {
 
-    Page<TourRating> findByTourTourId(Long tourId, Pageable pageable);
+    Page<TourRating> findByTourTourIdAndRatingStatus(Long tourId, String status, Pageable pageable);
 
     boolean existsByBookingBookingId(Long bookingId);
 
     @Query("select avg(rating.ratingValue) from TourRating rating "
-            + "where rating.tour.tourId = :tourId")
-    Double averageRating(@Param("tourId") Long tourId);
+            + "where rating.tour.tourId = :tourId and rating.ratingStatus = 'APPROVED'")
+    Double averageRatingApproved(@Param("tourId") Long tourId);
 }

@@ -49,7 +49,7 @@ class TourRatingControllerTest {
     @Test
     void listReturnsAverageAndPage() throws Exception {
         TourRatingResponse rating = new TourRatingResponse(
-                7L, 1L, 2L, "traveler", 30L, 5, "Great", LocalDateTime.of(2026, 11, 7, 10, 0));
+                7L, 1L, 2L, "traveler", 30L, 5, "Great", "APPROVED", LocalDateTime.of(2026, 11, 7, 10, 0));
         TourRatingPageResponse page = new TourRatingPageResponse(
                 List.of(rating), 0, 20, 1, 1, true, false, false,
                 new BigDecimal("5.00"), 1);
@@ -64,7 +64,7 @@ class TourRatingControllerTest {
     @Test
     void createReturnsCreatedRating() throws Exception {
         TourRatingResponse rating = new TourRatingResponse(
-                7L, 1L, 2L, "traveler", 30L, 5, "Great", LocalDateTime.of(2026, 11, 7, 10, 0));
+                7L, 1L, 2L, "traveler", 30L, 5, "Great", "APPROVED", LocalDateTime.of(2026, 11, 7, 10, 0));
         when(ratingService.create(eq(1L), any(), any())).thenReturn(rating);
 
         mockMvc.perform(post("/api/tours/1/ratings")

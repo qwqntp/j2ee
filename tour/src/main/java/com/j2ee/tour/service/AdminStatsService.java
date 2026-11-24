@@ -1,5 +1,6 @@
 package com.j2ee.tour.service;
 
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.dto.response.AdminStatsResponse;
 import com.j2ee.tour.repository.BookingRepository;
 import com.j2ee.tour.repository.PaymentRepository;
@@ -7,12 +8,14 @@ import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TourRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -36,17 +39,38 @@ public class AdminStatsService {
     private final Clock clock;
 
     public AdminStatsResponse stats() {
+        return build(null, null);
+    }
+
+    public AdminStatsResponse stats(LocalDate from, LocalDate to) {
+        if (from == null || to == null || from.isAfter(to)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "from must be on or before to");
+        }
+        return build(from, to);
+    }
+
+    private AdminStatsResponse build(LocalDate fromDate, LocalDate toDate) {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime from = now;
         LocalDateTime to = now.plusDays(WINDOW_DAYS);
+        LocalDateTime paymentFrom = fromDate == null ? from : fromDate.atStartOfDay();
+        LocalDateTime paymentTo = toDate == null ? to
+                : toDate.plusDays(1).atStartOfDay().minusNanos(1);
 
         Map<String, Long> bookingsByStatus = new HashMap<>();
         for (String status : BOOKING_STATUSES) {
             bookingsByStatus.put(status, bookingRepository.countByBookingStatus(status));
         }
 
-        long successfulPayments = paymentRepository.countByPaymentStatus("SUCCESS");
-        BigDecimal successfulRevenue = decimal(paymentRepository.sumByPaymentStatus("SUCCESS"));
+        long successfulPayments;
+        BigDecimal successfulRevenue;
+        if (fromDate == null) {
+            successfulPayments = paymentRepository.countByPaymentStatus("SUCCESS");
+            successfulRevenue = decimal(paymentRepository.sumByPaymentStatus("SUCCESS"));
+        } else {
+            successfulPayments = paymentRepository.countSuccessfulPaymentsBetween(paymentFrom, paymentTo);
+            successfulRevenue = decimal(paymentRepository.sumSuccessfulPaymentsBetween(paymentFrom, paymentTo));
+        }
         BigDecimal averageSuccessfulPayment = successfulPayments == 0
                 ? BigDecimal.ZERO
                 : successfulRevenue.divide(BigDecimal.valueOf(successfulPayments), 2,

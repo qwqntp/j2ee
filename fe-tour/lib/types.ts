@@ -64,6 +64,27 @@ export type TourDetail = {
   departures: TourDeparture[];
 };
 
+export type TourRating = {
+  id: number;
+  tourId: number;
+  accountId: number;
+  accountUsername: string;
+  bookingId: number;
+  rating: number;
+  comment: string | null;
+  status: string;
+  createdAt: string;
+};
+
+export type TourRatingPage = PageData<TourRating> & {
+  averageRating: number;
+  ratingCount: number;
+};
+
+export type RatingModerationInput = {
+  status: "APPROVED" | "REJECTED";
+};
+
 export type Account = {
   id: number;
   username: string;
@@ -162,6 +183,22 @@ export type Payment = {
   status: string;
   paidAt: string | null;
   createdAt: string;
+};
+
+export type Refund = {
+  id: number;
+  paymentId: number;
+  bookingId: number;
+  amount: number;
+  reason: string | null;
+  status: string;
+  requestedAt: string;
+  processedAt: string | null;
+};
+
+export type RefundUpdateInput = {
+  status: "APPROVED" | "REJECTED" | "DONE";
+  reason?: string | null;
 };
 
 export type VnpayStart = {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { buildDashboardCards, shouldShowSignIn } from "@/lib/admin-stats";
-import { ApiError, getAdminStats } from "@/lib/api";
+import { ApiError, getAdminStats, getRevenueCsv } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminBarPanel, AdminStatCard } from "@/components/admin/admin-dashboard-panels";
@@ -19,16 +19,24 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
+      if (Boolean(from) !== Boolean(to)) {
+        setError("Choose both a from date and a to date to filter stats.");
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const session = await getSession();
         if (!active || !session) return;
-        const result = await getAdminStats(session.accessToken);
+        const result = await getAdminStats(session.accessToken, from || undefined, to || undefined);
         if (!active) return;
         setStats(result);
         setError(null);
@@ -46,7 +54,33 @@ export function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [reloadKey, getSession]);
+  }, [reloadKey, from, to, getSession]);
+
+  async function exportCsv() {
+    if (!from || !to) {
+      setError("Choose both a from date and a to date.");
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    try {
+      const session = await getSession();
+      if (!session) return;
+      const csv = await getRevenueCsv(session.accessToken, from, to);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "revenue.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not export the revenue report.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const errorPanel = error ? (
     <div
@@ -86,7 +120,33 @@ export function AdminDashboard() {
     <div>
       <AdminPageHeading title="Operations overview"
         description="Track successful payments, booking activity, and upcoming tours."
-        action={<p className="admin-page-meta">Data as of {formatDate(stats.generatedAt)}</p>}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label="Revenue from date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              className="field min-h-0 w-auto px-3 py-1 text-xs"
+            />
+            <input
+              type="date"
+              aria-label="Revenue to date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              className="field min-h-0 w-auto px-3 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => void exportCsv()}
+              disabled={exporting}
+              className="btn-secondary min-h-0 px-4 py-2 text-xs"
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+            <p className="admin-page-meta">Data as of {formatDate(stats.generatedAt)}</p>
+          </div>
+        }
       />
 
       {errorPanel}

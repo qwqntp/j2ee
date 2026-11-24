@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   apiRequest, cancelBooking, createAdminAccount, deleteAdminAccount, forgotPassword, getBooking,
   getInvoiceByBooking, getVnpayStatus, googleSignIn, listAdminBookings, listInvoices,
-  reconcileVnpayBooking, resetPassword, startVnpay, verifyVnpayReturn,
+  getRevenueCsv, reconcileVnpayBooking, requestBookingRefund, resetPassword, startVnpay,
+  updateAdminRefund, uploadImage, verifyVnpayReturn,
 } from "./api";
 
 afterEach(() => {
@@ -48,6 +49,102 @@ describe("apiRequest", () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
     await assertion;
+  });
+});
+
+describe("uploadImage", () => {
+  it("posts multipart file without overriding the browser Content-Type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: "Success",
+          data: { url: "https://res.cloudinary.com/demo/image/upload/tour.png", publicId: "tour-images/tour" },
+          timestamp: "2026-11-24T00:00:00",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["bytes"], "tour.png", { type: "image/png" });
+
+    const result = await uploadImage("access-token", file);
+
+    expect(result.publicId).toBe("tour-images/tour");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url.endsWith("/api/admin/uploads")).toBe(true);
+    expect(init.headers).toEqual({
+      Accept: "application/json",
+      Authorization: "Bearer access-token",
+    });
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBe(file);
+  });
+});
+
+describe("getRevenueCsv", () => {
+  it("returns CSV text with the date window and access token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("\uFEFFdate,amount\n2026-11-15,50.00\n", {
+        status: 200,
+        headers: { "Content-Type": "text/csv" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const csv = await getRevenueCsv("access-token", "2026-11-01", "2026-11-30");
+
+    expect(csv).toContain("2026-11-15,50.00");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url.endsWith("/api/admin/reports/revenue.csv?from=2026-11-01&to=2026-11-30")).toBe(true);
+    expect(init.headers).toMatchObject({ Authorization: "Bearer access-token" });
+  });
+});
+
+describe("refund requests", () => {
+  it("posts a customer refund request with the access token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: "Success",
+          data: { id: 7, status: "CANCELLED" },
+          timestamp: "2026-11-24T00:00:00",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await requestBookingRefund("access-token", 7);
+
+    expect(result.status).toBe("CANCELLED");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url.endsWith("/api/bookings/7/refund-request")).toBe(true);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({ Authorization: "Bearer access-token" });
+  });
+
+  it("puts a refund status update with the access token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: "Success",
+          data: { id: 3, status: "DONE" },
+          timestamp: "2026-11-24T00:00:00",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await updateAdminRefund("access-token", 3, { status: "DONE" });
+
+    expect(result.status).toBe("DONE");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url.endsWith("/api/refunds/3")).toBe(true);
+    expect(init.method).toBe("PUT");
   });
 });
 

@@ -1,5 +1,6 @@
 package com.j2ee.tour.controller;
 
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.ApiResponse;
 import com.j2ee.tour.common.OpenApiConfig;
 import com.j2ee.tour.common.PageResponse;
@@ -13,11 +14,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -32,9 +37,17 @@ public class AdminController {
     private final AdminStatsService adminStatsService;
 
     @GetMapping("/stats")
-    @Operation(summary = "Admin dashboard summary")
-    public ApiResponse<AdminStatsResponse> stats() {
-        return ApiResponse.success(adminStatsService.stats());
+    @Operation(summary = "Admin dashboard summary",
+            description = "Optional from/to dates (ISO yyyy-MM-dd) filter successful payments.")
+    public ApiResponse<AdminStatsResponse> stats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if ((from == null) != (to == null)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "from and to must be supplied together");
+        }
+        return ApiResponse.success(from == null
+                ? adminStatsService.stats()
+                : adminStatsService.stats(from, to));
     }
 
     @GetMapping("/accounts")

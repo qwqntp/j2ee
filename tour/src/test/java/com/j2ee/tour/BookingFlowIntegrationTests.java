@@ -287,6 +287,7 @@ class BookingFlowIntegrationTests {
                 principal);
 
         assertEquals(5, rating.rating());
+        tourRatingService.moderate(rating.id(), "APPROVED");
         var page = tourRatingService.list(departure.getTour().getTourId(),
                 PageRequest.of(0, 10));
         assertEquals(new BigDecimal("5.00"), page.averageRating());
@@ -305,10 +306,12 @@ class BookingFlowIntegrationTests {
         paymentService.handleCallback(second.id(),
                 callback(second.id(), "txn-rating-3", "500.00", "CARD", true), principal);
 
-        tourRatingService.create(departure.getTour().getTourId(),
+        var firstRating = tourRatingService.create(departure.getTour().getTourId(),
                 new TourRatingRequest(first.id(), 5, null), principal);
-        tourRatingService.create(departure.getTour().getTourId(),
+        var secondRating = tourRatingService.create(departure.getTour().getTourId(),
                 new TourRatingRequest(second.id(), 3, null), principal);
+        tourRatingService.moderate(firstRating.id(), "APPROVED");
+        tourRatingService.moderate(secondRating.id(), "APPROVED");
 
         var page = tourRatingService.list(departure.getTour().getTourId(),
                 PageRequest.of(0, 10));

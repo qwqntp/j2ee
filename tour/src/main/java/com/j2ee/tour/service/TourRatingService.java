@@ -1,6 +1,7 @@
 package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
+import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.TourRatingRequest;
 import com.j2ee.tour.dto.response.TourRatingPageResponse;
 import com.j2ee.tour.dto.response.TourRatingResponse;
@@ -76,6 +77,7 @@ public class TourRatingService {
         rating.setBooking(booking);
         rating.setRatingValue(request.rating());
         rating.setRatingComment(request.comment());
+        rating.setRatingStatus("PENDING");
         rating.setRatingCreatedAt(LocalDateTime.now(clock));
         return TourRatingResponse.from(ratingRepository.save(rating));
     }
@@ -90,8 +92,9 @@ public class TourRatingService {
                 : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "ratingCreatedAt")
                                 .and(Sort.by(Sort.Direction.DESC, "ratingId")));
-        Page<TourRating> page = ratingRepository.findByTourTourId(tourId, effective);
-        Double averageValue = ratingRepository.averageRating(tourId);
+        Page<TourRating> page = ratingRepository.findByTourTourIdAndRatingStatus(
+                tourId, "APPROVED", effective);
+        Double averageValue = ratingRepository.averageRatingApproved(tourId);
         BigDecimal average = BigDecimal.valueOf(averageValue == null ? 0.0 : averageValue)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -106,5 +109,28 @@ public class TourRatingService {
                 page.hasPrevious(),
                 average,
                 page.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<TourRatingResponse> listAll(Pageable pageable) {
+        return PageResponse.from(ratingRepository.findAll(pageable), TourRatingResponse::from);
+    }
+
+    @Transactional
+    public TourRatingResponse moderate(Long id, String status) {
+        if (!"APPROVED".equals(status) && !"REJECTED".equals(status)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Status must be APPROVED or REJECTED");
+        }
+        TourRating rating = ratingRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Rating not found"));
+        rating.setRatingStatus(status);
+        return TourRatingResponse.from(ratingRepository.save(rating));
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        ratingRepository.delete(ratingRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Rating not found")));
     }
 }
