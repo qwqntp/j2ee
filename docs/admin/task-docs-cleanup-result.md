@@ -4,7 +4,8 @@
 > Scope: `docs/`, root `README.md`, `tour/README.md`, `fe-tour/README.md`, the two `.env.example`
 > files and `.github/workflows/ci.yml`.
 > No Java/TypeScript source, tests, migrations, `pom.xml`, `package.json` or
-> `application.properties` were changed. No git commands were run and no `.env` file was opened.
+> `application.properties` were changed by this task. No git commands were run and no `.env` file
+> was opened.
 
 ## Checklist
 
@@ -15,7 +16,7 @@
 - [x] 5. `fe-tour/README.md` fix
 - [x] 6. The two `.env.example` files
 - [x] 7. CI workflow
-- [ ] 8. Final check that every command and path in the READMEs exists
+- [x] 8. Final check that every command and path in the READMEs exists
 
 ## 1. Classification
 
@@ -124,9 +125,9 @@ New files: `README.md`, `tour/README.md`, `tour/.env.example`, `fe-tour/.env.exa
 ## 4. Review / uncertain
 
 - **Flyway does not seed roles.** `dev_seed.sql` assumes `account_roles` already contains
-  `ROLE_ADMIN`, `ROLE_USER` and `ROLE_STAFF` (it inserts a `demo_staff` account). The migrations
-  create the table but do not insert rows. The READMEs document a one-time role insert before
-  running the seed. I did not change the seed or migrations.
+  `ROLE_ADMIN`, `ROLE_USER` and `ROLE_STAFF` (it seeds `staff@example.com` with `ROLE_STAFF`). The
+  migrations create the table but do not insert rows. The READMEs document a one-time role insert
+  before running the seed. I did not change the seed or migrations.
 - **Role model reality:** only `ROLE_USER` (default on registration/Google sign-in) and
   `ROLE_ADMIN` (admin console + `/api/admin/**` and the admin-only route matrix) are enforced.
   `ROLE_STAFF` is a seeded label with no authorization behaviour.
@@ -140,11 +141,44 @@ New files: `README.md`, `tour/README.md`, `tour/.env.example`, `fe-tour/.env.exa
   requires Node `>=20.9.0` (from `node_modules/next/package.json`); CI uses Node 22 LTS.
 - **No `typecheck` npm script.** `package.json` only has `dev`, `build`, `start`, `lint`, `test`.
   CI therefore does not run a separate typecheck; `next build` type-checks.
+- **Parallel work appeared during verification.** While checking the frontend, `lib/admin-passengers.ts`,
+  `app/admin/departures/[id]/passengers/page.tsx` and `components/admin-passengers.tsx` appeared
+  (or changed) without any action from me, adding the `/admin/departures/[id]/passengers` route.
+  The first typecheck run briefly failed because `lib/admin-passengers.ts` did not exist yet; once
+  the files settled, `tsc`, lint, tests and the production build all passed. The new route is listed
+  in `fe-tour/README.md`. The same parallel stream added `AdminPassengerServiceTest`, taking the
+  backend count from 312 to 316. I did not modify any of those files.
+- **`.env.local` was loaded by the build.** Next.js reported `Environments: .env.local` during the
+  production build. I did not open, read, print or copy that file; the CI placeholders were supplied
+  as process environment variables.
 
-## 5. Could not verify
+## 5. Verification performed
 
-- GitHub Actions itself was not run (no local runner). YAML syntax and the commands were checked
-  locally as far as this machine allows.
-- No live PostgreSQL, Redis, SMTP, VNPay Sandbox or Google sign-in flow was exercised.
+- **Paths:** a script checked 71 paths referenced by the READMEs (both projects, migrations,
+  seed, docs, routes, env examples, CI file) and all exist.
+- **CI YAML:** parsed with `js-yaml`; it exposes exactly the `backend` and `frontend` jobs and the
+  expected steps. No secrets or deployment steps.
+- **Backend CI command:**
+  `.\mvnw.cmd -B "-Dtest=!*IntegrationTests,!TourApplicationTests" test` →
+  **316 tests, 0 failures, 0 errors, skipped 0, BUILD SUCCESS** (28 s). Local JDK 26; the compiler
+  still uses `release 21`.
+- **Frontend:** `npm run lint` clean; `npm test` → **25 files / 199 tests passed**;
+  `npx tsc --noEmit` clean; `npm run build` succeeds with the CI placeholder env.
+  `npm ci --dry-run` reports "up to date", so the lockfile matches `package.json`.
+- **Environment files:** confirmed both `.gitignore` files whitelist `.env.example` (pattern
+  inspection only — no git command was run).
+
+## 6. Could not verify
+
+- GitHub Actions itself was not run (no local runner). The exact `bash ./mvnw ...` form was not
+  run locally because `bash` resolves to an unconfigured WSL here; the equivalent `mvnw.cmd`
+  command passed. The wrapper uses `distributionType=only-script` and has no jar to check in, so
+  the Linux script should run on the Ubuntu runner.
+- A real clean `npm ci` was not run (a populated `node_modules` already existed); `npm ci --dry-run`
+  succeeded and `package-lock.json` exists.
+- The production build loaded the existing `.env.local` (Next.js reports it). Local build output
+  therefore reflects local env values rather than exactly the CI placeholders.
+- No live PostgreSQL, Redis, SMTP, VNPay Sandbox or Google sign-in flow was exercised. `psql` is
+  not on PATH on this machine, so the role-insert and `dev_seed.sql` commands were not executed.
 - The local JDK is 26, while CI (and `pom.xml`) target Java 21, so a local backend test run is not
   identical to CI.

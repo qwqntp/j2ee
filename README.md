@@ -20,8 +20,9 @@ The repository contains two independent applications:
 - Forgot-password, reset-password and email-verification flows.
 - Checkout that creates a real `PENDING` booking with one traveler per seat, an optional promotion
   code and server-computed totals.
-- Pay online through VNPay Sandbox when configured, or reserve now and pay later. A demo card
-  payment endpoint exists but is disabled by default.
+- Pay online through VNPay Sandbox when configured, or reserve now and pay later. The VNPay option
+  is enabled only in a production frontend build (`next dev` hides it). A demo card payment
+  endpoint exists but is disabled by default.
 - Booking list and detail (`/account/bookings`, aliases under `/my-trips`), cancel, confirm,
   complete, and a printable invoice.
 - Profile editing and password change.
@@ -34,7 +35,7 @@ The repository contains two independent applications:
 - Account and role management.
 - Promotion management.
 - Tour and departure management (including the guide-overlap guard and departure-cancellation
-  cascade).
+  cascade), plus printable/CSV passenger manifests per departure.
 - Invoice list and printable detail.
 - Catalogue management for accommodations, guides, vehicles, destinations and tour images.
 
@@ -88,10 +89,11 @@ roles above affect authorization today.
 ### 1. Backend
 
 ```bash
-createdb -U postgres tour      # once, if the database does not exist yet
+createdb -U postgres tour      # once, if the database does not exist yet (or use pgAdmin)
 cd tour
 cp .env.example .env           # Windows: copy .env.example .env
-# edit .env: JWT_SECRET is required (>= 32 bytes) and must not stay "change-me"
+# edit .env: replace the JWT_SECRET and datasource "change-me" placeholders
+# (JWT_SECRET must be >= 32 bytes); or remove a datasource line to use its default
 ./mvnw spring-boot:run         # Windows: .\mvnw.cmd spring-boot:run
 ```
 
@@ -103,6 +105,7 @@ Flyway does **not** seed roles. While the backend is running, open a second term
 one-time role insert plus the optional dev seed:
 
 ```bash
+cd tour
 psql -U postgres -d tour -c "INSERT INTO account_roles (role_name) SELECT v.role_name FROM (VALUES ('ROLE_ADMIN'), ('ROLE_USER'), ('ROLE_STAFF')) AS v(role_name) WHERE NOT EXISTS (SELECT 1 FROM account_roles r WHERE r.role_name = v.role_name);"
 
 psql -U postgres -d tour -f src/main/resources/db/seed/dev_seed.sql
@@ -164,8 +167,9 @@ database.
 cd fe-tour
 npm test              # Vitest
 npm run lint          # ESLint
-npx tsc --noEmit      # type check (no npm script exists for this)
-npm run build         # production build
+npm run build         # production build (also type-checks)
+npx tsc --noEmit      # optional standalone type check; run after build/dev
+                      # so generated .next/types and next-env.d.ts exist
 ```
 
 ## Documentation
