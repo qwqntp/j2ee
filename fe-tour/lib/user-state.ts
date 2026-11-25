@@ -1,4 +1,5 @@
 import { dismissFlash } from "./flash";
+import { privateSearchStore } from "./admin-private-search";
 
 type Cleanup = () => void;
 
@@ -36,6 +37,7 @@ export function registerUserRequest(controller: AbortController): () => void {
  * account. Never leaves the previous account's message or caches behind.
  */
 export function clearPerUserClientState(): void {
+  privateSearchStore().clear();
   for (const controller of [...inFlight]) {
     inFlight.delete(controller);
     controller.abort();

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createPayment,
@@ -20,10 +20,12 @@ import {
   buildBookingListQuery,
   createDebouncedCommit,
   createKeyedRequestTracker,
-  resetAdminPage,
   type BookingListFilters,
 } from "@/lib/booking-list";
 import { formatDate, formatDateRange, formatPrice } from "@/lib/format";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
+import { useAdminPrivateSearch } from "@/lib/use-admin-private-search";
+import { updateAdminQuery } from "@/lib/admin-query-state";
 import type { AdminBookingListItem, AdminListSort, Booking, Payment } from "@/lib/types";
 
 const DEFAULT_SIZE = 10;
@@ -41,6 +43,14 @@ const SORTS: Array<{ value: AdminListSort; label: string }> = [
   { value: "totalAmount,desc", label: "Total: high to low" },
   { value: "totalAmount,asc", label: "Total: low to high" },
 ];
+const QUERY_SCHEMA = {
+  page: { kind: "page" }, size: { kind: "number", allowed: [10, 20, 50], defaultValue: 10 },
+  status: { kind: "enum", allowed: ["PENDING", "PAID", "CONFIRMED", "COMPLETED", "CANCELLED"] },
+  from: { kind: "date" }, to: { kind: "date" },
+  sort: { kind: "enum", allowed: ["createdAt", "totalAmount"], defaultValue: "createdAt" },
+  direction: { kind: "enum", allowed: ["asc", "desc"], defaultValue: "desc" },
+  q: { kind: "enum", allowed: [] },
+} as const;
 
 type FilterForm = {
   status: BookingListFilters["status"];
@@ -69,15 +79,31 @@ function toFilters(form: FilterForm): BookingListFilters {
 }
 
 export function AdminBookings() {
-  const { getSession } = useAdminAccess();
+  const { getSession, account } = useAdminAccess();
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const queryString = params.toString();
+  const [privateQuery, setPrivateQuery] = useAdminPrivateSearch(account.id, "bookings");
+  const query = useMemo<CommittedQuery>(() => {
+    const values = new URLSearchParams(queryString);
+    return { page: Number(values.get("page") ?? "1") - 1, size: Number(values.get("size") ?? "10"),
+      filters: { status: (values.get("status") ?? "") as BookingListFilters["status"],
+        from: values.get("from") ?? undefined, to: values.get("to") ?? undefined,
+        q: privateQuery || undefined,
+        sort: `${values.get("sort") ?? "createdAt"},${values.get("direction") ?? "desc"}` as AdminListSort } };
+  }, [queryString, privateQuery]);
+  const sourceForm: FilterForm = { status: query.filters.status ?? "", from: query.filters.from ?? "",
+    to: query.filters.to ?? "", q: query.filters.q ?? "", sort: query.filters.sort ?? "createdAt,desc" };
+  const formKey = JSON.stringify([queryString, sourceForm]);
+  const [draft, setDraft] = useState<{ key: string; value: FilterForm } | null>(null);
+  const [previousNavigation, setPreviousNavigation] = useState(queryString);
+  if (previousNavigation !== queryString) {
+    setPreviousNavigation(queryString);
+    setDraft(null);
+  }
+  const form = draft?.key === formKey ? draft.value : sourceForm;
+  const waitingForUrl = useRef<string | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
   const [bookings, setBookings] = useState<AdminBookingListItem[]>([]);
-  const [query, setQuery] = useState<CommittedQuery>({
-    page: 0,
-    size: DEFAULT_SIZE,
-    filters: toFilters(EMPTY_FORM),
-  });
-  const [form, setForm] = useState<FilterForm>(EMPTY_FORM);
-  const formRef = useRef(form);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasNext, setHasNext] = useState(false);
@@ -98,7 +124,7 @@ export function AdminBookings() {
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const commitFilters = useCallback((nextForm: FilterForm, nextSize?: number) => {
+  const commitFilters = useCallback((nextForm: FilterForm, nextSize?: number, mode: "push" | "replace" = "push") => {
     const filters = toFilters(nextForm);
     try {
       buildBookingListQuery({ page: 0, size: nextSize ?? DEFAULT_SIZE, ...filters });
@@ -107,20 +133,29 @@ export function AdminBookings() {
       return;
     }
     setError(null);
-    setQuery((current) => resetAdminPage(current, {
-      size: nextSize ?? current.size,
-      filters,
-    }));
+    const [sort, direction] = nextForm.sort.split(",");
+    const patch = { page: null, q: null, size: String(nextSize ?? query.size),
+      status: filters.status ?? null, from: filters.from ?? null, to: filters.to ?? null, sort, direction };
+    const target = updateAdminQuery(new URLSearchParams(queryString), QUERY_SCHEMA, patch).toString();
+    waitingForUrl.current = target === queryString ? null : target;
+    if (target !== queryString || nextForm.q.trim() !== privateQuery) listRequest.current?.abort();
+    setPrivateQuery(nextForm.q.trim());
+    setDraft(null);
+    update(patch, mode);
     setExpandedId(null);
-  }, []);
+  }, [privateQuery, query.size, queryString, setPrivateQuery, update]);
 
-  const debouncedSearch = useState(() =>
-    createDebouncedCommit<FilterForm>((next) => commitFilters(next)),
-  )[0];
+  const debouncedSearch = useMemo(() =>
+    createDebouncedCommit<FilterForm>((next) => commitFilters(next, undefined, "replace")),
+  [commitFilters]);
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch, queryString]);
 
   useEffect(() => {
+    if (privateQuery === null || (waitingForUrl.current !== null && waitingForUrl.current !== queryString)) return;
+    waitingForUrl.current = null;
     const controller = new AbortController();
+    listRequest.current = controller;
     let active = true;
 
     async function load() {
@@ -158,8 +193,9 @@ export function AdminBookings() {
     return () => {
       active = false;
       controller.abort();
+      if (listRequest.current === controller) listRequest.current = null;
     };
-  }, [query, reloadKey, getSession]);
+  }, [query, reloadKey, getSession, privateQuery, queryString]);
 
   useEffect(() => {
     if (expandedId === null || detailCache.current[expandedId]) return;
@@ -208,9 +244,8 @@ export function AdminBookings() {
   }, [expandedId, detailReloadKey, getSession]);
 
   function updateForm(patch: Partial<FilterForm>, debounce = false) {
-    const next = { ...formRef.current, ...patch };
-    formRef.current = next;
-    setForm(next);
+    const next = { ...form, ...patch };
+    setDraft({ key: formKey, value: next });
     if (debounce) {
       debouncedSearch.schedule(next);
     } else {
@@ -221,14 +256,13 @@ export function AdminBookings() {
 
   function clearFilters() {
     debouncedSearch.cancel();
-    formRef.current = EMPTY_FORM;
-    setForm(EMPTY_FORM);
+    setDraft(null);
     commitFilters(EMPTY_FORM);
   }
 
   function changeSize(nextSize: number) {
     debouncedSearch.cancel();
-    commitFilters(formRef.current, nextSize);
+    commitFilters(form, nextSize);
   }
 
   function retryDetail(bookingId: number) {
@@ -332,7 +366,7 @@ export function AdminBookings() {
         onSubmit={(event) => {
           event.preventDefault();
           debouncedSearch.cancel();
-          commitFilters(formRef.current);
+          commitFilters(form);
         }}
         className="admin-filter-bar admin-toolbar"
       >
@@ -724,7 +758,7 @@ export function AdminBookings() {
         <button
           type="button"
           disabled={query.page === 0 || loading}
-          onClick={() => setQuery((current) => ({ ...current, page: Math.max(0, current.page - 1) }))}
+          onClick={() => update({ page: String(query.page) })}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Previous
@@ -738,7 +772,7 @@ export function AdminBookings() {
         <button
           type="button"
           disabled={!hasNext || loading}
-          onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
+          onClick={() => update({ page: String(query.page + 2) })}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Next

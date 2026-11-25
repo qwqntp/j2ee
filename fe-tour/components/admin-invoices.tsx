@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildInvoiceListQuery,
   toInvoiceStatusParam,
@@ -13,7 +13,9 @@ import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, Ad
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
 import { adminActionStyles } from "@/components/admin/admin-action-styles";
-import { createDebouncedCommit, resetAdminPage } from "@/lib/booking-list";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
+import { useAdminPrivateSearch } from "@/lib/use-admin-private-search";
+import { updateAdminQuery } from "@/lib/admin-query-state";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { AdminInvoiceListItem, AdminListSort } from "@/lib/types";
 
@@ -26,6 +28,13 @@ const SORTS: Array<{ value: AdminListSort; label: string }> = [
   { value: "totalAmount,desc", label: "Total: high to low" },
   { value: "totalAmount,asc", label: "Total: low to high" },
 ];
+const QUERY_SCHEMA = {
+  page: { kind: "page" }, size: { kind: "number", allowed: [10, 20, 50], defaultValue: 10 },
+  status: { kind: "enum", allowed: ["PAID", "UNPAID"] },
+  sort: { kind: "enum", allowed: ["createdAt", "totalAmount"], defaultValue: "createdAt" },
+  direction: { kind: "enum", allowed: ["asc", "desc"], defaultValue: "desc" },
+  q: { kind: "enum", allowed: [] },
+} as const;
 
 type FilterForm = {
   status: InvoiceStatusFilter;
@@ -52,14 +61,29 @@ function toCommittedFilter(form: FilterForm) {
 }
 
 export function AdminInvoices() {
-  const { getSession } = useAdminAccess();
+  const { getSession, account } = useAdminAccess();
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const queryString = params.toString();
+  const [privateQuery, setPrivateQuery] = useAdminPrivateSearch(account.id, "invoices");
+  const query = useMemo<CommittedQuery>(() => {
+    const values = new URLSearchParams(queryString);
+    return { page: Number(values.get("page") ?? "1") - 1, size: Number(values.get("size") ?? "10"),
+      status: (values.get("status") ?? undefined) as CommittedQuery["status"],
+      q: privateQuery || undefined,
+      sort: `${values.get("sort") ?? "createdAt"},${values.get("direction") ?? "desc"}` as AdminListSort };
+  }, [queryString, privateQuery]);
+  const sourceForm: FilterForm = { status: query.status ?? "All", q: query.q ?? "", sort: query.sort };
+  const formKey = JSON.stringify([queryString, sourceForm]);
+  const [draft, setDraft] = useState<{ key: string; value: FilterForm } | null>(null);
+  const [previousNavigation, setPreviousNavigation] = useState(queryString);
+  if (previousNavigation !== queryString) {
+    setPreviousNavigation(queryString);
+    setDraft(null);
+  }
+  const form = draft?.key === formKey ? draft.value : sourceForm;
+  const waitingForUrl = useRef<string | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
   const [invoices, setInvoices] = useState<AdminInvoiceListItem[]>([]);
-  const [query, setQuery] = useState<CommittedQuery>({
-    page: 0,
-    size: DEFAULT_SIZE,
-    ...toCommittedFilter(EMPTY_FORM),
-  });
-  const [form, setForm] = useState<FilterForm>(EMPTY_FORM);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasNext, setHasNext] = useState(false);
@@ -68,7 +92,7 @@ export function AdminInvoices() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const commitFilters = useCallback((nextForm: FilterForm, nextSize?: number) => {
+  const commitFilters = useCallback((nextForm: FilterForm, nextSize?: number, mode: "push" | "replace" = "push") => {
     try {
       buildInvoiceListQuery({ page: 0, size: nextSize ?? DEFAULT_SIZE, ...toCommittedFilter(nextForm) });
     } catch (err) {
@@ -76,19 +100,31 @@ export function AdminInvoices() {
       return;
     }
     setError(null);
-    setQuery((current) => resetAdminPage(current, {
-      size: nextSize ?? current.size,
-      ...toCommittedFilter(nextForm),
-    }));
-  }, []);
+    const [sort, direction] = nextForm.sort.split(",");
+    const patch = { page: null, q: null, size: String(nextSize ?? query.size),
+      status: toInvoiceStatusParam(nextForm.status) ?? null, sort, direction };
+    const target = updateAdminQuery(new URLSearchParams(queryString), QUERY_SCHEMA, patch).toString();
+    waitingForUrl.current = target === queryString ? null : target;
+    if (target !== queryString || nextForm.q.trim() !== privateQuery) listRequest.current?.abort();
+    setPrivateQuery(nextForm.q.trim());
+    setDraft(null);
+    update(patch, mode);
+  }, [privateQuery, query.size, queryString, setPrivateQuery, update]);
 
-  const debouncedSearch = useState(() =>
-    createDebouncedCommit<FilterForm>((next) => commitFilters(next)),
-  )[0];
-  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+  }, [commitFilters]);
+  function cancelSearch() {
+    if (searchTimer.current !== null) clearTimeout(searchTimer.current);
+    searchTimer.current = null;
+  }
 
   useEffect(() => {
+    if (privateQuery === null || (waitingForUrl.current !== null && waitingForUrl.current !== queryString)) return;
+    waitingForUrl.current = null;
     const controller = new AbortController();
+    listRequest.current = controller;
     let active = true;
 
     async function load() {
@@ -124,28 +160,30 @@ export function AdminInvoices() {
     return () => {
       active = false;
       controller.abort();
+      if (listRequest.current === controller) listRequest.current = null;
     };
-  }, [query, reloadKey, getSession]);
+  }, [query, reloadKey, getSession, privateQuery, queryString]);
 
   function updateForm(patch: Partial<FilterForm>, debounce = false) {
     const next = { ...form, ...patch };
-    setForm(next);
+    setDraft({ key: formKey, value: next });
     if (debounce) {
-      debouncedSearch.schedule(next);
+      cancelSearch();
+      searchTimer.current = setTimeout(() => commitFilters(next, undefined, "replace"), 400);
     } else {
-      debouncedSearch.cancel();
+      cancelSearch();
       commitFilters(next);
     }
   }
 
   function clearFilters() {
-    debouncedSearch.cancel();
-    setForm(EMPTY_FORM);
+    cancelSearch();
+    setDraft(null);
     commitFilters(EMPTY_FORM);
   }
 
   function changeSize(nextSize: number) {
-    debouncedSearch.cancel();
+    cancelSearch();
     commitFilters(form, nextSize);
   }
 
@@ -154,6 +192,12 @@ export function AdminInvoices() {
   }
 
   const filtering = Boolean(query.status || query.q);
+  const returnParams = new URLSearchParams();
+  for (const key of ["page", "size", "status", "sort", "direction"]) {
+    const value = params.get(key);
+    if (value) returnParams.set(key, value);
+  }
+  const returnQuery = returnParams.toString();
 
   return (
     <div>
@@ -165,7 +209,7 @@ export function AdminInvoices() {
         aria-label="Filter invoices"
         onSubmit={(event) => {
           event.preventDefault();
-          debouncedSearch.cancel();
+          cancelSearch();
           commitFilters(form);
         }}
         className="admin-filter-bar admin-toolbar"
@@ -287,7 +331,7 @@ export function AdminInvoices() {
                   </td>
                   <td className="px-4 py-4">
                     <Link
-                      href={`/admin/invoices/${invoice.bookingId}`}
+                      href={`/admin/invoices/${invoice.bookingId}${returnQuery ? `?${returnQuery}` : ""}`}
                       className={adminActionStyles.view}
                       aria-label={`View invoice for booking ${invoice.bookingId}`}
                       title="View invoice"
@@ -306,7 +350,7 @@ export function AdminInvoices() {
         <button
           type="button"
           disabled={query.page === 0 || loading}
-          onClick={() => setQuery((current) => ({ ...current, page: Math.max(0, current.page - 1) }))}
+          onClick={() => update({ page: String(query.page) })}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Previous
@@ -320,7 +364,7 @@ export function AdminInvoices() {
         <button
           type="button"
           disabled={!hasNext || loading}
-          onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
+          onClick={() => update({ page: String(query.page + 2) })}
           className="btn-secondary min-h-0 px-4 py-2 text-xs disabled:opacity-50"
         >
           Next

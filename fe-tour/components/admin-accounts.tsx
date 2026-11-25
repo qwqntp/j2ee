@@ -10,32 +10,57 @@ import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminTableRegion } f
 import { useAdminAccess } from "@/components/admin-gate";
 import { filterAccounts, isFinalActiveAdmin, type AdminAccountFilter } from "@/lib/admin-accounts";
 import { ApiError, deleteAdminAccount, listAccountRoles, listAdminAccounts } from "@/lib/api";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
+import { useAdminPrivateSearch } from "@/lib/use-admin-private-search";
+import { useAdminTextDraft } from "@/lib/use-admin-text-draft";
 import type { AccountRoleResponse, AdminAccount } from "@/lib/types";
 
 const PAGE_SIZE = 10;
 const BATCH_SIZE = 100;
+const QUERY_SCHEMA = {
+  page: { kind: "page" }, q: { kind: "enum", allowed: [] },
+  role: { kind: "text", maxLength: 100 },
+  status: { kind: "enum", allowed: ["0", "1"] },
+} as const;
 type Editor = { mode: "add" } | { mode: "edit"; account: AdminAccount };
 
 export function AdminAccounts() {
-  const { getSession } = useAdminAccess();
+  const { getSession, account } = useAdminAccess();
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const page = Number(params.get("page") ?? "1") - 1;
+  const batch = Math.floor(page / (BATCH_SIZE / PAGE_SIZE));
+  const [privateQuery, setPrivateQuery] = useAdminPrivateSearch(account.id, "accounts");
+  const privateReady = privateQuery !== null;
+  const [search, changeSearch] = useAdminTextDraft(privateQuery ?? "", (value) => {
+    setPrivateQuery(value.trim());
+    update({ page: null, q: null }, "replace");
+  }, params.toString());
+  const roleName = params.get("role") ?? "";
+  const status = (params.get("status") ?? "all") as AdminAccountFilter["status"];
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [roles, setRoles] = useState<AccountRoleResponse[]>([]);
-  const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
-  const [hasNext, setHasNext] = useState(false);
+  const hasNext = (page + 1) * PAGE_SIZE < totalElements;
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [filter, setFilter] = useState<AdminAccountFilter>({ query: "", roleName: "", status: "all" });
+  const filter = useMemo<AdminAccountFilter>(() => ({ query: search, roleName, status }), [search, roleName, status]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [accountToDelete, setAccountToDelete] = useState<AdminAccount | null>(null);
   const [accountDetails, setAccountDetails] = useState<AdminAccount | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
+    if (roles.length && roleName && !roles.some((role) => role.roleName === roleName)) {
+      update({ role: null }, "replace");
+    }
+  }, [roles, roleName, update]);
+
+  useEffect(() => {
+    if (!privateReady) return;
     let active = true;
     async function load() {
       setLoading(true);
@@ -43,14 +68,13 @@ export function AdminAccounts() {
         const session = await getSession();
         if (!active || !session) return;
         const [result, roleList] = await Promise.all([
-          listAdminAccounts(session.accessToken, Math.floor(page / (BATCH_SIZE / PAGE_SIZE)), BATCH_SIZE),
+          listAdminAccounts(session.accessToken, batch, BATCH_SIZE),
           listAccountRoles(session.accessToken),
         ]);
         if (!active) return;
         setAccounts(result.content);
         setTotalElements(result.totalElements);
         setTotalPages(Math.ceil(result.totalElements / PAGE_SIZE));
-        setHasNext((page + 1) * PAGE_SIZE < result.totalElements);
         setRoles(roleList);
         setError(null);
       } catch (err) {
@@ -64,7 +88,7 @@ export function AdminAccounts() {
     }
     void load();
     return () => { active = false; };
-  }, [page, reloadKey, getSession]);
+  }, [batch, reloadKey, getSession, privateReady]);
 
   const currentAccounts = useMemo(() => accounts.slice((page % (BATCH_SIZE / PAGE_SIZE)) * PAGE_SIZE, (page % (BATCH_SIZE / PAGE_SIZE) + 1) * PAGE_SIZE), [accounts, page]);
   const visibleAccounts = useMemo(() => filterAccounts(currentAccounts, filter), [currentAccounts, filter]);
@@ -86,7 +110,7 @@ export function AdminAccounts() {
       if (!session) return;
       await deleteAdminAccount(session.accessToken, account.id);
       setAccounts((current) => current.filter(({ id }) => id !== account.id));
-      if (page > 0 && currentAccounts.length === 1) setPage((current) => current - 1);
+      if (page > 0 && currentAccounts.length === 1) update({ page: String(page) }, "replace");
       accountSaved(`Account "${account.username}" deleted.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete the account.");
@@ -112,19 +136,19 @@ export function AdminAccounts() {
       <AdminListPanel busy={loading}>
         <div className="admin-filter-bar admin-toolbar">
           <label className="admin-toolbar-search"><span className="sr-only">Search accounts</span><AdminIcon name="search" className="size-4" />
-            <input type="search" className="field" placeholder="Username, email or role" value={filter.query}
-              onChange={(event) => setFilter({ ...filter, query: event.target.value })} />
+            <input type="search" className="field" placeholder="Username, email or role" maxLength={100} value={filter.query}
+              onChange={(event) => changeSearch(event.target.value)} />
           </label>
           <div className="admin-toolbar-row">
           <label className="admin-toolbar-control">Role
-            <select className="field" value={filter.roleName} onChange={(event) => setFilter({ ...filter, roleName: event.target.value })}>
+            <select className="field" value={filter.roleName} onChange={(event) => update({ role: event.target.value, page: null })}>
               <option value="">All roles</option>
               {roles.map((role) => <option key={role.id} value={role.roleName}>{role.roleName}</option>)}
             </select>
           </label>
           <label className="admin-toolbar-control">Status
             <select className="field" value={filter.status}
-              onChange={(event) => setFilter({ ...filter, status: event.target.value as AdminAccountFilter["status"] })}>
+              onChange={(event) => update({ status: event.target.value === "all" ? null : event.target.value, page: null })}>
               <option value="all">All</option><option value="1">Active</option><option value="0">Locked</option>
             </select>
           </label>
@@ -157,12 +181,12 @@ export function AdminAccounts() {
 
         <div className="admin-pagination">
           <button type="button" className="btn-secondary" disabled={page === 0 || loading}
-            onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button>
+            onClick={() => update({ page: String(page) })}>Previous</button>
           <p className="text-center text-sm text-muted" aria-live="polite">
             Page {page + 1} of {totalPages} · {visibleAccounts.length} shown · {totalElements} total
           </p>
           <button type="button" className="btn-secondary" disabled={!hasNext || loading}
-            onClick={() => setPage((current) => current + 1)}>Next</button>
+            onClick={() => update({ page: String(page + 2) })}>Next</button>
         </div>
       </AdminListPanel>
 

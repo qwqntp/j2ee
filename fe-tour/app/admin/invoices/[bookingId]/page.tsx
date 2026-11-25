@@ -9,20 +9,27 @@ export const metadata: Metadata = {
   description: "Printable customer invoice for a booking.",
 };
 
-type Props = { params: Promise<{ bookingId: string }> };
+type Props = { params: Promise<{ bookingId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
-export default function AdminInvoicePage({ params }: Props) {
+export default function AdminInvoicePage({ params, searchParams }: Props) {
   return (
     <Suspense fallback={<AdminInvoiceSkeleton />}>
-      <AdminInvoiceRoute params={params} />
+      <AdminInvoiceRoute params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function AdminInvoiceRoute({ params }: Props) {
+async function AdminInvoiceRoute({ params, searchParams }: Props) {
   const { bookingId } = await params;
   const id = Number(bookingId);
   if (!Number.isSafeInteger(id) || id <= 0) notFound();
 
-  return <InvoiceView bookingId={id} mode="admin" backHref="/admin/invoices" />;
+  const supplied = await searchParams;
+  const backParams = new URLSearchParams();
+  for (const key of ["page", "size", "status", "sort", "direction"]) {
+    const value = supplied[key];
+    if (typeof value === "string" && value.length <= 50) backParams.set(key, value);
+  }
+  const query = backParams.toString();
+  return <InvoiceView bookingId={id} mode="admin" backHref={query ? `/admin/invoices?${query}` : "/admin/invoices"} />;
 }

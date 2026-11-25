@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createAdminTour,
@@ -12,6 +12,7 @@ import { TourDeparturesDialog } from "@/components/admin/tour-departures-dialog"
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { lastAvailablePage } from "@/lib/admin-pagination";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
 import { adminActionStyles } from "@/components/admin/admin-action-styles";
@@ -35,6 +36,7 @@ type TourForm = {
 };
 
 const TOUR_STATUSES = ["DRAFT", "OPEN", "CLOSED", "CANCELLED"];
+const QUERY_SCHEMA = { page: { kind: "page" } } as const;
 
 const EMPTY_TOUR: TourForm = {
   name: "",
@@ -52,7 +54,10 @@ const EMPTY_TOUR: TourForm = {
 export function AdminTours() {
   const { getSession } = useAdminAccess();
   const [tours, setTours] = useState<AdminTour[]>([]);
-  const [page, setPage] = useState(0);
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const page = Number(params.get("page") ?? "1") - 1;
+  const updateRef = useRef(update);
+  useEffect(() => { updateRef.current = update; }, [update]);
   const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -77,7 +82,7 @@ export function AdminTours() {
         const result = await listAdminTours(session.accessToken, page, 10);
         if (!active) return;
         const validPage = lastAvailablePage(page, result.totalPages);
-        if (page !== validPage) { setPage(validPage); return; }
+        if (page !== validPage) { updateRef.current({ page: String(validPage + 1) }, "replace"); return; }
         setTours(result.content);
         setPagination(result);
         setError(null);
@@ -354,7 +359,7 @@ export function AdminTours() {
           </table>
         </AdminTableRegion>
       )}
-      <AdminPagination page={page} {...pagination} loading={loading} onPageChange={setPage} />
+      <AdminPagination page={page} {...pagination} loading={loading} onPageChange={(next) => update({ page: String(next + 1) })} />
       </AdminListPanel>
 
       {selectedTour ? (

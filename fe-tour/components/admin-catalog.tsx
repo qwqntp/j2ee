@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { catalogInput, catalogTabs } from "@/lib/admin-catalog";
 import {
   ApiError,
@@ -29,6 +29,7 @@ import {
 import { useAdminAccess } from "@/components/admin-gate";
 import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminTableRegion } from "@/components/admin/admin-ui";
 import { lastAvailablePage } from "@/lib/admin-pagination";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
 import { AdminFormSkeleton, AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
@@ -177,12 +178,20 @@ async function removeRow(resource: CatalogResource, token: string, id: number): 
   }
 }
 
+const QUERY_SCHEMA = {
+  page: { kind: "page" },
+  tab: { kind: "enum", allowed: ["destinations", "accommodations", "vehicles", "guides", "images"], defaultValue: "destinations" },
+} as const;
+
 export function AdminCatalog() {
   const { getSession } = useAdminAccess();
   const tabs = catalogTabs();
-  const [resource, setResource] = useState<CatalogResource>("destinations");
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const resource = (params.get("tab") ?? "destinations") as CatalogResource;
+  const page = Number(params.get("page") ?? "1") - 1;
+  const updateRef = useRef(update);
+  useEffect(() => { updateRef.current = update; }, [update]);
   const [rows, setRows] = useState<CatalogRow[]>([]);
-  const [page, setPage] = useState(0);
   const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,7 +231,7 @@ export function AdminCatalog() {
         ]);
         if (!active) return;
         const validPage = lastAvailablePage(page, loadedRows.totalPages);
-        if (page !== validPage) { setPage(validPage); return; }
+        if (page !== validPage) { updateRef.current({ page: String(validPage + 1) }, "replace"); return; }
         setRows(loadedRows.content);
         setPagination(loadedRows);
         setTours(loadedTours);
@@ -246,8 +255,7 @@ export function AdminCatalog() {
 
   function selectTab(next: CatalogResource) {
     if (next === resource) return;
-    setResource(next);
-    setPage(0);
+    update({ tab: next, page: null });
     setLoadedResource(null);
     setLoading(true);
     setRows([]);
@@ -525,7 +533,7 @@ export function AdminCatalog() {
           </table>
         </AdminTableRegion>
       )}
-      {!initialLoading && <AdminPagination page={page} {...pagination} loading={loading} onPageChange={setPage} />}
+      {!initialLoading && <AdminPagination page={page} {...pagination} loading={loading} onPageChange={(next) => update({ page: String(next + 1) })} />}
       </AdminListPanel>
       <AdminConfirmDialog title="Delete catalog record?"
         target={rowToDelete ? ("name" in rowToDelete ? rowToDelete.name : `${activeLabel} #${rowToDelete.id}`) : null}
