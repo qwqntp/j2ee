@@ -116,6 +116,23 @@ class GoogleAuthServiceTest {
     }
 
     @Test
+    void googleLoginPreservesExistingStaffRole() {
+        Account staff = account();
+        staff.getRole().setRoleName("ROLE_STAFF");
+        when(verifier.verify("id-token")).thenReturn(
+                new GoogleIdTokenVerifierService.GoogleIdentity("staff-sub", "staff@example.com", true));
+        when(accountRepository.findByGoogleSub("staff-sub")).thenReturn(Optional.of(staff));
+        when(jwtService.issue(staff.getAccountId(), staff.getUsername(), "ROLE_STAFF")).thenReturn("staff-jwt");
+        when(refreshTokenService.issue(staff)).thenReturn("staff-refresh");
+
+        var result = googleAuthService.signIn("id-token");
+
+        assertThat(result.account().roleName()).isEqualTo("ROLE_STAFF");
+        assertThat(result.accessToken()).isEqualTo("staff-jwt");
+        verifyNoInteractions(roleRepository);
+    }
+
+    @Test
     void linksAVerifiedEmailAccountWithoutReplacingItsPassword() {
         Account account = account();
         account.setEmailVerified(1);

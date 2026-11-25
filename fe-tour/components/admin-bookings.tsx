@@ -8,9 +8,9 @@ import {
   getBooking,
   listAdminBookings,
   listBookingPayments,
-  updateBookingStatus,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
+import { changeOperationalBookingStatus } from "@/lib/admin-booking-actions";
 import { AdminEmptyState, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminIcon } from "@/components/admin/admin-icons";
@@ -572,7 +572,7 @@ export function AdminBookings() {
                                 run(
                                   booking,
                                   (token) =>
-                                    updateBookingStatus(token, booking.id, "CONFIRMED"),
+                                    changeOperationalBookingStatus(token, booking.id, "CONFIRMED", account.roleName),
                                   `${booking.bookingCode} confirmed.`,
                                 )
                               }
@@ -589,7 +589,7 @@ export function AdminBookings() {
                                 run(
                                   booking,
                                   (token) =>
-                                    updateBookingStatus(token, booking.id, "COMPLETED"),
+                                    changeOperationalBookingStatus(token, booking.id, "COMPLETED", account.roleName),
                                   `${booking.bookingCode} completed.`,
                                 )
                               }
@@ -606,7 +606,7 @@ export function AdminBookings() {
                                 run(
                                   booking,
                                   (token) =>
-                                    updateBookingStatus(token, booking.id, "CANCELLED"),
+                                    changeOperationalBookingStatus(token, booking.id, "CANCELLED", account.roleName),
                                   `${booking.bookingCode} cancelled.`,
                                 )
                               }

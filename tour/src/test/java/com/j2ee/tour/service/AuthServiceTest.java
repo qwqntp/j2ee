@@ -100,6 +100,25 @@ class AuthServiceTest {
     }
 
     @Test
+    void staffLoginAndRefreshUseTheDatabaseRole() {
+        Account staff = account();
+        staff.getRole().setRoleName("ROLE_STAFF");
+        when(accountRepository.findByUsername(staff.getUsername())).thenReturn(Optional.of(staff));
+        when(passwordEncoder.matches("password123", staff.getPassword())).thenReturn(true);
+        when(refreshTokenService.issue(staff)).thenReturn("refresh-staff");
+        when(jwtService.issue(staff.getAccountId(), staff.getUsername(), "ROLE_STAFF")).thenReturn("staff-jwt");
+        when(refreshTokenService.rotate("refresh-staff"))
+                .thenReturn(new RefreshTokenService.Rotation(staff, "refresh-next"));
+
+        var login = authService.login(new LoginRequest(staff.getUsername(), "password123"));
+        var refresh = authService.refresh("refresh-staff");
+
+        assertThat(login.account().roleName()).isEqualTo("ROLE_STAFF");
+        assertThat(refresh.account().roleName()).isEqualTo("ROLE_STAFF");
+        assertThat(refresh.accessToken()).isEqualTo("staff-jwt");
+    }
+
+    @Test
     void registerRejectsDuplicateEmailCaseInsensitively() {
         when(accountRepository.existsByUsername("new-user")).thenReturn(false);
         when(accountRepository.existsByAccountEmailIgnoreCase("New@Example.com")).thenReturn(true);

@@ -6,6 +6,8 @@ import com.j2ee.tour.dto.request.AccountCreateRequest;
 import com.j2ee.tour.dto.request.AccountUpdateRequest;
 import com.j2ee.tour.dto.response.AccountResponse;
 import com.j2ee.tour.service.AccountService;
+import com.j2ee.tour.security.AuthPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -47,13 +49,15 @@ public class AccountController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<AccountResponse>> update(
             @PathVariable Long id,
-            @Valid @RequestBody AccountUpdateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(accountService.update(id, request)));
+            @Valid @RequestBody AccountUpdateRequest request,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.success(accountService.update(id, request, principal)));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        accountService.delete(id);
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        accountService.delete(id, principal);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 }

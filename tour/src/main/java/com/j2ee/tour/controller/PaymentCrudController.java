@@ -1,15 +1,18 @@
 package com.j2ee.tour.controller;
 
 import com.j2ee.tour.common.ApiResponse;
+import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
 import com.j2ee.tour.dto.request.PaymentCreateRequest;
 import com.j2ee.tour.dto.request.PaymentUpdateRequest;
 import com.j2ee.tour.dto.response.PaymentResponse;
 import com.j2ee.tour.service.PaymentService;
+import com.j2ee.tour.security.AuthPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,7 +42,12 @@ public class PaymentCrudController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<PaymentResponse>> create(@Valid @RequestBody PaymentCreateRequest request) {
+    public ResponseEntity<ApiResponse<PaymentResponse>> create(@Valid @RequestBody PaymentCreateRequest request,
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        if ("ROLE_STAFF".equals(principal.role())
+                && (!"CASH".equals(request.paymentMethod()) || !"SUCCESS".equals(request.status()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Staff can only record successful cash payments");
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(paymentService.create(request)));
     }

@@ -5,6 +5,7 @@ import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.AccountRole;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
+import com.j2ee.tour.security.AuthPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -114,6 +115,40 @@ class AccountServiceTest {
 
         verify(accountRepository, never()).findActiveAdminsForUpdate("ROLE_ADMIN", 1);
         verify(accountRepository).save(user);
+    }
+
+    @Test
+    void adminCannotDemoteOrDisableTheirOwnAccount() {
+        when(accountRoleRepository.findById(3L)).thenReturn(Optional.of(role(3L, "ROLE_STAFF")));
+        var caller = new AuthPrincipal(ADMIN_ID, "admin", "ROLE_ADMIN");
+        assertThatThrownBy(() -> accountService.update(ADMIN_ID,
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 1, 3L), caller))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("your own");
+        assertThatThrownBy(() -> accountService.update(ADMIN_ID,
+                new AccountUpdateRequest("admin", null, "admin@example.com", 1, 0, 1L), caller))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("your own");
+        verify(accountRepository, never()).save(any());
+    }
+
+    @Test
+    void adminCanAssignStaffToAnotherCustomer() {
+        Account user = account(USER_ID, "user", role(2L, "ROLE_USER"));
+        when(accountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(accountRoleRepository.findById(3L)).thenReturn(Optional.of(role(3L, "ROLE_STAFF")));
+        when(accountRepository.save(user)).thenReturn(user);
+        var result = accountService.update(USER_ID,
+                new AccountUpdateRequest("user", null, "user@example.com", 1, 1, 3L),
+                new AuthPrincipal(ADMIN_ID, "admin", "ROLE_ADMIN"));
+        assertThat(result.roleName()).isEqualTo("ROLE_STAFF");
+        assertThat(result.roleId()).isEqualTo(3L);
+    }
+
+    @Test
+    void adminCannotDeleteTheirOwnAccount() {
+        assertThatThrownBy(() -> accountService.delete(ADMIN_ID,
+                new AuthPrincipal(ADMIN_ID, "admin", "ROLE_ADMIN")))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("your own");
+        verify(accountRepository, never()).delete(any());
     }
 
     @Test

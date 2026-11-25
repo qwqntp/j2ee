@@ -120,28 +120,46 @@ cd tour
 The API listens on port 8080. Flyway runs at startup:
 
 - `db/callback/beforeMigrate.sql` creates the two bootstrap tables (`account_roles`, `accounts`).
-- `db/migration/V1`–`V9` create the rest of the schema.
+- `db/migration/V1`–`V9` create the rest of the schema; V10 idempotently seeds the three roles.
 - `baseline-on-migrate=true` with `baseline-version=0` keeps pre-Flyway databases working.
 
-Never edit an applied migration; add `V10__*.sql` or later. `db/quanlybantour_booking_floor.sql` is a
+Never edit an applied migration; add the next unused version after V10. `db/quanlybantour_booking_floor.sql` is a
 reference schema + seed, **not** a migration — do not apply it on top of a Flyway database.
 
 ### Seed roles and dev data
 
-Flyway creates `account_roles` but does not insert rows. `db/seed/dev_seed.sql` expects
-`ROLE_ADMIN`, `ROLE_USER` and `ROLE_STAFF` to exist (it seeds a `demo_staff` account) and is run
-manually with `psql`, not by Flyway:
+`V10__seed_account_roles.sql` inserts missing `ROLE_USER`, `ROLE_ADMIN` and `ROLE_STAFF` rows,
+preserving existing IDs. The optional `db/seed/dev_seed.sql` already contains a staff demo
+account and is run manually with `psql`, not by Flyway. Use a disposable development database only:
 
 ```bash
-psql -U postgres -d tour -c "INSERT INTO account_roles (role_name) SELECT v.role_name FROM (VALUES ('ROLE_ADMIN'), ('ROLE_USER'), ('ROLE_STAFF')) AS v(role_name) WHERE NOT EXISTS (SELECT 1 FROM account_roles r WHERE r.role_name = v.role_name);"
-
 psql -U postgres -d tour -f src/main/resources/db/seed/dev_seed.sql
 ```
 
-Demo accounts created by the seed use password `demo1234`:
-`admin@example.com` (`ROLE_ADMIN`), `demo1@example.com` … `demo3@example.com` (`ROLE_USER`) and
-`staff@example.com` (`ROLE_STAFF`, an inert label today). Re-running the seed is guarded by
-`WHERE NOT EXISTS` / `ON CONFLICT` checks.
+**Dev-only credentials** (login accepts username, not email; never use in production):
+
+| Username | Email | Password | Role / landing page |
+|---|---|---|---|
+| `demo_admin` | `admin@example.com` | `demo1234` | `ROLE_ADMIN` → `/admin` |
+| `demo_staff` | `staff@example.com` | `demo1234` | `ROLE_STAFF` → `/admin/bookings` |
+| `demo_user1` … `demo_user3` | `demo1@example.com` … `demo3@example.com` | `demo1234` | `ROLE_USER` → existing customer flow |
+
+Re-running the seed is guarded by `WHERE NOT EXISTS` / `ON CONFLICT` checks.
+The existing seed accounts were not changed for staff authorization.
+
+### Role model
+
+Customers retain owner-scoped booking/profile/VNPay/invoice access. Staff can view and operate
+bookings (confirm/complete/cancel unpaid PENDING), record successful CASH payments, view payments
+and reconcile pending managed VNPay, read customers, view/print invoices and read departures/
+passengers. Only admins manage accounts/roles, promotions, tours/departures/catalog, cancel
+departures, issue refunds, access dashboard/reports, or cancel PAID bookings where implemented.
+See the [full access matrix](../README.md#role-model).
+
+`SecurityConfig` opens only explicit staff method/path pairs; unlisted `/api/admin/**` paths
+stay admin-only. Staff uses dedicated lifecycle POSTs, not generic booking status PUT.
+Existing last-admin locking remains; self-demotion/disable/delete and admin-role rename/delete
+are rejected with 409. Admin Accounts can assign the seeded Staff role to another account.
 
 ### Redis (optional)
 
@@ -186,8 +204,8 @@ java -jar target/tour-0.0.1-SNAPSHOT.jar
 - Health: <http://localhost:8080/actuator/health>
 
 Public GETs are limited to tour reads, the VNPay IPN route plus Swagger/health. Auth `POST`s are
-public. Everything else requires a Bearer access token; the admin route matrix requires
-`ROLE_ADMIN`.
+public. Everything else requires a Bearer access token; the admin route matrix defaults to
+`ROLE_ADMIN`, with the explicit staff operations allow-list described above.
 
 ## Optional integrations
 

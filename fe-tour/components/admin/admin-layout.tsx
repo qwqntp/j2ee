@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAdminAccess } from "@/components/admin-gate";
+import { AdminPageAccess } from "@/components/admin-page-access";
 import { getDrawerFocusIndex } from "@/lib/admin-drawer";
 import { getAdminLocation } from "@/lib/admin-navigation";
 import { signOut } from "@/lib/auth";
@@ -54,7 +55,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const sidebarProps = { pathname, activeHref: location.activeHref, signingOut, onSignOut: handleSignOut };
+  const sidebarProps = { pathname, activeHref: location.activeHref, roleName: account.roleName, signingOut, onSignOut: handleSignOut };
 
   return (
     <div className="admin-workspace grid h-dvh min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden text-charcoal min-[768px]:grid-cols-[auto_minmax(0,1fr)]">
@@ -71,7 +72,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <main id="admin-main" tabIndex={-1} ref={content}
           className="admin-main min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
           <div className="admin-content mx-auto w-full min-w-0 max-w-[100rem] p-4 sm:p-6 xl:p-8">
-            {children}
+            <AdminPageAccess role={account.roleName} pathname={pathname}>{children}</AdminPageAccess>
           </div>
         </main>
       </div>

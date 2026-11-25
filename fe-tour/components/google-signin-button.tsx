@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { signInWithGoogle } from "@/lib/auth";
 import { publishFlash } from "@/lib/flash";
+import { loginDestination } from "@/lib/admin-permissions";
 import {
   googleSignInErrorMessage,
   resolveGoogleClientId,
@@ -85,7 +86,7 @@ export function GoogleSignInButton({ next }: Props) {
       try {
         const session = await withTimeout(signInWithGoogle(credential));
         publishFlash(`Welcome, ${session.account.username}!`);
-        router.push(next);
+        router.push(loginDestination(session.account.roleName, next));
         router.refresh();
       } catch (err) {
         setError(googleSignInErrorMessage(err));

@@ -86,6 +86,27 @@ public class SecurityConfig {
                                 "/api/bookings/*/payments/vnpay/reconcile",
                                 "/api/payments/vnpay/return").authenticated()
                         .requestMatchers("/error").permitAll()
+                        // Staff is an explicit method/path allow-list, never an admin-prefix grant.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/admin/bookings",
+                                "/api/admin/payments",
+                                "/api/admin/customers", "/api/admin/customers/{id:[0-9]+}/bookings",
+                                "/api/admin/departures", "/api/admin/departures/{id:[0-9]+}/passengers",
+                                "/api/customers/{id:[0-9]+}",
+                                "/api/payments", "/api/payments/{id:[0-9]+}",
+                                "/api/bookings/{id:[0-9]+}/payments",
+                                "/api/invoices", "/api/invoices/{id:[0-9]+}",
+                                "/api/invoices/by-booking/{id:[0-9]+}")
+                        .hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/admin/payments/{id:[0-9]+}/reconcile", "/api/payments")
+                        .hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(HttpMethod.POST, "/api/bookings")
+                        .hasAnyRole("ADMIN", "USER")
+                        .requestMatchers(HttpMethod.PUT, "/api/bookings/*")
+                        .hasAnyRole("ADMIN", "USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/bookings/*")
+                        .hasAnyRole("ADMIN", "USER")
                         .requestMatchers(
                                 "/api/admin/**",
                                 "/api/accounts/**",

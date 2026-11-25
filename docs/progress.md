@@ -1,5 +1,15 @@
 # Progress — Tour Booking System
 
+## Real customer / staff / admin authorization (2026-11-25)
+
+- Added V10 idempotent role seeding, explicit staff method/path allow-list with admin-only
+  fallback, operation-specific booking checks, cash-only staff recording and minimal admin
+  self/role protections. Added one-query paginated read-only departures API and staff page.
+- Frontend now gates/navigation-filters by role, blocks forbidden direct URLs, and sends staff
+  logins to bookings. Existing dev staff account is unchanged.
+- See `docs/admin/task-staff-role-result.md` for the final matrix, file inventory, three-role
+  manual test guide, verification results and database/browser limitations.
+
 ## Admin passenger, payment and customer screens (2026-11-24)
 
 - Added passenger manifest with print and client-side CSV; payment search and VNPay reconciliation;

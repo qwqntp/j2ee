@@ -8,6 +8,7 @@ import com.j2ee.tour.model.Account;
 import com.j2ee.tour.model.AccountRole;
 import com.j2ee.tour.repository.AccountRepository;
 import com.j2ee.tour.repository.AccountRoleRepository;
+import com.j2ee.tour.security.AuthPrincipal;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,16 @@ public class AccountService {
     }
 
     @Transactional
+    public AccountResponse update(Long id, AccountUpdateRequest request, AuthPrincipal caller) {
+        if (id.equals(caller.id()) && "ROLE_ADMIN".equals(caller.role())
+                && (!Objects.equals(request.status(), 1)
+                || !"ROLE_ADMIN".equals(resolveRole(request.roleId()).getRoleName()))) {
+            throw new IllegalStateException("Cannot demote or disable your own administrator account");
+        }
+        return update(id, request);
+    }
+
+    @Transactional
     public AccountResponse update(Long id, AccountUpdateRequest request) {
         Account account = find(id);
         accountRepository.findByUsername(request.username())
@@ -84,6 +95,14 @@ public class AccountService {
         account.setRole(requestedRole);
         account.setAccountUpdatedAt(LocalDateTime.now());
         return AccountResponse.from(accountRepository.save(account));
+    }
+
+    @Transactional
+    public void delete(Long id, AuthPrincipal caller) {
+        if (id.equals(caller.id()) && "ROLE_ADMIN".equals(caller.role())) {
+            throw new IllegalStateException("Cannot delete your own administrator account");
+        }
+        delete(id);
     }
 
     @Transactional

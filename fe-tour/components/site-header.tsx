@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ensureSession, getStoredSession, signOut, useSession } from "@/lib/auth";
+import { consoleHome, isConsoleRole } from "@/lib/admin-permissions";
 import { IconArrowRight, IconChevronRight, IconCompass, IconMenu, IconUsers } from "./icons";
 
 const links = [
@@ -105,9 +106,9 @@ export function SiteHeader() {
                   Profile
                   <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                 </Link>
-                {account.roleName === "ROLE_ADMIN" ? (
+                {isConsoleRole(account.roleName) ? (
                   <Link
-                    href="/admin"
+                    href={consoleHome(account.roleName)}
                     onClick={() => accountMenu.current?.removeAttribute("open")}
                     className="flex min-h-11 items-center gap-2 border-t border-line px-3 pt-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
                   >
@@ -202,9 +203,9 @@ export function SiteHeader() {
                       Profile
                       <IconChevronRight className="ml-auto h-3.5 w-3.5 text-muted" />
                     </Link>
-                    {account.roleName === "ROLE_ADMIN" ? (
+                    {isConsoleRole(account.roleName) ? (
                       <Link
-                        href="/admin"
+                        href={consoleHome(account.roleName)}
                         className="flex min-h-11 items-center gap-2 rounded-[2px] px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-sage/20 hover:text-forest"
                       >
                         Admin console

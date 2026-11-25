@@ -119,7 +119,7 @@ export function AdminAccountEditor({ account, roles, protectedAdmin, onDismiss, 
             <label className="label">Role
               <select className="field" required value={roleId} onChange={(event) => setRoleId(event.target.value)} disabled={protectedAdmin || busy || confirming}>
                 <option value="">Select role</option>
-                {roles.map((role) => <option key={role.id} value={role.id}>{role.roleName}</option>)}
+                {roles.map((role) => <option key={role.id} value={role.id}>{role.roleName === "ROLE_STAFF" ? "Staff" : role.roleName}</option>)}
               </select>
             </label>
             <label className="label">Status

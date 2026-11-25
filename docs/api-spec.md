@@ -1048,4 +1048,82 @@ All endpoints below require `ROLE_ADMIN` and use the standard response/error env
   `GET /api/customers/{id}` admin endpoint.
 - `GET /api/admin/customers/{id}/bookings?page=0&size=10` returns paginated `id`, `code`,
   `tourName`, `status`, and `total`, newest first; page size is capped at 50. Customers without
-  an associated account have no associated bookings.
+   an associated account have no associated bookings.
+
+## Three-role authorization and departures list (2026-11-25)
+
+This section supersedes earlier blanket statements that all operational reads require
+`ROLE_ADMIN`. Authentication still uses one DB role in the signed JWT `role` claim;
+email login, refresh and existing-account Google login preserve `ROLE_STAFF`. New registrations
+and new Google accounts remain `ROLE_USER`. V10 seeds all three roles idempotently.
+
+### GET /api/admin/departures
+
+Requires Bearer `ROLE_STAFF` or `ROLE_ADMIN`. Returns `ApiResponse<PageResponse<AdminDepartureItem>>`.
+
+| Query | Default | Rules |
+|---|---|---|
+| `page` | `0` | Non-negative, zero-based |
+| `size` | `10` | Positive; capped at configured admin maximum (default 50) |
+| `upcomingOnly` | `true` | `startDate > now` in the server's Asia/Ho_Chi_Minh clock |
+| `status` | none | `OPEN`, `FULL`, `CLOSED`, `CANCELLED`; blank means all |
+| `q` | none | Case-insensitive literal tour-name substring; max 100 characters |
+
+Upcoming mode sorts start date ascending, then departure ID descending; all-dates mode sorts
+start date descending, then ID descending. A status filter is independent of the date filter.
+One joined SQL statement retrieves page rows and count, without entity loading or N+1, and
+retains the correct total when the requested page is empty/out of range.
+
+Example `data`:
+
+```json
+{
+  "content": [{
+    "id": 4, "tourId": 2, "tourName": "Bay tour",
+    "startDate": "2026-12-01T08:00:00", "endDate": "2026-12-02T17:00:00",
+    "status": "OPEN", "capacity": 20, "booked": 6, "remaining": 14
+  }],
+  "page": 0, "size": 10, "totalElements": 1, "totalPages": 1,
+  "last": true, "hasNext": false, "hasPrevious": false
+}
+```
+
+`booked` uses the stored booked-slot counter, not traveler-row count; `remaining = capacity - booked`.
+`id` links to `/admin/departures/{id}/passengers` in the frontend and
+`GET /api/admin/departures/{id}/passengers` in the API. Dates have no offset; preserve wall-clock
+formatting. Errors: 400 invalid filters/paging, 401 no session, 403 customer.
+
+### Authorization matrix
+
+All rows retain existing business-state validation. Customers' public/owner-scoped flows are
+unchanged. Staff grants below are **method/path allow-lists**, not prefix grants.
+
+| Method/path or capability | Customer | Staff | Admin |
+|---|---|---|---|
+| `GET /api/admin/bookings` | 403 | Allowed | Allowed |
+| `GET /api/bookings`, `/{id}`, `/code/{code}` | Own only | All operational bookings | All |
+| `POST /api/bookings/{id}/confirm`, `/complete` | Own only | Allowed | Allowed |
+| `POST /api/bookings/{id}/cancel` | Own unpaid PENDING | Unpaid PENDING only; non-PENDING 403 | Existing behavior |
+| `POST /api/bookings`, `PUT/DELETE /api/bookings/{id}` | Existing owner rules | 403 | Existing behavior |
+| `GET /api/admin/payments`, `GET /api/payments`, `/{numericId}`, `GET /api/bookings/{id}/payments` | 403 | Allowed | Allowed |
+| `POST /api/payments` | 403 | Only `paymentMethod=CASH`, `status=SUCCESS`; otherwise 403 | Existing methods/statuses |
+| `POST /api/admin/payments/{id}/reconcile` | 403 | Allowed | Allowed |
+| `GET /api/admin/customers`, `/{id}/bookings`, `GET /api/customers/{numericId}` | 403 | Read-only | Allowed |
+| `GET /api/invoices`, `/{numericId}`, `/by-booking/{id}` | 403 | Read/print | Allowed |
+| `GET /api/invoices/me` | Own only | Own only | Own only |
+| `GET /api/admin/departures`, `/{id}/passengers` | 403 | Read-only | Allowed |
+| Stats/dashboard/reports; tours/departures/catalog management; departure cancel | 403 (public tour reads unchanged) | 403 | Allowed |
+| Promotions; accounts/roles; customer writes; invoice/payment updates/deletes | 403 | 403 | Allowed |
+| Refunds, signed internal payment callback, PAID-booking cancellation management | 403 | 403 | Admin-only where implemented |
+| **Any unlisted `/api/admin/**` path/method**, including future refunds/reports/image upload | 403 | 403 | Allowed by role |
+
+Unauthenticated protected requests return 401; 403 means authenticated but forbidden.
+VNPay customer start/return/status/reconcile and the public signed IPN keep their previous rules.
+Admin reconciliation only handles managed pending VNPay attempts and trusts signed provider
+verification, never a client-supplied payment outcome. Staff cannot use legacy departure CRUD
+reads to enter management flows; use the new departures list and existing manifest.
+
+Account PUT/DELETE reject self-demotion, self-disable and self-delete; existing last-active-admin
+protection still locks admin rows. Renaming/deleting `ROLE_ADMIN` is rejected. These account
+conflicts return 409. The seeded Staff role is assignable to other accounts from Accounts.
+Existing access tokens remain stateless and may retain old privileges until expiry (15 minutes).

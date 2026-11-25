@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ADMIN_SECTIONS } from "@/lib/admin-navigation";
+import { getAdminSections } from "@/lib/admin-navigation";
+import { consoleHome } from "@/lib/admin-permissions";
 import { IconCompass } from "@/components/icons";
 import { AdminIcon } from "./admin-icons";
 
 type Props = {
   pathname: string;
   activeHref: string | null;
+  roleName: string | null;
   collapsed?: boolean;
   signingOut: boolean;
   onToggle?: () => void;
@@ -14,12 +16,12 @@ type Props = {
 };
 
 export function AdminSidebar({
-  pathname, activeHref, collapsed, signingOut, onToggle, onClose, onSignOut,
+  pathname, activeHref, roleName, collapsed, signingOut, onToggle, onClose, onSignOut,
 }: Props) {
   return (
     <div className="admin-sidebar flex h-full min-h-0 flex-col bg-forest-deep text-ivory">
       <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-white/15 px-3">
-        <Link href="/admin" onNavigate={onClose} aria-label="Hành Trình admin dashboard"
+        <Link href={consoleHome(roleName)} onNavigate={onClose} aria-label="Hành Trình workspace home"
           className="flex min-h-11 min-w-0 items-center gap-3 rounded-md px-2">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/20">
             <IconCompass className="size-5" />
@@ -40,7 +42,7 @@ export function AdminSidebar({
       <nav aria-label="Admin" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5">
         {!collapsed && <p className="mb-2 px-3 text-xs font-medium text-ivory/75">Management</p>}
         <ul className="space-y-1">
-          {ADMIN_SECTIONS.map(({ href, label, icon }) => {
+          {getAdminSections(roleName).map(({ href, label, icon }) => {
             const active = activeHref === href;
             return (
               <li key={href}>
