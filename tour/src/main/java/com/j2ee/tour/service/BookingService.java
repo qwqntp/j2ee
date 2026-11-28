@@ -102,12 +102,12 @@ public class BookingService {
                                 .and(Sort.by(Sort.Direction.DESC, "bookingId")));
         Page<Booking> bookings;
         if (filter == null) {
-            bookings = isAdmin(principal)
+            bookings = (isAdmin(principal) || isStaff(principal))
                     ? bookingRepository.findAll(effective)
                     : bookingRepository.findByAccountAccountId(principal.id(), effective);
         } else {
             Specification<Booking> spec = BookingSpecifications.from(filter);
-            if (!isAdmin(principal)) {
+            if (!isAdmin(principal) && !isStaff(principal)) {
                 spec = spec.and(BookingSpecifications.ownedBy(principal.id()));
             }
             bookings = bookingRepository.findAll(spec, effective);
@@ -117,6 +117,9 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public BookingResponse get(Long id, AuthPrincipal principal) {
+        if (isStaff(principal)) {
+            return BookingResponse.from(find(id));
+        }
         return BookingResponse.from(findOwned(id, principal));
     }
 
@@ -124,7 +127,9 @@ public class BookingService {
     public BookingResponse getByCode(String bookingCode, AuthPrincipal principal) {
         Booking booking = bookingRepository.findByBookingCode(bookingCode)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
-        ensureOwner(booking, principal);
+        if (!isStaff(principal)) {
+            ensureOwner(booking, principal);
+        }
         return BookingResponse.from(booking);
     }
 
@@ -293,7 +298,7 @@ public class BookingService {
      */
     @Transactional
     public BookingResponse confirm(Long id, AuthPrincipal principal) {
-        Booking booking = findOwnedForUpdate(id, principal);
+        Booking booking = findOwnedForUpdate(id, principal, true);
         if (!"PAID".equals(booking.getBookingStatus())) {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Only paid bookings can be confirmed");
@@ -307,7 +312,7 @@ public class BookingService {
      */
     @Transactional
     public BookingResponse complete(Long id, AuthPrincipal principal) {
-        Booking booking = findOwnedForUpdate(id, principal);
+        Booking booking = findOwnedForUpdate(id, principal, true);
         if (!"CONFIRMED".equals(booking.getBookingStatus())) {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Only confirmed bookings can be completed");
@@ -319,7 +324,10 @@ public class BookingService {
     @Transactional
     @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse cancel(Long id, AuthPrincipal principal) {
-        Booking booking = findOwnedForUpdate(id, principal);
+        Booking booking = findOwnedForUpdate(id, principal, true);
+        if (isStaff(principal) && !"PENDING".equals(booking.getBookingStatus())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Staff can only cancel pending unpaid bookings");
+        }
         if (!"PENDING".equals(booking.getBookingStatus())) {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Only pending unpaid bookings can be cancelled");
@@ -519,10 +527,20 @@ public class BookingService {
     }
 
     private Booking findOwnedForUpdate(Long id, AuthPrincipal principal) {
+        return findOwnedForUpdate(id, principal, false);
+    }
+
+    private Booking findOwnedForUpdate(Long id, AuthPrincipal principal, boolean staffOperation) {
         Booking booking = bookingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
-        ensureOwner(booking, principal);
+        if (!staffOperation || !isStaff(principal)) {
+            ensureOwner(booking, principal);
+        }
         return booking;
+    }
+
+    private boolean isStaff(AuthPrincipal principal) {
+        return "ROLE_STAFF".equals(principal.role());
     }
 
     private void ensureOwner(Booking booking, AuthPrincipal principal) {

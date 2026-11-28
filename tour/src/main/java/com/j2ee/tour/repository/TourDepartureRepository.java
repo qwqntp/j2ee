@@ -2,6 +2,9 @@ package com.j2ee.tour.repository;
 
 import com.j2ee.tour.model.TourDeparture;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +16,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TourDepartureRepository extends JpaRepository<TourDeparture, Long> {
+
+    @Override
+    @EntityGraph(attributePaths = "tour")
+    Page<TourDeparture> findAll(Pageable pageable);
 
     List<TourDeparture> findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
             Long tourId, Collection<String> statuses, LocalDateTime now);

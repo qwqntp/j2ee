@@ -19,6 +19,12 @@ class JwtServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-26T00:00:00Z");
 
     @Test
+    void staffAuthoritySurvivesSignedTokenRoundTrip() {
+        JwtService jwt = serviceAt(NOW);
+        assertThat(jwt.parse(jwt.issue(8L, "staff", "ROLE_STAFF")).role()).isEqualTo("ROLE_STAFF");
+    }
+
+    @Test
     void issuesAndParsesAccessToken() {
         JwtService jwtService = serviceAt(NOW);
 

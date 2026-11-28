@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { catalogInput, catalogTabs } from "@/lib/admin-catalog";
 import {
   ApiError,
@@ -28,11 +28,14 @@ import {
   uploadImage,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminTableRegion } from "@/components/admin/admin-ui";
+import { lastAvailablePage } from "@/lib/admin-pagination";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
 import { AdminFormSkeleton, AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import type {
   AccommodationInput,
   AdminTour,
@@ -43,6 +46,7 @@ import type {
   GuideInput,
   ImageInput,
   VehicleInput,
+  PageData,
 } from "@/lib/types";
 
 type Field = {
@@ -100,18 +104,18 @@ function displayError(error: unknown, fallback: string, deletion = false): strin
   return fallback;
 }
 
-async function fetchRows(resource: CatalogResource, token: string): Promise<CatalogRow[]> {
+async function fetchRows(resource: CatalogResource, token: string, page: number): Promise<PageData<CatalogRow>> {
   switch (resource) {
     case "destinations":
-      return (await listDestination(token)).content;
+      return listDestination(token, page, 10);
     case "accommodations":
-      return (await listAccommodation(token)).content;
+      return listAccommodation(token, page, 10);
     case "vehicles":
-      return (await listVehicle(token)).content;
+      return listVehicle(token, page, 10);
     case "guides":
-      return (await listGuide(token)).content;
+      return listGuide(token, page, 10);
     case "images":
-      return (await listImage(token)).content;
+      return listImage(token, page, 10);
   }
 }
 
@@ -175,11 +179,21 @@ async function removeRow(resource: CatalogResource, token: string, id: number): 
   }
 }
 
+const QUERY_SCHEMA = {
+  page: { kind: "page" },
+  tab: { kind: "enum", allowed: ["destinations", "accommodations", "vehicles", "guides", "images"], defaultValue: "destinations" },
+} as const;
+
 export function AdminCatalog() {
   const { getSession } = useAdminAccess();
   const tabs = catalogTabs();
-  const [resource, setResource] = useState<CatalogResource>("destinations");
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const resource = (params.get("tab") ?? "destinations") as CatalogResource;
+  const page = Number(params.get("page") ?? "1") - 1;
+  const updateRef = useRef(update);
+  useEffect(() => { updateRef.current = update; }, [update]);
   const [rows, setRows] = useState<CatalogRow[]>([]);
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [tours, setTours] = useState<AdminTour[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadedResource, setLoadedResource] = useState<CatalogResource | null>(null);
@@ -213,13 +227,16 @@ export function AdminCatalog() {
         const session = await getSession();
         if (!active || !session) return;
         const [loadedRows, loadedTours] = await Promise.all([
-          fetchRows(resource, session.accessToken),
+          fetchRows(resource, session.accessToken, page),
           resource === "images"
             ? listAdminTours(session.accessToken, 0, 100).then((page) => page.content)
             : Promise.resolve<AdminTour[]>([]),
         ]);
         if (!active) return;
-        setRows(loadedRows);
+        const validPage = lastAvailablePage(page, loadedRows.totalPages);
+        if (page !== validPage) { updateRef.current({ page: String(validPage + 1) }, "replace"); return; }
+        setRows(loadedRows.content);
+        setPagination(loadedRows);
         setTours(loadedTours);
         setError(null);
       } catch (err) {
@@ -237,11 +254,11 @@ export function AdminCatalog() {
     return () => {
       active = false;
     };
-  }, [resource, reloadKey, getSession]);
+  }, [resource, page, reloadKey, getSession]);
 
   function selectTab(next: CatalogResource) {
     if (next === resource) return;
-    setResource(next);
+    update({ tab: next, page: null });
     setLoadedResource(null);
     setLoading(true);
     setRows([]);
@@ -541,17 +558,19 @@ export function AdminCatalog() {
                       <button
                         type="button"
                         onClick={() => startEdit(row)}
-                        className="admin-row-action"
+                        className={adminActionStyles.edit}
+                        aria-label={`Edit record ${row.id}`} title="Edit"
                       >
-                         <AdminIcon name="edit" className="size-4" /> Edit
+                         <AdminIcon name="edit" className="size-4" />
                       </button>
                       <button
                         type="button"
                          disabled={deleting}
                          onClick={() => setRowToDelete(row)}
-                         className="admin-danger-action"
+                         className={adminActionStyles.delete}
+                         aria-label={`Delete record ${row.id}`} title="Delete"
                       >
-                         <AdminIcon name="delete" className="size-4" /> Delete
+                         <AdminIcon name="delete" className="size-4" />
                        </button>
                     </div>
                   </td>
@@ -561,7 +580,7 @@ export function AdminCatalog() {
           </table>
         </AdminTableRegion>
       )}
-      {!initialLoading && <p className="admin-pagination text-sm text-muted">{rows.length} records loaded</p>}
+      {!initialLoading && <AdminPagination page={page} {...pagination} loading={loading} onPageChange={(next) => update({ page: String(next + 1) })} />}
       </AdminListPanel>
       <AdminConfirmDialog title="Delete catalog record?"
         target={rowToDelete ? ("name" in rowToDelete ? rowToDelete.name : `${activeLabel} #${rowToDelete.id}`) : null}

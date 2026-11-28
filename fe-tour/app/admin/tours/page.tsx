@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { AdminTours } from "@/components/admin-tours";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AdminToursPage() {
-  return <AdminTours />;
+  return <Suspense fallback={null}><AdminTours /></Suspense>;
 }

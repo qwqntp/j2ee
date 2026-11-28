@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getAdminRecheckAt } from "@/lib/admin-session";
+import { hasConsoleAccess, isConsoleRole } from "@/lib/admin-permissions";
 import { ensureSession, getStoredSession, useSession } from "@/lib/auth";
 import type { Account, AuthSession } from "@/lib/types";
 
@@ -56,9 +57,19 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
 
   const getSession = useCallback(async () => {
     const current = await validate();
-    return current?.account.roleName === "ROLE_ADMIN" ? current : null;
+    return current && hasConsoleAccess(current, getStoredSession()) ? current : null;
   }, [validate]);
 
+  return <AdminGateContent session={session} stored={stored} getSession={getSession}>{children}</AdminGateContent>;
+}
+
+// Keep the permission states testable without a browser or new DOM-test dependencies.
+export function AdminGateContent({ session, stored, getSession, children }: {
+  session: AuthSession | null | undefined;
+  stored: AuthSession | null;
+  getSession: AdminAccess["getSession"];
+  children: React.ReactNode;
+}) {
   if (session === undefined || (session && stored && session.account.id !== stored.account.id)) {
     return (
       <main className="admin-access">
@@ -74,7 +85,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           <p className="font-display text-lg text-forest">Hành Trình</p>
           <h1 className="mt-3 text-2xl font-semibold">Admin sign-in required</h1>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Sign in with an administrator account to manage tours, departures, bookings and payments.
+            Sign in with an administrator or staff account to access the workspace.
           </p>
           <Link href="/login?next=/admin" className="btn-primary mt-4">
             Sign in
@@ -84,12 +95,12 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (session.account.roleName !== "ROLE_ADMIN" || stored.account.roleName !== "ROLE_ADMIN") {
+  if (!isConsoleRole(session.account.roleName) || !hasConsoleAccess(session, stored)) {
     return (
       <main className="admin-access">
         <div role="alert" className="admin-panel w-full max-w-md p-6">
-          <h1 className="text-2xl font-semibold">Admin access required</h1>
-          <p className="mt-2 text-sm leading-6 text-muted">This account is not an administrator.</p>
+          <h1 className="text-2xl font-semibold">Workspace access required</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">This account does not have permission to access the workspace.</p>
           <Link href="/" className="btn-secondary mt-4">Back to Hành Trình</Link>
         </div>
       </main>

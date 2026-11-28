@@ -139,6 +139,40 @@ class BookingServiceTest {
         return new AuthPrincipal(id, "user" + id, role);
     }
 
+    @Test
+    void staffCanReadAnotherCustomersBooking() {
+        assertEquals(30L, bookingService.get(30L, principal(99, "ROLE_STAFF")).id());
+    }
+
+    @Test
+    void staffCanConfirmAndCompleteAnotherCustomersBooking() {
+        booking.setBookingStatus("PAID");
+        assertEquals("CONFIRMED", bookingService.confirm(30L, principal(99, "ROLE_STAFF")).status());
+        assertEquals("COMPLETED", bookingService.complete(30L, principal(99, "ROLE_STAFF")).status());
+    }
+
+    @Test
+    void staffCanCancelAnotherCustomersPendingBooking() {
+        assertEquals("CANCELLED", bookingService.cancel(30L, principal(99, "ROLE_STAFF")).status());
+    }
+
+    @Test
+    void staffCannotCancelPaidBookingsEvenIfTheyOwnThem() {
+        booking.setBookingStatus("PAID");
+        ApiException error = assertThrows(ApiException.class,
+                () -> bookingService.cancel(30L, principal(10, "ROLE_STAFF")));
+        assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
+        assertEquals("PAID", booking.getBookingStatus());
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void staffDoesNotGainGenericUpdateOrDeleteOwnershipBypass() {
+        assertThrows(ApiException.class, () -> bookingService.update(30L,
+                new BookingUpdateRequest(null, null, "edited", null), principal(99, "ROLE_STAFF")));
+        assertThrows(ApiException.class, () -> bookingService.delete(30L, principal(99, "ROLE_STAFF")));
+    }
+
     private Promotion promotion(String code, String percentage, Integer usageLimit, int usedCount,
                                 String minOrderAmount) {
         Promotion promotion = new Promotion();

@@ -39,13 +39,20 @@ public class AccountRoleService {
     @Transactional
     public AccountRoleResponse update(Long id, AccountRoleRequest request) {
         AccountRole role = find(id);
+        if ("ROLE_ADMIN".equals(role.getRoleName()) && !"ROLE_ADMIN".equals(request.roleName())) {
+            throw new IllegalStateException("Cannot rename the administrator role");
+        }
         role.setRoleName(request.roleName());
         return AccountRoleResponse.from(accountRoleRepository.save(role));
     }
 
     @Transactional
     public void delete(Long id) {
-        accountRoleRepository.delete(find(id));
+        AccountRole role = find(id);
+        if ("ROLE_ADMIN".equals(role.getRoleName())) {
+            throw new IllegalStateException("Cannot delete the administrator role");
+        }
+        accountRoleRepository.delete(role);
     }
 
     private AccountRole find(Long id) {

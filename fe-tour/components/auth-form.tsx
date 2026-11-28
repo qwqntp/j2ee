@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { signIn, signUp } from "@/lib/auth";
 import { publishFlash } from "@/lib/flash";
+import { loginDestination } from "@/lib/admin-permissions";
 import { GoogleSignInButton } from "./google-signin-button";
 
 type Props = { mode: "login" | "register" };
@@ -41,7 +42,7 @@ export function AuthForm({ mode }: Props) {
           ? `Account created — welcome, ${session.account.username}!`
           : `Welcome back, ${session.account.username}!`,
       );
-      router.push(next);
+      router.push(loginDestination(session.account.roleName, next));
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not reach the booking service.");

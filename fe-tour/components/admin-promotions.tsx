@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createPromotion,
@@ -9,11 +9,15 @@ import {
   updatePromotion,
 } from "@/lib/api";
 import { useAdminAccess } from "@/components/admin-gate";
-import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { AdminEmptyState, AdminFormActions, AdminFormSection, AdminListPanel, AdminPageHeading, AdminPagination, AdminStatusBadge, AdminTableRegion } from "@/components/admin/admin-ui";
+import { lastAvailablePage } from "@/lib/admin-pagination";
+import { useAdminQueryState } from "@/lib/use-admin-query-state";
+import { useAdminTextDraft } from "@/lib/use-admin-text-draft";
 import { AdminTableSkeleton } from "@/components/admin/admin-skeletons";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminFormDialog } from "@/components/admin/admin-form-dialog";
 import { AdminIcon } from "@/components/admin/admin-icons";
+import { adminActionStyles } from "@/components/admin/admin-action-styles";
 import { formatPrice } from "@/lib/format";
 import {
   filterPromotions,
@@ -53,6 +57,11 @@ const LIFECYCLES: PromotionFilter["lifecycle"][] = [
   "Expired",
   "Inactive",
 ];
+const QUERY_SCHEMA = {
+  page: { kind: "page" },
+  q: { kind: "text", maxLength: 100 },
+  status: { kind: "enum", allowed: ["Active", "Scheduled", "Expired", "Inactive"] },
+} as const;
 
 function draftFrom(promotion: Promotion): PromotionForm {
   return {
@@ -99,14 +108,22 @@ function inputWithActive(promotion: Promotion, active: boolean): PromotionInput 
 
 export function AdminPromotions() {
   const { getSession } = useAdminAccess();
+  const { params, update } = useAdminQueryState(QUERY_SCHEMA);
+  const page = Number(params.get("page") ?? "1") - 1;
+  const query = params.get("q") ?? "";
+  const lifecycle = (params.get("status") ?? "All") as PromotionFilter["lifecycle"];
+  const [search, changeSearch] = useAdminTextDraft(query, (value) => update({ q: value, page: null }, "replace"), params.toString());
+  const updateRef = useRef(update);
+  useEffect(() => { updateRef.current = update; }, [update]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0, hasNext: false });
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [filter, setFilter] = useState<PromotionFilter>({ lifecycle: "All", query: "" });
+  const filter = useMemo<PromotionFilter>(() => ({ lifecycle, query: search }), [lifecycle, search]);
   const [form, setForm] = useState<PromotionForm | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -122,9 +139,12 @@ export function AdminPromotions() {
       try {
         const session = await getSession();
         if (!active || !session) return;
-        const page = await listPromotions(session.accessToken, 0, 100);
+        const result = await listPromotions(session.accessToken, page, 10);
         if (!active) return;
-        setPromotions(page.content);
+        const validPage = lastAvailablePage(page, result.totalPages);
+        if (page !== validPage) { updateRef.current({ page: String(validPage + 1) }, "replace"); return; }
+        setPromotions(result.content);
+        setPagination(result);
         setError(null);
       } catch (err) {
         if (!active) return;
@@ -141,7 +161,7 @@ export function AdminPromotions() {
     return () => {
       active = false;
     };
-  }, [reloadKey, getSession]);
+  }, [page, reloadKey, getSession]);
 
   const visiblePromotions = useMemo(
     () => filterPromotions(promotions, filter),
@@ -233,7 +253,7 @@ export function AdminPromotions() {
   return (
     <div>
       <AdminPageHeading title="Promotions"
-        description="Manage discounts and availability. Search and filters apply to the first 100 promotions."
+        description="Manage discounts and availability. Search and filters apply to the current page."
         action={<button type="button" onClick={startCreate} className="btn-primary"><AdminIcon name="plus" className="size-4" /> New promotion</button>}
       />
 
@@ -402,21 +422,23 @@ export function AdminPromotions() {
       </AdminFormDialog>
 
       <AdminListPanel busy={loading}>
-      <div className="admin-filter-bar grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="promotion-search" className="label">
-            Search
+      <div className="admin-filter-bar admin-toolbar">
+        <div className="admin-toolbar-search">
+          <label htmlFor="promotion-search" className="sr-only">
+            Search promotions
           </label>
+          <AdminIcon name="search" className="size-4" />
           <input
             id="promotion-search"
             type="search"
             className="field"
             placeholder="Name, code or description"
-            value={filter.query}
-            onChange={(event) => setFilter({ ...filter, query: event.target.value })}
+            maxLength={100}
+            value={search}
+            onChange={(event) => changeSearch(event.target.value)}
           />
         </div>
-        <div>
+        <div className="admin-toolbar-row"><div className="admin-toolbar-control">
           <label htmlFor="promotion-lifecycle-filter" className="label">
             Lifecycle
           </label>
@@ -424,12 +446,7 @@ export function AdminPromotions() {
             id="promotion-lifecycle-filter"
             className="field"
             value={filter.lifecycle}
-            onChange={(event) =>
-              setFilter({
-                ...filter,
-                lifecycle: event.target.value as PromotionFilter["lifecycle"],
-              })
-            }
+            onChange={(event) => update({ status: event.target.value === "All" ? null : event.target.value, page: null })}
           >
             {LIFECYCLES.map((lifecycle) => (
               <option key={lifecycle} value={lifecycle}>
@@ -437,6 +454,7 @@ export function AdminPromotions() {
               </option>
             ))}
           </select>
+        </div>
         </div>
       </div>
 
@@ -491,17 +509,19 @@ export function AdminPromotions() {
                         <button
                           type="button"
                           onClick={() => startEdit(promotion)}
-                          className="admin-row-action"
+                          className={adminActionStyles.edit}
+                          aria-label={`Edit ${promotion.name}`} title="Edit"
                         >
-                           <AdminIcon name="edit" className="size-4" /> Edit
+                           <AdminIcon name="edit" className="size-4" />
                         </button>
                         <button
                           type="button"
                           disabled={busy || togglingId === promotion.id}
                            onClick={() => setPromotionToDelete(promotion)}
-                           className="admin-danger-action"
+                           className={adminActionStyles.delete}
+                           aria-label={`Delete ${promotion.name}`} title="Delete"
                         >
-                           <AdminIcon name="delete" className="size-4" /> Delete
+                           <AdminIcon name="delete" className="size-4" />
                         </button>
                       </div>
                     </td>
@@ -512,7 +532,7 @@ export function AdminPromotions() {
           </table>
         </AdminTableRegion>
       )}
-      <p className="admin-pagination text-sm text-muted">{visiblePromotions.length} of {promotions.length} shown</p>
+      <AdminPagination page={page} {...pagination} loading={loading} onPageChange={(next) => update({ page: String(next + 1) })} />
       </AdminListPanel>
       <AdminConfirmDialog title="Delete promotion?" target={promotionToDelete?.name ?? null}
         consequence="This removes the promotion if the system permits deletion. This action cannot be undone here."

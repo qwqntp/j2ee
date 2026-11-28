@@ -1,8 +1,8 @@
 # Hành Trình — tour booking and management
 
 A tour booking and management site for a single travel company. Customers browse tours and
-departures, book seats, pay online and manage their trips; staff use a separate admin console to
-manage tours, departures, bookings, payments, accounts, promotions and invoices.
+departures, book seats, pay online and manage their trips. Operations staff use a restricted
+console; administrators manage the whole system.
 
 The repository contains two independent applications:
 
@@ -42,20 +42,38 @@ The repository contains two independent applications:
 ### Role model
 
 - `ROLE_USER` — the default role assigned on email registration and Google sign-in.
-- `ROLE_ADMIN` — required for the admin console and every route under `/api/admin/**` and the
-  admin-only prefixes in `SecurityConfig`. The front end also gates the console client-side.
-- `ROLE_STAFF` — present in the reference schema and dev seed as a label. **No code enforces it**;
-  it currently has the same permissions as `ROLE_USER`.
+- `ROLE_STAFF` — operations staff, with the five console sections below.
+- `ROLE_ADMIN` — full administrative access, subject to existing business-state validation.
 
-Roles live in the `account_roles` table and can be managed through the admin API/UI. Only the two
-roles above affect authorization today.
+| Capability | Customer (`ROLE_USER`) | Staff (`ROLE_STAFF`) | Admin (`ROLE_ADMIN`) |
+|---|---|---|---|
+| Browse tours, own bookings/profile/payments/invoices | Existing customer flow | No additional customer privileges | Existing admin behavior |
+| View/filter operational bookings | Own only | Yes | Yes |
+| Confirm / complete bookings | Own only | Yes | Yes |
+| Cancel unpaid PENDING bookings | Own only | Yes | Yes |
+| Record CASH payment, view payments, reconcile pending VNPay | Own VNPay flow only | Yes | Yes |
+| Read customers and booking history | Own profile only | Yes | Yes |
+| View/print invoices | Own only | Yes | Yes |
+| Read departures and passenger manifests | Public departure reads only | Yes | Yes |
+| Dashboard, statistics and reports | No | No | Yes |
+| Tour/departure/catalog CRUD and departure cancellation | No | No | Yes |
+| Promotions, accounts and roles; customer edit/delete | No | No | Yes |
+| Refunds and PAID-booking cancellation | No | No | Admin-only where implemented |
+| Any unlisted `/api/admin/**` operation, including future endpoints | No | No | Yes |
+
+Backend security uses an explicit method/path staff allow-list before the admin-only fallback.
+The frontend hides forbidden navigation and blocks direct URLs. Staff signs into
+`/admin/bookings`; admins go to `/admin`; customers keep their current redirect behavior.
+Staff cannot use generic booking PUT/DELETE or payment/invoice CRUD. Admins can assign Staff
+through the DB-driven Accounts role selector. Self-demotion/disable/delete, removing the last
+active admin, and renaming/deleting the admin role are protected.
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Spring Boot 4.1.1, Java 21, Spring Web MVC, Spring Data JPA/Hibernate, Spring Security + JJWT |
-| Database | PostgreSQL, Flyway migrations (`V1`–`V9`), Hibernate `ddl-auto=validate` |
+| Database | PostgreSQL, Flyway migrations (`V1`–`V10`), Hibernate `ddl-auto=validate` |
 | Cache | Spring Cache + Redis (optional; can be disabled) |
 | Auth | Email/password + Google ID-token sign-in; JWT access token + rotating refresh cookie |
 | Payments | VNPay Sandbox PAY 2.1.0 (HMAC-SHA512, return/IPN/QueryDr); gated demo card endpoint |
@@ -98,25 +116,24 @@ cp .env.example .env           # Windows: copy .env.example .env
 ```
 
 Flyway runs automatically at startup: `db/callback/beforeMigrate.sql` creates the two bootstrap
-tables, then `db/migration/V1`–`V9` create the schema. The API starts on
+tables, then `db/migration/V1`–`V10` create the schema and seed roles. The API starts on
 <http://localhost:8080>.
 
-Flyway does **not** seed roles. While the backend is running, open a second terminal and run the
-one-time role insert plus the optional dev seed:
+Flyway V10 idempotently seeds all three roles. The optional dev seed is **development-only**:
 
 ```bash
 cd tour
-psql -U postgres -d tour -c "INSERT INTO account_roles (role_name) SELECT v.role_name FROM (VALUES ('ROLE_ADMIN'), ('ROLE_USER'), ('ROLE_STAFF')) AS v(role_name) WHERE NOT EXISTS (SELECT 1 FROM account_roles r WHERE r.role_name = v.role_name);"
-
 psql -U postgres -d tour -f src/main/resources/db/seed/dev_seed.sql
 ```
 
 `dev_seed.sql` adds demo tours, departures, bookings and sign-in-able demo accounts (password
 `demo1234`):
 
-- `admin@example.com` (`ROLE_ADMIN`)
-- `demo1@example.com`, `demo2@example.com`, `demo3@example.com` (`ROLE_USER`)
-- `staff@example.com` (`ROLE_STAFF`, currently the same permissions as `ROLE_USER`)
+- Username `demo_admin`, email `admin@example.com` (`ROLE_ADMIN`)
+- Usernames `demo_user1` … `demo_user3`, emails `demo1@example.com` … `demo3@example.com` (`ROLE_USER`)
+- Username `demo_staff`, email `staff@example.com` (`ROLE_STAFF`)
+
+Sign in with the **username**, not the email. Never seed these known credentials in production.
 
 ### 2. Frontend
 

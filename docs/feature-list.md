@@ -68,10 +68,10 @@
 | 7 | Tạo booking | Sinh mã booking, trạng thái ban đầu `PENDING`, gắn tài khoản sở hữu | `POST /api/bookings` |
 | 8 | Ghi chú đơn | Lưu ghi chú liên hệ / yêu cầu đặc biệt | `bookingNote` |
 | 9 | Vòng đời booking | `PENDING → PAID → CONFIRMED → COMPLETED`; nhánh `CANCELLED` | `BookingService` |
-| 10 | Phân quyền theo chủ sở hữu | Khách chỉ xem/sửa/hủy booking của mình; admin được bỏ qua giới hạn này | `AuthPrincipal`, owner-scoped queries |
+| 10 | Phân quyền theo chủ sở hữu | Khách chỉ xem/sửa/hủy booking của mình; admin bypass; staff chỉ bypass cho đọc và thao tác confirm/complete/hủy PENDING | `AuthPrincipal`, owner-scoped queries |
 | 11 | Hủy đơn chưa thanh toán | Chỉ hủy booking `PENDING` chưa có thanh toán thành công; giải phóng chỗ và hoàn lượt promotion | `POST /api/bookings/{id}/cancel` |
-| 12 | Xác nhận booking | Chủ đơn hoặc admin xác nhận booking `PAID` | `POST /api/bookings/{id}/confirm` |
-| 13 | Hoàn thành chuyến đi | Chủ đơn hoặc admin đánh dấu `CONFIRMED` thành `COMPLETED` | `POST /api/bookings/{id}/complete` |
+| 12 | Xác nhận booking | Chủ đơn, staff hoặc admin xác nhận booking `PAID` | `POST /api/bookings/{id}/confirm` |
+| 13 | Hoàn thành chuyến đi | Chủ đơn, staff hoặc admin đánh dấu `CONFIRMED` thành `COMPLETED` | `POST /api/bookings/{id}/complete` |
 | 14 | Mail xác nhận / hủy | Gửi mail xác nhận khi tạo booking và mail hủy khi hủy; lỗi SMTP không làm hỏng nghiệp vụ | `EmailService`, `AfterCommitMailDispatcher` |
 | 15 | Giữ chỗ, trả sau | Chọn “Reserve only” để tạo booking `PENDING`, thanh toán sau từ chi tiết đơn | `/payment` |
 
@@ -88,7 +88,7 @@
 | 5 | Đối soát booking | Hỏi VNPay về giao dịch đang chờ và chỉ ghi nhận khi có kết quả hợp lệ | `POST /api/bookings/{id}/payments/vnpay/reconcile` |
 | 6 | Thanh toán một phần | Booking thành `PAID` khi tổng các payment `SUCCESS` đạt tổng tiền; hỗ trợ nhiều lần thanh toán | `PaymentService.recomputeBookingStatus` |
 | 7 | Chống trùng giao dịch | Deduplicate theo `payment_provider_txn_id`; kiểm tra số tiền và chữ ký | `PaymentService`, `VnpayPaymentService` |
-| 8 | Ghi nhận tiền mặt | Admin tạo payment `SUCCESS` để xác nhận đã thu tiền | `/admin/bookings`, `POST /api/payments` |
+| 8 | Ghi nhận tiền mặt | Admin hoặc staff tạo payment CASH `SUCCESS`; staff không được ghi phương thức/trạng thái khác | `/admin/bookings`, `POST /api/payments` |
 | 9 | Callback HMAC nội bộ | Callback thanh toán có chữ ký HMAC-SHA256; hiện chỉ admin gọi được | `POST /api/bookings/{id}/payments/callback` |
 | 10 | Thanh toán demo | Endpoint giả lập thẻ, mặc định tắt, dùng cho test/demo | `POST /api/bookings/{id}/payments/mock`, `PAYMENT_MOCK_ENABLED` |
 | 11 | Hóa đơn tự động | Tạo hóa đơn khi booking chuyển sang `PAID` | `InvoiceService.createForPaidBooking` |
@@ -118,7 +118,7 @@
 
 | # | Chức năng | Mô tả | Điểm vào |
 |---|---|---|---|
-| 1 | Khu quản trị | Shell riêng, sidebar, topbar, gate theo `ROLE_ADMIN`, link Admin trên header công khai | `/admin`, `components/admin-gate.tsx` |
+| 1 | Khu quản trị | Gate admin/staff; staff chỉ thấy Bookings, Payments, Customers, Invoices, Departures; chặn URL trực tiếp; đăng nhập staff vào bookings | `/admin`, `components/admin-gate.tsx`, `/admin/departures` |
 | 2 | Dashboard | Doanh thu, số payment thành công, trung bình mỗi payment, booking theo trạng thái, số tour, departure sắp tới, sắp đầy, đã đầy, top tour, cảnh báo sức chứa | `/admin`, `GET /api/admin/stats` |
 | 3 | Quản lý booking | Lọc trạng thái / khoảng ngày / từ khóa, sắp xếp, phân trang; xem hành khách và lịch sử thanh toán | `/admin/bookings`, `GET /api/admin/bookings` |
 | 4 | Thao tác booking | Ghi nhận tiền mặt, xác nhận, hoàn thành, hủy booking `PENDING`, mở hóa đơn | `/admin/bookings` |
@@ -126,7 +126,7 @@
 | 6 | Quản lý departure | Tạo, sửa, xóa lịch khởi hành; đổi trạng thái, giá, sức chứa | `/admin/tours`, `/api/tour-departures` |
 | 7 | Hủy departure | Chuyển departure sang `CANCELLED` sẽ hủy booking liên quan, giải phóng chỗ, gửi mail và tạo yêu cầu hoàn tiền cho payment thành công | `TourDepartureService.cascadeCancel` |
 | 8 | Quản lý tài khoản | Tìm/lọc theo username, email, role, trạng thái; tạo, sửa, xóa; đổi role, khóa/mở, sửa xác thực email, đặt mật khẩu tạm | `/admin/accounts` |
-| 9 | Bảo vệ admin cuối cùng | Không cho xóa hoặc vô hiệu hóa admin hoạt động cuối cùng | `AdminService`, `PESSIMISTIC_WRITE` |
+| 9 | Bảo vệ quyền admin | Chặn tự hạ quyền/khóa/xóa, hạ quyền admin cuối cùng và đổi tên/xóa ROLE_ADMIN; dropdown cho gán Staff | `AccountService`, `AccountRoleService`, `PESSIMISTIC_WRITE` |
 | 10 | Quản lý promotion | Danh sách, lọc, tạo, sửa, xóa; mã, phần trăm giảm, ngày, lượt dùng, đơn tối thiểu, trạng thái | `/admin/promotions` |
 | 11 | Quản lý hóa đơn | Tìm kiếm hóa đơn, mở chi tiết, in | `/admin/invoices` |
 | 12 | Quản lý danh mục | CRUD điểm đến, lưu trú, phương tiện, hướng dẫn viên, ảnh tour; xử lý lỗi ràng buộc 409 | `/admin/catalog` |
@@ -159,7 +159,7 @@
 |---|---|---|
 | 1 | Cơ sở dữ liệu | PostgreSQL (Supabase), Flyway quản lý migration `V1`–`V9`, Hibernate `ddl-auto=validate` |
 | 2 | Xác thực | Access JWT HS256 15 phút; refresh token opaque, chỉ lưu hash SHA-256; rotation và reuse detection |
-| 3 | Phân quyền | Ma trận route admin trong `SecurityConfig`; toàn bộ CRUD quản trị yêu cầu `ROLE_ADMIN` |
+| 3 | Phân quyền | Ba nhóm ROLE_USER / ROLE_STAFF / ROLE_ADMIN; staff allow-list theo method/path, route admin chưa mở vẫn admin-only; V10 seed vai trò idempotent |
 | 4 | Bảo vệ dữ liệu | Kiểm tra chủ sở hữu booking/payment; admin bypass có chủ đích; không lộ stack trace |
 | 5 | Validation | Jakarta Validation cho request; lỗi trả envelope JSON thống nhất |
 | 6 | Phân trang | `PageResponse` thống nhất cho các API danh sách |

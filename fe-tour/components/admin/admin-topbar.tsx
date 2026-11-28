@@ -53,14 +53,14 @@ export function AdminTopbar({
             menu.current.querySelector("summary")?.focus();
           }
         }}>
-        <summary aria-label={`Account menu: ${account.username}, Administrator`}
+        <summary aria-label={`Account menu: ${account.username}, ${account.roleName === "ROLE_STAFF" ? "Staff" : "Administrator"}`}
           className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg border border-line/80 px-1.5 hover:bg-ivory sm:pr-2.5 [&::-webkit-details-marker]:hidden">
           <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-md bg-forest text-sm font-semibold text-white">
             {account.username.slice(0, 1).toUpperCase()}
           </span>
           <span className="hidden max-w-32 truncate text-left text-sm leading-tight sm:block">
             <span className="block truncate font-semibold">{account.username}</span>
-            <span className="block text-xs text-muted">Administrator</span>
+            <span className="block text-xs text-muted">{account.roleName === "ROLE_STAFF" ? "Staff" : "Administrator"}</span>
           </span>
           <IconChevronRight className="size-3.5 rotate-90 text-muted" />
         </summary>
