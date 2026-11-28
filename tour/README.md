@@ -150,6 +150,31 @@ The read cache is on by default. Either run Redis on `localhost:6379`, point
 `SPRING_CACHE_TYPE=none`. `Dockerfile.redis` contains a small standalone Redis image example
 (port 6380 in its comments); credentials are supplied at runtime, never baked into the image.
 
+### What Redis caches, and what it never caches
+
+Only stable public content is cached, in region `tours` with keys
+`v2:catalog:[id,...]` and `v2:detail:<id>` (default full key `tour:tours::v2:detail:1`).
+Tour name, description, duration, images, accommodation/guide/destination/vehicle labels and
+relation IDs can be warm. PostgreSQL remains the source of truth for catalog membership,
+ordering, totals, page metadata, price/date/seats/departure counts, visibility and every
+departure field. Bookings, payments, refunds, auth and admin reads are never cached.
+A cache get/put/serialization failure logs a warning and falls back to PostgreSQL; a PostgreSQL
+failure is never masked by an older availability response.
+
+Default TTL is `PT10M`, configurable with `SPRING_CACHE_TTL`; prefix is `tour:`. With
+`SPRING_CACHE_TYPE=none`, the same loaders run uncached. Auth rate limits stay in JVM memory
+(`FixedWindowRateLimiter`), so they are per-process and reset on restart; they are not shared
+through Redis. Content invalidation happens after a successful application write commit; a
+concurrent older read, a failed Redis clear or a direct SQL edit can leave briefly stale content
+until the TTL expires. Availability is a fresh database observation, not a seat reservation.
+Do not treat cached content as a consistency guarantee across processes.
+
+The running application continues to use the configured Supabase PostgreSQL through
+`SPRING_DATASOURCE_*` (or the optional `.env`); these cache changes do not alter that connection.
+Tests must **not** use that shared database. Redis Cloud currently has TLS and CIDR restrictions
+disabled, which is demo-only: secure transport and access restrictions before production.
+Never put a real connection string, password or token in this README.
+
 ## Tests
 
 ```bash
@@ -169,6 +194,60 @@ cd tour
   PostgreSQL. They use the configured datasource and let Flyway + Hibernate validation run.
 - There is no H2 or Testcontainers setup. Do not point the tests at a shared or production
   database; use a disposable local database.
+
+### Verifying the cache changes safely (Windows)
+
+1. Unit-only verification; no live database or Redis required:
+
+   ```powershell
+   .\mvnw.cmd "-Dtest=TourContentCacheTest,TourCacheTest,TourServiceTest,TourCacheInvalidatorTest,TourCacheFailureTest,TourContentInvalidationTest,CacheConfigTest,TourControllerTest,FixedWindowRateLimiterTest,RateLimitFilterTest,TourCacheDatabaseGuardTest" test
+   ```
+
+   The focused failure-context class uses production `CacheConfig` with a throwing cache and a
+   no-op cache manager in separate contexts. Run it explicitly with:
+
+   ```powershell
+   .\mvnw.cmd "-Dtest=TourCacheFailureTest" test
+   ```
+
+2. Guarded database-backed regression class. Set all three `TOUR_CACHE_TEST_DB_*` variables to a
+   disposable local database named `tour_cache_test`:
+
+   ```powershell
+   $env:TOUR_CACHE_TEST_DB_URL = "jdbc:postgresql://localhost:5432/tour_cache_test"
+   $env:TOUR_CACHE_TEST_DB_USERNAME = "<dedicated-user>"
+   $env:TOUR_CACHE_TEST_DB_PASSWORD = "<dedicated-password>"
+   .\mvnw.cmd "-Dtest=TourCacheIntegrationTests" test
+   ```
+
+   The class is disabled unless `TOUR_CACHE_TEST_DB_URL` is set. Its context initializer rejects
+   missing credentials, non-loopback hosts, wrong database names, query strings, fragments and
+   URL user-info before Flyway or Hibernate connects. Accepted hosts are `localhost`,
+   `127.0.0.1` and bracketed IPv6 `[::1]`. Verify the class ran rather than skipped, then stop if
+   the dedicated database is unavailable.
+
+   Existing `*IntegrationTests` classes have no such guard. To run them, override the shared
+   defaults with the same disposable values (process environment overrides `.env`):
+
+   ```powershell
+   $env:SPRING_DATASOURCE_URL = $env:TOUR_CACHE_TEST_DB_URL
+   $env:SPRING_DATASOURCE_USERNAME = $env:TOUR_CACHE_TEST_DB_USERNAME
+   $env:SPRING_DATASOURCE_PASSWORD = $env:TOUR_CACHE_TEST_DB_PASSWORD
+   .\mvnw.cmd "-Dtest=TourSearchIntegrationTests,BookingFlowIntegrationTests,BookingRefundIntegrationTests" test
+   ```
+
+   Never run bare `mvn test` against the current shared datasource defaults, and never point
+   these tests at Supabase. The integration fixtures commit explicitly and delete only their own
+   rows; they do not use a test-wide rollback that would hide `afterCommit` behavior.
+
+3. Real Redis smoke against a separate **local** Redis. Supply the local URL through the process
+   environment (no secrets in files), start the backend on the disposable demo database, warm
+   `GET /api/tours`, `GET /api/tours/{id}` and `GET /api/tours/{id}/departures`, then inspect only
+   `tour:tours::v2:*` keys with `SCAN` (never `KEYS`). Use a one-guest booking then cancellation
+   to observe seats 28 → 27 → 28 while the static `v2:detail:<id>` content stays cached; confirm
+   no cached departure payload exists. Repeat with `SPRING_CACHE_TYPE=none` and with an
+   unreachable Redis address to confirm correct live reads and fail-open behavior. Never stop
+   shared Redis or clear its entire database (`FLUSHDB`/`FLUSHALL`).
 
 ## Build
 

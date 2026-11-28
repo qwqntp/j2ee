@@ -17,10 +17,13 @@ import java.util.NoSuchElementException;
 public class TourImageService {
     private final TourImageRepository tourImageRepository;
     private final TourRepository tourRepository;
+    private final TourCacheInvalidator cacheInvalidator;
 
-    public TourImageService(TourImageRepository tourImageRepository, TourRepository tourRepository) {
+    public TourImageService(TourImageRepository tourImageRepository, TourRepository tourRepository,
+                            TourCacheInvalidator cacheInvalidator) {
         this.tourImageRepository = tourImageRepository;
         this.tourRepository = tourRepository;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -37,19 +40,24 @@ public class TourImageService {
     public TourImageResponse create(TourImageRequest request) {
         TourImage image = new TourImage();
         apply(image, request);
-        return TourImageResponse.from(tourImageRepository.save(image));
+        TourImageResponse response = TourImageResponse.from(tourImageRepository.save(image));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public TourImageResponse update(Long id, TourImageRequest request) {
         TourImage image = find(id);
         apply(image, request);
-        return TourImageResponse.from(tourImageRepository.save(image));
+        TourImageResponse response = TourImageResponse.from(tourImageRepository.save(image));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         tourImageRepository.delete(find(id));
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     private void apply(TourImage image, TourImageRequest request) {

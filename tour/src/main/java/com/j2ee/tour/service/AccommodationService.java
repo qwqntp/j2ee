@@ -14,9 +14,12 @@ import java.util.NoSuchElementException;
 @Service
 public class AccommodationService {
     private final AccommodationRepository accommodationRepository;
+    private final TourCacheInvalidator cacheInvalidator;
 
-    public AccommodationService(AccommodationRepository accommodationRepository) {
+    public AccommodationService(AccommodationRepository accommodationRepository,
+                                TourCacheInvalidator cacheInvalidator) {
         this.accommodationRepository = accommodationRepository;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -33,19 +36,26 @@ public class AccommodationService {
     public AccommodationResponse create(AccommodationRequest request) {
         Accommodation accommodation = new Accommodation();
         apply(accommodation, request);
-        return AccommodationResponse.from(accommodationRepository.save(accommodation));
+        AccommodationResponse response =
+                AccommodationResponse.from(accommodationRepository.save(accommodation));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public AccommodationResponse update(Long id, AccommodationRequest request) {
         Accommodation accommodation = find(id);
         apply(accommodation, request);
-        return AccommodationResponse.from(accommodationRepository.save(accommodation));
+        AccommodationResponse response =
+                AccommodationResponse.from(accommodationRepository.save(accommodation));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         accommodationRepository.delete(find(id));
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     private void apply(Accommodation accommodation, AccommodationRequest request) {

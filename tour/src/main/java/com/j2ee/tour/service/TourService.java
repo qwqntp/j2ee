@@ -2,6 +2,7 @@ package com.j2ee.tour.service;
 
 import com.j2ee.tour.common.ApiException;
 import com.j2ee.tour.common.PageResponse;
+import com.j2ee.tour.dto.cache.TourCardContent;
 import com.j2ee.tour.dto.request.TourRequest;
 import com.j2ee.tour.dto.request.TourSearchCriteria;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
@@ -24,8 +25,6 @@ import com.j2ee.tour.repository.TourRepository;
 import com.j2ee.tour.repository.TourStatsProjection;
 import com.j2ee.tour.repository.TouristDestinationRepository;
 import com.j2ee.tour.repository.TravelVehicleRepository;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -39,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -60,6 +58,8 @@ public class TourService {
     private final TouristDestinationRepository destinationRepository;
     private final TravelVehicleRepository vehicleRepository;
     private final TourImageRepository tourImageRepository;
+    private final TourContentCache tourContentCache;
+    private final TourCacheInvalidator cacheInvalidator;
 
     public TourService(TourRepository tourRepository,
                        TourDepartureRepository departureRepository,
@@ -70,7 +70,9 @@ public class TourService {
                        TouristDestinationRepository destinationRepository,
                        TravelVehicleRepository vehicleRepository,
                        TourImageRepository tourImageRepository,
-                       GuideOverlapValidator overlapValidator) {
+                       GuideOverlapValidator overlapValidator,
+                       TourContentCache tourContentCache,
+                       TourCacheInvalidator cacheInvalidator) {
         this.tourRepository = tourRepository;
         this.departureRepository = departureRepository;
         this.clock = clock;
@@ -81,23 +83,23 @@ public class TourService {
         this.vehicleRepository = vehicleRepository;
         this.tourImageRepository = tourImageRepository;
         this.overlapValidator = overlapValidator;
+        this.tourContentCache = tourContentCache;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     /**
-     * Filtered/sorted variants are deliberately not cached: filter combinations are
-     * client-controlled and unbounded, so only the plain catalogue query uses Redis.
+     * Only stable catalogue cards are cached, and only for the plain query: filter
+     * combinations are client-controlled and unbounded. Membership, ordering,
+     * totals, stats and seats stay live on every request.
      */
-    @Cacheable(cacheNames = "tours", condition = "#criteria.isUnfiltered()")
     public PageResponse<TourSummaryResponse> listTours(int page, int size, TourSearchCriteria criteria) {
         TourSearchCriteria normalized = normalize(criteria);
         validate(normalized);
 
         Pageable pageable = PageRequest.of(page, size);
-        Page<Long> idPage = tourRepository.searchTourIds(normalized, now(), pageable);
-        return toSummaryPage(idPage);
-    }
-
-    private PageResponse<TourSummaryResponse> toSummaryPage(Page<Long> idPage) {
+        // One request time for both the membership search and the aggregate query.
+        LocalDateTime now = now();
+        Page<Long> idPage = tourRepository.searchTourIds(normalized, now, pageable);
         List<Long> tourIds = idPage.getContent();
         if (tourIds.isEmpty()) {
             return new PageResponse<>(List.of(), idPage.getNumber(), idPage.getSize(),
@@ -105,31 +107,17 @@ public class TourService {
                     idPage.hasNext(), idPage.hasPrevious());
         }
 
-        Map<Long, Tour> toursById = tourRepository.findAllById(tourIds).stream()
-                .collect(Collectors.toMap(Tour::getTourId, Function.identity()));
-        // findAllById does not preserve order; the sorted id page is the source of truth.
-        List<Tour> tours = tourIds.stream()
-                .map(toursById::get)
-                .filter(Objects::nonNull)
-                .toList();
-
+        List<TourCardContent> cards = tourContentCache
+                .getCatalogContent(tourIds, normalized.isUnfiltered())
+                .items();
         Map<Long, TourStatsProjection> stats = departureRepository
-                .findStatsByTourIds(tourIds, now())
+                .findStatsByTourIds(tourIds, now)
                 .stream()
                 .collect(Collectors.toMap(TourStatsProjection::getTourId, Function.identity()));
-        Map<Long, String> firstImages = tourImageRepository
-                .findImageUrlsByTourIds(tourIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        TourImageRepository.TourImageProjection::getTourId,
-                        TourImageRepository.TourImageProjection::getImageUrl,
-                        (first, second) -> first));
 
-        List<TourSummaryResponse> content = tours.stream()
-                .map(tour -> TourMapper.toSummary(
-                        tour,
-                        stats.get(tour.getTourId()),
-                        firstImages.get(tour.getTourId())))
+        // The cached cards and the stats are joined, never cached as a response.
+        List<TourSummaryResponse> content = cards.stream()
+                .map(card -> TourMapper.toSummary(card, stats.get(card.id())))
                 .toList();
 
         return new PageResponse<>(content, idPage.getNumber(), idPage.getSize(),
@@ -170,7 +158,7 @@ public class TourService {
 
     /**
      * Options for the public catalogue filter. Not cached: destination rows are edited by
-     * the admin CRUD path, which does not evict the tour cache.
+     * the admin CRUD path, which schedules content invalidation after commit.
      */
     public List<TourDestinationOptionResponse> listDestinations() {
         return destinationRepository.findAllByOrderByDestinationNameAsc().stream()
@@ -178,21 +166,27 @@ public class TourService {
                 .toList();
     }
 
-    @Cacheable(cacheNames = "tours")
     public TourResponse getTour(Long tourId) {
-        Tour tour = tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
-        return TourMapper.toDetail(tour, upcomingDepartures(tourId));
+        assertPublic(tourId);
+        // Static content may be warm; visibility and departures are never cached.
+        TourResponse content = tourContentCache.getDetailContent(tourId);
+        List<TourDepartureResponse> departures = upcomingDepartures(tourId).stream()
+                .map(departure -> TourMapper.toDeparture(tourId, departure))
+                .toList();
+        return TourMapper.withDepartures(content, departures);
     }
 
-    @Cacheable(cacheNames = "tours")
     public List<TourDepartureResponse> getDepartures(Long tourId) {
-        tourRepository.findByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Tour not found"));
-
+        assertPublic(tourId);
         return upcomingDepartures(tourId).stream()
                 .map(departure -> TourMapper.toDeparture(tourId, departure))
                 .toList();
+    }
+
+    private void assertPublic(Long tourId) {
+        if (!tourRepository.existsByTourIdAndTourStatus(tourId, PUBLIC_TOUR_STATUS)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "Tour not found");
+        }
     }
 
     public PageResponse<TourResponse> list(Pageable pageable) {
@@ -206,28 +200,29 @@ public class TourService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourResponse create(TourRequest request) {
         Tour tour = new Tour();
         apply(tour, request);
         Tour saved = tourRepository.save(tour);
         syncImages(saved, request.imageUrls());
-        return TourResponse.from(saved);
+        TourResponse response = TourResponse.from(saved);
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public TourResponse update(Long id, TourRequest request) {
         Tour tour = find(id);
         assertGuideChangeSafe(tour, request);
         apply(tour, request);
         Tour saved = tourRepository.save(tour);
         syncImages(saved, request.imageUrls());
-        return TourResponse.from(saved);
+        TourResponse response = TourResponse.from(saved);
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id) {
         Tour tour = find(id);
         if (departureRepository.existsByTourTourId(id)) {
@@ -239,6 +234,7 @@ public class TourService {
         tour.getVehicles().clear();
         tourRepository.save(tour);
         tourRepository.delete(tour);
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     /**

@@ -22,7 +22,6 @@ import com.j2ee.tour.repository.PromotionRepository;
 import com.j2ee.tour.repository.TourDepartureRepository;
 import com.j2ee.tour.repository.TravelerRepository;
 import com.j2ee.tour.security.AuthPrincipal;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -129,7 +128,6 @@ public class BookingService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse create(CreateBookingRequest request, AuthPrincipal principal) {
         List<BookingTravelerRequest> travelerRequests = request.travelers();
         if (travelerRequests != null && travelerRequests.size() != request.guestCount()) {
@@ -198,7 +196,6 @@ public class BookingService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse update(Long id, BookingUpdateRequest request, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         if (!isAdmin(principal) && (request.accountId() != null || request.status() != null)) {
@@ -317,7 +314,6 @@ public class BookingService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse cancel(Long id, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         if (!"PENDING".equals(booking.getBookingStatus())) {
@@ -347,7 +343,6 @@ public class BookingService {
      * successful payment. The actual money movement stays with the payment provider.
      */
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public BookingResponse requestRefund(Long id, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         String status = booking.getBookingStatus();
@@ -379,7 +374,6 @@ public class BookingService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "tours", allEntries = true)
     public void delete(Long id, AuthPrincipal principal) {
         Booking booking = findOwnedForUpdate(id, principal);
         if (paymentRepository.existsByBookingBookingId(id)) {

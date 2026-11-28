@@ -12,5 +12,7 @@ public interface TourRepository extends JpaRepository<Tour, Long>, TourSearchRep
 
     Optional<Tour> findByTourIdAndTourStatus(Long tourId, String tourStatus);
 
+    boolean existsByTourIdAndTourStatus(Long tourId, String tourStatus);
+
     long countByTourStatus(String tourStatus);
 }

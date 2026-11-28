@@ -1,5 +1,6 @@
 package com.j2ee.tour.mapper;
 
+import com.j2ee.tour.dto.cache.TourCardContent;
 import com.j2ee.tour.dto.response.TourDepartureResponse;
 import com.j2ee.tour.dto.response.TourResponse;
 import com.j2ee.tour.dto.response.TourSummaryResponse;
@@ -23,12 +24,25 @@ public final class TourMapper {
     }
 
     public static TourSummaryResponse toSummary(Tour tour, TourStatsProjection stats, String imageUrl) {
-        return new TourSummaryResponse(
+        return toSummary(toCardContent(tour, imageUrl), stats);
+    }
+
+    public static TourCardContent toCardContent(Tour tour, String imageUrl) {
+        return new TourCardContent(
                 tour.getTourId(),
                 tour.getTourName(),
                 truncate(firstSegment(tour.getTourDescription()), SUMMARY_DESCRIPTION_LENGTH),
                 tour.getTourStatus(),
-                imageUrl,
+                imageUrl);
+    }
+
+    public static TourSummaryResponse toSummary(TourCardContent content, TourStatsProjection stats) {
+        return new TourSummaryResponse(
+                content.id(),
+                content.name(),
+                content.description(),
+                content.status(),
+                content.imageUrl(),
                 stats == null ? null : stats.getPriceFrom(),
                 stats == null ? null : stats.getNextDepartureDate(),
                 stats == null || stats.getSeatsAvailable() == null ? 0 : stats.getSeatsAvailable().intValue(),
@@ -76,6 +90,30 @@ public final class TourMapper {
                 tour.getDestinations().stream().map(TouristDestination::getDestinationId).toList(),
                 tour.getVehicles().stream().map(TravelVehicle::getVehicleId).toList()
         );
+    }
+
+    public static TourResponse withDepartures(TourResponse content, List<TourDepartureResponse> departures) {
+        return new TourResponse(
+                content.id(),
+                content.name(),
+                content.description(),
+                content.status(),
+                content.accommodationName(),
+                content.accommodationRating(),
+                content.accommodationType(),
+                content.guideName(),
+                content.guidePhone(),
+                content.imageUrls(),
+                content.itinerary(),
+                content.destinationNames(),
+                content.vehicleTypes(),
+                departures,
+                content.durationDays(),
+                content.accommodationId(),
+                content.tourGuideId(),
+                content.promotionId(),
+                content.destinationIds(),
+                content.vehicleIds());
     }
 
     public static TourDepartureResponse toDeparture(Long tourId, TourDeparture departure) {

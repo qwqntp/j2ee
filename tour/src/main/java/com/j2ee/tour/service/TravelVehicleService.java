@@ -14,9 +14,12 @@ import java.util.NoSuchElementException;
 @Service
 public class TravelVehicleService {
     private final TravelVehicleRepository vehicleRepository;
+    private final TourCacheInvalidator cacheInvalidator;
 
-    public TravelVehicleService(TravelVehicleRepository vehicleRepository) {
+    public TravelVehicleService(TravelVehicleRepository vehicleRepository,
+                                TourCacheInvalidator cacheInvalidator) {
         this.vehicleRepository = vehicleRepository;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -33,19 +36,24 @@ public class TravelVehicleService {
     public TravelVehicleResponse create(TravelVehicleRequest request) {
         TravelVehicle vehicle = new TravelVehicle();
         apply(vehicle, request);
-        return TravelVehicleResponse.from(vehicleRepository.save(vehicle));
+        TravelVehicleResponse response = TravelVehicleResponse.from(vehicleRepository.save(vehicle));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public TravelVehicleResponse update(Long id, TravelVehicleRequest request) {
         TravelVehicle vehicle = find(id);
         apply(vehicle, request);
-        return TravelVehicleResponse.from(vehicleRepository.save(vehicle));
+        TravelVehicleResponse response = TravelVehicleResponse.from(vehicleRepository.save(vehicle));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         vehicleRepository.delete(find(id));
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     private void apply(TravelVehicle vehicle, TravelVehicleRequest request) {

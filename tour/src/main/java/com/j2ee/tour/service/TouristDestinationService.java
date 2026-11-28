@@ -14,9 +14,12 @@ import java.util.NoSuchElementException;
 @Service
 public class TouristDestinationService {
     private final TouristDestinationRepository destinationRepository;
+    private final TourCacheInvalidator cacheInvalidator;
 
-    public TouristDestinationService(TouristDestinationRepository destinationRepository) {
+    public TouristDestinationService(TouristDestinationRepository destinationRepository,
+                                     TourCacheInvalidator cacheInvalidator) {
         this.destinationRepository = destinationRepository;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -33,19 +36,26 @@ public class TouristDestinationService {
     public TouristDestinationResponse create(TouristDestinationRequest request) {
         TouristDestination destination = new TouristDestination();
         apply(destination, request);
-        return TouristDestinationResponse.from(destinationRepository.save(destination));
+        TouristDestinationResponse response =
+                TouristDestinationResponse.from(destinationRepository.save(destination));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public TouristDestinationResponse update(Long id, TouristDestinationRequest request) {
         TouristDestination destination = find(id);
         apply(destination, request);
-        return TouristDestinationResponse.from(destinationRepository.save(destination));
+        TouristDestinationResponse response =
+                TouristDestinationResponse.from(destinationRepository.save(destination));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         destinationRepository.delete(find(id));
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     private void apply(TouristDestination destination, TouristDestinationRequest request) {

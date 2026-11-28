@@ -62,6 +62,9 @@ class TourServiceTest {
         tourRepository = mock(TourRepository.class);
         departureRepository = mock(TourDepartureRepository.class);
         tourImageRepository = mock(TourImageRepository.class);
+        // Real uncached loader: no Spring proxy in this unit test, so every call
+        // exercises the batch queries. Cache boundaries are covered by TourCacheTest.
+        TourContentCache tourContentCache = new TourContentCache(tourRepository, tourImageRepository);
         tourService = new TourService(tourRepository, departureRepository, CLOCK,
                 mock(AccommodationRepository.class),
                 mock(TourGuideRepository.class),
@@ -69,7 +72,9 @@ class TourServiceTest {
                 mock(TouristDestinationRepository.class),
                 mock(TravelVehicleRepository.class),
                 tourImageRepository,
-                new GuideOverlapValidator(departureRepository, mock(TourGuideRepository.class)));
+                new GuideOverlapValidator(departureRepository, mock(TourGuideRepository.class)),
+                tourContentCache,
+                mock(TourCacheInvalidator.class));
     }
 
     @Test
@@ -179,7 +184,7 @@ class TourServiceTest {
 
     @Test
     void getTourThrowsNotFoundWhenTourIsNotPublic() {
-        when(tourRepository.findByTourIdAndTourStatus(99L, "OPEN")).thenReturn(Optional.empty());
+        when(tourRepository.existsByTourIdAndTourStatus(99L, "OPEN")).thenReturn(false);
 
         assertThatThrownBy(() -> tourService.getTour(99L))
                 .isInstanceOf(ApiException.class)
@@ -193,6 +198,7 @@ class TourServiceTest {
         List<TourDeparture> departures = List.of(
                 departure(1L, "OPEN", LocalDateTime.of(2026, 11, 1, 8, 0)),
                 departure(2L, "FULL", LocalDateTime.of(2026, 11, 5, 8, 0)));
+        when(tourRepository.existsByTourIdAndTourStatus(1L, "OPEN")).thenReturn(true);
         when(tourRepository.findByTourIdAndTourStatus(1L, "OPEN")).thenReturn(Optional.of(tour));
         when(departureRepository
                 .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
@@ -213,7 +219,7 @@ class TourServiceTest {
 
     @Test
     void getDeparturesQueriesUpcomingOpenAndFullDepartures() {
-        when(tourRepository.findByTourIdAndTourStatus(1L, "OPEN")).thenReturn(Optional.of(tour()));
+        when(tourRepository.existsByTourIdAndTourStatus(1L, "OPEN")).thenReturn(true);
         when(departureRepository
                 .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
                         eq(1L), eq(List.of("OPEN", "FULL")), any(LocalDateTime.class)))
@@ -223,6 +229,7 @@ class TourServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().seatsAvailable()).isEqualTo(28);
+        verify(tourRepository, never()).findByTourIdAndTourStatus(1L, "OPEN");
         verify(departureRepository)
                 .findByTourTourIdAndDepartureStatusInAndDepartureStartDateAfterOrderByDepartureStartDateAsc(
                         eq(1L), eq(List.of("OPEN", "FULL")), eq(NOW));
@@ -230,12 +237,54 @@ class TourServiceTest {
 
     @Test
     void getDeparturesThrowsNotFoundWhenTourIsNotPublic() {
-        when(tourRepository.findByTourIdAndTourStatus(99L, "OPEN")).thenReturn(Optional.empty());
+        when(tourRepository.existsByTourIdAndTourStatus(99L, "OPEN")).thenReturn(false);
 
         assertThatThrownBy(() -> tourService.getDepartures(99L))
                 .isInstanceOf(ApiException.class)
                 .satisfies(exception -> assertThat(((ApiException) exception).getStatus())
                         .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void catalogKeepsLiveMembershipOrderAndTotals() {
+        Page<Long> firstPage = new PageImpl<>(List.of(1L, 2L), PageRequest.of(0, 12), 2);
+        Page<Long> secondPage = new PageImpl<>(List.of(2L, 3L), PageRequest.of(0, 3), 3);
+        when(tourRepository.searchTourIds(any(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(firstPage, secondPage);
+        when(tourRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(List.of(tour(2L, "Two"), tour(1L, "One")));
+        when(tourRepository.findAllById(List.of(2L, 3L)))
+                .thenReturn(List.of(tour(3L, "Three"), tour(2L, "Two")));
+        when(tourImageRepository.findImageUrlsByTourIds(anyCollection())).thenReturn(List.of());
+        when(departureRepository.findStatsByTourIds(anyCollection(), any(LocalDateTime.class)))
+                .thenReturn(List.of(), List.of());
+
+        PageResponse<TourSummaryResponse> first = tourService.listTours(0, 12, criteria(null));
+        PageResponse<TourSummaryResponse> second = tourService.listTours(0, 12, criteria(null));
+
+        assertThat(first.content()).extracting(TourSummaryResponse::id).containsExactly(1L, 2L);
+        assertThat(first.totalElements()).isEqualTo(2);
+        assertThat(second.content()).extracting(TourSummaryResponse::id).containsExactly(2L, 3L);
+        assertThat(second.content()).extracting(TourSummaryResponse::name)
+                .containsExactly("Two", "Three");
+        assertThat(second.totalElements()).isEqualTo(3);
+        assertThat(second.totalPages()).isEqualTo(1);
+    }
+
+    @Test
+    void emptyPageSkipsContentAndStats() {
+        Page<Long> empty = new PageImpl<>(List.of(), PageRequest.of(0, 12), 0);
+        when(tourRepository.searchTourIds(any(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(empty);
+
+        PageResponse<TourSummaryResponse> result = tourService.listTours(0, 12, criteria(null));
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isZero();
+        assertThat(result.totalPages()).isZero();
+        verify(tourRepository, never()).findAllById(anyCollection());
+        verify(tourImageRepository, never()).findImageUrlsByTourIds(anyCollection());
+        verify(departureRepository, never()).findStatsByTourIds(anyCollection(), any(LocalDateTime.class));
     }
 
     private TourSearchCriteria criteria(String keyword) {
@@ -244,9 +293,13 @@ class TourServiceTest {
     }
 
     private Tour tour() {
+        return tour(1L, "Da Nang - Hoi An");
+    }
+
+    private Tour tour(Long id, String name) {
         Tour tour = new Tour();
-        tour.setTourId(1L);
-        tour.setTourName("Da Nang - Hoi An");
+        tour.setTourId(id);
+        tour.setTourName(name);
         tour.setTourDescription("Ngay 1: Da Nang|Ngay 2: Hoi An");
         tour.setTourStatus("OPEN");
 

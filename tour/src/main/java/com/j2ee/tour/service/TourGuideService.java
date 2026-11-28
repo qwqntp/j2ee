@@ -14,9 +14,12 @@ import java.util.NoSuchElementException;
 @Service
 public class TourGuideService {
     private final TourGuideRepository tourGuideRepository;
+    private final TourCacheInvalidator cacheInvalidator;
 
-    public TourGuideService(TourGuideRepository tourGuideRepository) {
+    public TourGuideService(TourGuideRepository tourGuideRepository,
+                            TourCacheInvalidator cacheInvalidator) {
         this.tourGuideRepository = tourGuideRepository;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     @Transactional(readOnly = true)
@@ -33,19 +36,24 @@ public class TourGuideService {
     public TourGuideResponse create(TourGuideRequest request) {
         TourGuide guide = new TourGuide();
         apply(guide, request);
-        return TourGuideResponse.from(tourGuideRepository.save(guide));
+        TourGuideResponse response = TourGuideResponse.from(tourGuideRepository.save(guide));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public TourGuideResponse update(Long id, TourGuideRequest request) {
         TourGuide guide = find(id);
         apply(guide, request);
-        return TourGuideResponse.from(tourGuideRepository.save(guide));
+        TourGuideResponse response = TourGuideResponse.from(tourGuideRepository.save(guide));
+        cacheInvalidator.invalidateAfterCommit();
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         tourGuideRepository.delete(find(id));
+        cacheInvalidator.invalidateAfterCommit();
     }
 
     private void apply(TourGuide guide, TourGuideRequest request) {
